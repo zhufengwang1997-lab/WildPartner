@@ -314,7 +314,7 @@ namespace WildPartner.EditorTools
             vis.transform.SetParent(root.transform, false);
             var c = root.AddComponent<Creature>();
             c.defId = def.id;
-            if (rigged) c.animRunSpeed = ClipSpeeds(def.model).Run;
+            if (rigged) { var sp = ClipSpeeds(def.model); c.animRunSpeed = sp.Run; c.animWalkSpeed = sp.Walk; }
             else
             {
                 var anim = root.AddComponent<ProceduralAnimator>();
@@ -450,6 +450,28 @@ namespace WildPartner.EditorTools
             T(sRub, loco, 0.3f).AddCondition(NC, 3, "Mood");
         }
 
+        /// <summary>Deer grazing (玩法设计 tier 2): Mood 1 -> GrazeDown (head goes down, with a glance up first) ->
+        /// Graze (loop); any other mood lifts the head back into locomotion. Skipped without the clips.</summary>
+        static void AddGraze(UnityEditor.Animations.AnimatorController ctrl, UnityEditor.Animations.AnimatorStateMachine sm,
+                             UnityEditor.Animations.AnimatorState loco, System.Func<string, AnimationClip> clip)
+        {
+            AnimationClip down = clip("GrazeDown"), loop = clip("Graze");
+            if (!down || !loop) return;
+            ctrl.AddParameter("Mood", AnimatorControllerParameterType.Int);
+            var sDown = sm.AddState("GrazeDown"); sDown.motion = down;
+            var sLoop = sm.AddState("Graze"); sLoop.motion = loop;
+            UnityEditor.Animations.AnimatorStateTransition T(UnityEditor.Animations.AnimatorState a, UnityEditor.Animations.AnimatorState b, float dur, float exit = -1)
+            {
+                var t = a.AddTransition(b); t.duration = dur; t.hasFixedDuration = true;
+                t.hasExitTime = exit >= 0; if (exit >= 0) t.exitTime = exit;
+                return t;
+            }
+            T(loco, sDown, 0.25f).AddCondition(UnityEditor.Animations.AnimatorConditionMode.Equals, 1, "Mood");
+            T(sDown, sLoop, 0.2f, 0.95f);
+            T(sDown, loco, 0.3f).AddCondition(UnityEditor.Animations.AnimatorConditionMode.NotEqual, 1, "Mood");
+            T(sLoop, loco, 0.5f).AddCondition(UnityEditor.Animations.AnimatorConditionMode.NotEqual, 1, "Mood");
+        }
+
         static UnityEditor.Animations.AnimatorController LocomotionController(string model, string fbx)
         {
             Directory.CreateDirectory(AnimDir);
@@ -476,6 +498,7 @@ namespace WildPartner.EditorTools
             sm.defaultState = state;
             AddJump(ctrl, sm, state, Clip);
             AddMoods(ctrl, sm, state, Clip);
+            AddGraze(ctrl, sm, state, Clip);
             EditorUtility.SetDirty(ctrl);
             return ctrl;
         }

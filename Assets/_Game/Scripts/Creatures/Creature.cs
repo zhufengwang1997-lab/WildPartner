@@ -24,11 +24,14 @@ namespace WildPartner.Creatures
         public int CompanionSlot { get; set; }
         /// <summary>Ground speed of the rigged Run clip at 1x (from the Blender export); 0 = not rigged.</summary>
         public float animRunSpeed;
+        /// <summary>Ground speed of the rigged Walk clip at 1x; 0 = not rigged.</summary>
+        public float animWalkSpeed;
         /// <summary>0 none, 1 sitting + licking, 2 lying belly-up, 3 rubbing against the witch (cat only).</summary>
         public int Mood { get; private set; }
 
         Animator _animator;
-        float _stillTime, _rubTime;
+        float _stillTime, _rubTime, _pauseUntil;
+        bool _hasMood, _paused;
         static readonly int SpeedId = Animator.StringToHash("Speed"), MoodId = Animator.StringToHash("Mood");
 
         NavMeshAgent _agent;
@@ -50,6 +53,8 @@ namespace WildPartner.Creatures
             _anim = GetComponent<ProceduralAnimator>();
             _visual = transform.Find("Visual");
             _animator = GetComponentInChildren<Animator>();
+            if (_animator && _animator.runtimeAnimatorController)
+                foreach (var prm in _animator.parameters) if (prm.nameHash == MoodId) _hasMood = true;
             if (_visual) _visualScale = _visual.localScale;
         }
 
@@ -101,6 +106,7 @@ namespace WildPartner.Creatures
         {
             Current = s;
             _stateTime = 0;
+            _pauseUntil = 0; _paused = false;
             bool visible = s != State.Hidden;
             if (_visual) _visual.gameObject.SetActive(visible);
             foreach (var c in GetComponents<Collider>()) c.enabled = visible;
@@ -210,8 +216,21 @@ namespace WildPartner.Creatures
         void Wander()
         {
             if (Def.wanderSpeed <= 0.01f) return; // perched (owl) stays put until disturbed
+            // rigged grazers stop at the end of a stroll and graze for a while (deer: GrazeDown -> Graze)
+            if (_pauseUntil > _stateTime)
+            {
+                if (_agent && _agent.enabled) _agent.isStopped = true;
+                return;
+            }
+            if (_hasMood && !_paused && Def.id != "cat" && Arrived(_target) && Random.value < 0.75f)
+            {
+                _paused = true;
+                _pauseUntil = _stateTime + Random.Range(5f, 12f);
+                return;
+            }
             if (_stateTime > _nextWander || Arrived(_target))
             {
+                _paused = false;
                 var a = Def.anchors[_anchor];
                 var r = Random.insideUnitCircle * Def.wanderRadius;
                 _target = GroundPoint(a.x + r.x, a.y + r.y);
@@ -293,7 +312,7 @@ namespace WildPartner.Creatures
             float dt = Time.deltaTime;
             Vector3 v = _agent && _agent.enabled ? _agent.velocity : _velocity;
             float speed = Vector3.ProjectOnPlane(v, Vector3.up).magnitude;
-            int mood = 0;
+            int mood = Current == State.Wander && _pauseUntil > _stateTime ? 1 : 0;
             if (Def.id == "cat" && Current == State.Companion && player)
             {
                 Vector3 toCat = transform.position - player.transform.position; toCat.y = 0;
@@ -317,9 +336,15 @@ namespace WildPartner.Creatures
             Mood = mood;
             if (!_animator) return;
             float run = animRunSpeed > 0.01f ? animRunSpeed : 1f;
-            _animator.SetFloat(SpeedId, Mathf.Min(speed, run), 0.1f, dt);
-            _animator.SetInteger(MoodId, mood);
-            _animator.speed = mood == 0 ? Mathf.Clamp(speed / run, 1f, 2.6f) : 1f;
+            float walk = animWalkSpeed > 0.01f ? animWalkSpeed : run * 0.3f;
+            // up to 1.5x the walk clip's speed: keep walking, just faster; beyond that blend towards the run
+            // and speed the run up once past its own speed — the hooves / paws keep up with the ground
+            bool walking = speed <= walk * 1.5f;
+            float param = walking ? Mathf.Min(speed, walk) : Mathf.Min(speed, run);
+            float play = walking ? Mathf.Max(1f, speed / walk) : Mathf.Clamp(speed / run, 1f, 2.6f);
+            _animator.SetFloat(SpeedId, param, 0.1f, dt);
+            if (_hasMood) _animator.SetInteger(MoodId, mood);
+            _animator.speed = mood == 0 ? play : 1f;
         }
 
         void FaceTowards(Vector3 dir)

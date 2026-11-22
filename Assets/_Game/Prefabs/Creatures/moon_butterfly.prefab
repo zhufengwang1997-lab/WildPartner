@@ -50,6 +50,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: WildPartner.Runtime::WildPartner.Creatures.Creature
   defId: moon_butterfly
   animRunSpeed: 0
+  animWalkSpeed: 0
 --- !u!114 &8555565746816885479
 MonoBehaviour:
   m_ObjectHideFlags: 0

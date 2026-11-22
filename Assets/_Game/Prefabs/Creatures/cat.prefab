@@ -857,6 +857,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: WildPartner.Runtime::WildPartner.Creatures.Creature
   defId: cat
   animRunSpeed: 0.676
+  animWalkSpeed: 0.198
 --- !u!135 &1317630044495411552
 SphereCollider:
   m_ObjectHideFlags: 0

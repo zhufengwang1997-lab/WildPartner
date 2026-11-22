@@ -2,6 +2,7 @@ using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using WildPartner.Creatures;
 using WildPartner.World;
 
 namespace WildPartner.EditorTools
@@ -32,17 +33,30 @@ namespace WildPartner.EditorTools
         /// (animation check for 画面整改 8 without entering Play mode).</summary>
         static void CatPoses(Camera cam, EnvController env, RenderTexture rt, Texture2D tex)
         {
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Game/Prefabs/Creatures/cat.prefab");
+            PoseShots(cam, env, rt, tex, "cat", W(WorldLayout.PlayerStart + WorldLayout.CabinFacing * 1.6f, 0f),   // on the dirt path, not in tall grass
+                      new Vector3(-WorldLayout.CabinFacing.y, 0, WorldLayout.CabinFacing.x), 1f,
+                      new[] { ("Idle", 2.1f), ("Walk", 0.2f), ("Run", 0.13f), ("SitLick", 1.3f), ("BellyUp", 1.0f), ("Rub", 0.45f) });
+            var deer = CreatureDefs.Get("white_deer");
+            PoseShots(cam, env, rt, tex, "white_deer", W(deer.anchors[0], 0f), new Vector3(1, 0, 0.3f), 2.3f,
+                      new[] { ("Idle", 1.5f), ("Walk", 0.3f), ("Run", 0.2f), ("GrazeDown", 0.6f), ("Graze", 0.4f), ("Graze", 1.1f) });
+        }
+
+        /// <summary>Close-ups of a rigged creature prefab sampled at given clip times -> Logs/shots/&lt;id&gt;_&lt;clip&gt;.png</summary>
+        static void PoseShots(Camera cam, EnvController env, RenderTexture rt, Texture2D tex, string id, Vector3 at, Vector3 facing, float k,
+                              (string, float)[] poses)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"Assets/_Game/Prefabs/Creatures/{id}.prefab");
             if (!prefab) return;
             var cat = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             var anim = cat.GetComponentInChildren<Animator>();
             if (!anim) { Object.DestroyImmediate(cat); return; }
             var clips = anim.runtimeAnimatorController.animationClips;
-            var at = W(WorldLayout.PlayerStart + WorldLayout.CabinFacing * 1.6f, 0f);   // on the dirt path, not in tall grass
-            cat.transform.SetPositionAndRotation(at, Quaternion.LookRotation(new Vector3(-WorldLayout.CabinFacing.y, 0, WorldLayout.CabinFacing.x)));
+            cat.transform.SetPositionAndRotation(at, Quaternion.LookRotation(facing));
             env.timeOfDay = 16.3f; env.Apply();
-            foreach (var (clipName, time) in new[] { ("Idle", 2.1f), ("Walk", 0.2f), ("Run", 0.13f), ("SitLick", 1.3f), ("BellyUp", 1.0f), ("Rub", 0.45f) })
+            int shot = 0;
+            foreach (var (clipName, time) in poses)
             {
+                shot++;
                 var clip = System.Array.Find(clips, c => c.name == clipName);
                 if (!clip) continue;
                 clip.SampleAnimation(anim.gameObject, time);
@@ -58,9 +72,9 @@ namespace WildPartner.EditorTools
                     smr.enabled = false; baked.Add(go);
                 }
                 var right = cat.transform.right;
-                var pos = at + right * 0.95f + cat.transform.forward * 0.9f + Vector3.up * 0.42f;
+                var pos = at + (right * 0.95f + cat.transform.forward * 0.9f + Vector3.up * 0.42f) * k;
                 cam.transform.position = pos;
-                cam.transform.rotation = Quaternion.LookRotation(at + Vector3.up * 0.22f - pos);
+                cam.transform.rotation = Quaternion.LookRotation(at + Vector3.up * 0.22f * k - pos);
                 cam.targetTexture = rt;
                 var grass = Object.FindFirstObjectByType<GrassRenderer>();
                 if (grass) { grass.Setup(); grass.Submit(cam, pos); }
@@ -70,7 +84,7 @@ namespace WildPartner.EditorTools
                 RenderTexture.active = rt;
                 tex.ReadPixels(new Rect(0, 0, 1600, 900), 0, 0); tex.Apply();
                 RenderTexture.active = null;
-                File.WriteAllBytes($"Logs/shots/cat_{clipName}.png", tex.EncodeToPNG());
+                File.WriteAllBytes($"Logs/shots/{id}_{shot}_{clipName}.png", tex.EncodeToPNG());
                 foreach (var go in baked) Object.DestroyImmediate(go);
                 foreach (var smr in cat.GetComponentsInChildren<SkinnedMeshRenderer>()) smr.enabled = true;
             }

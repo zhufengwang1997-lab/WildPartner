@@ -140,6 +140,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: WildPartner.Runtime::WildPartner.Creatures.Creature
   defId: moon_rabbit
   animRunSpeed: 0
+  animWalkSpeed: 0
 --- !u!114 &322023768476372764
 MonoBehaviour:
   m_ObjectHideFlags: 0
