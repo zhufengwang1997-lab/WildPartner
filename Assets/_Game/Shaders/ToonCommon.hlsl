@@ -80,4 +80,18 @@ float3 ApplyWindOSPrev(float3 positionOS, half weight, float t)
 #endif
 }
 
+// Near-camera dither fade (画面整改 6): foliage and props closer than _WP_NearFade.y metres dissolve with a 4x4
+// Bayer pattern so a branch next to the camera never fills the screen. posCS is SV_Position (w = view depth).
+// Not used in the shadow pass (orthographic light camera, w = 1).
+float4 _WP_NearFade;   // x: fully hidden below (m), y: fully visible above (m); y <= 0 disables
+void NearFade(float4 posCS)
+{
+    if (_WP_NearFade.y <= 0) return;
+    float a = saturate((posCS.w - _WP_NearFade.x) / max(_WP_NearFade.y - _WP_NearFade.x, 1e-3));
+    if (a >= 1) return;
+    uint2 q = uint2(posCS.xy) & 3;
+    const float bayer[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+    clip(a - (bayer[q.y * 4 + q.x] + 0.5) / 16.0);
+}
+
 #endif

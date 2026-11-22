@@ -25,14 +25,20 @@ namespace WildPartner.EditorTools
         /// <summary>Tripo model -> prefab names it is saved as (the names the world builder places).</summary>
         static readonly Dictionary<string, string[]> TripoTargets = new Dictionary<string, string[]>
         {
-            { "Tree_Broadleaf", new[] { "Tree_Broadleaf_A", "Tree_Broadleaf_B" } },
-            { "Tree_Autumn", new[] { "Tree_Autumn_A", "Tree_Autumn_B" } },
+            { "Tree_Broadleaf", new[] { "Tree_Broadleaf_A", "Tree_Broadleaf_B", "Tree_Autumn_B" } },
+            { "Tree_Autumn", new[] { "Tree_Autumn_A" } },
             { "Tree_Birch", new[] { "Tree_Birch_A" } },
             { "Tree_Pine", new[] { "Tree_Pine_A", "Tree_Pine_B" } },
             { "Bush", new[] { "Bush_A", "Bush_B" } },
             { "Rock_Large", new[] { "Rock_A" } },
             { "Rock_Small", new[] { "Rock_B" } },
             { "Mushroom", new[] { "Mushrooms" } },
+        };
+        /// <summary>Prefabs that reuse a Tripo mesh with a recoloured texture (tools/make_tree_variants.py): a deeper
+        /// green broadleaf, a round-canopy autumn tree built from the broadleaf mesh, fresher birch leaves.</summary>
+        static readonly Dictionary<string, string> TexVariants = new Dictionary<string, string>
+        {
+            { "Tree_Broadleaf_B", "Broadleaf_Deep" }, { "Tree_Autumn_B", "Broadleaf_Autumn" }, { "Tree_Birch_A", "Birch_Fresh" },
         };
         public const string MatDir = "Assets/_Game/Materials";
         public const string EnvPrefabs = "Assets/_Game/Prefabs/Env";
@@ -99,8 +105,9 @@ namespace WildPartner.EditorTools
                     {
                         m.SetFloat("_RampSteps", 3);
                         m.SetColor("_RimColor", new Color(1, 0.95f, 0.8f, wind ? 0.25f : 0.15f));
-                        if (wind) { m.EnableKeyword("_WIND"); m.SetFloat("_Wind", 1); m.SetFloat("_WindStrength", name == "Bush" ? 0.08f : 0.25f); m.SetFloat("_Translucency", 0.3f); }
-                        else { m.DisableKeyword("_WIND"); m.SetFloat("_Wind", 0); }
+                        if (wind) { m.SetFloat("_Cull", 0);   // leaf cards are single-sided: from behind a canopy fell apart into slivers
+                                    m.EnableKeyword("_WIND"); m.SetFloat("_Wind", 1); m.SetFloat("_WindStrength", name == "Bush" ? 0.08f : 0.25f); m.SetFloat("_Translucency", 0.3f); }
+                        else { m.DisableKeyword("_WIND"); m.SetFloat("_Wind", 0); m.SetFloat("_Cull", 2); }
                         if (name == "LampPost" || name == "MoonFlower") m.SetFloat("_Emission", name == "MoonFlower" ? 0.6f : 0.12f);
                     });
                     var model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
@@ -108,9 +115,20 @@ namespace WildPartner.EditorTools
                     {
                         var go = (GameObject)PrefabUtility.InstantiatePrefab(model);
                         go.name = target;
+                        var tmat = mat;
+                        if (TexVariants.TryGetValue(target, out var vt) && AssetDatabase.LoadAssetAtPath<Texture2D>($"{Tripo}/Variants/{vt}.png") is Texture2D vtex)
+                        {
+                            string vpath = $"{MatDir}/M_T_{target}.mat";
+                            tmat = AssetDatabase.LoadAssetAtPath<Material>(vpath);
+                            if (!tmat) { tmat = new Material(mat); AssetDatabase.CreateAsset(tmat, vpath); }
+                            tmat.CopyPropertiesFromMaterial(mat);
+                            tmat.shaderKeywords = mat.shaderKeywords;
+                            tmat.SetTexture("_BaseMap", vtex);
+                            EditorUtility.SetDirty(tmat);
+                        }
                         foreach (var r in go.GetComponentsInChildren<MeshRenderer>())
                         {
-                            r.sharedMaterial = mat;
+                            r.sharedMaterial = tmat;
                             if (name == "Mushroom" || name == "Book") r.shadowCastingMode = ShadowCastingMode.Off;
                         }
                         ConfigureLods(go, name);

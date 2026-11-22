@@ -47,7 +47,7 @@ namespace WildPartner.World
             R(215, 960, 64), R(245, 905, 63), R(258, 884, 52),
             R(285, 842, 51), R(300, 822, 41), R(338, 794, 40),
             R(366, 778, 32), R(450, 736, 30.6f), R(560, 698, 29.2f),
-            R(640, 684, 28f), R(700, 700, LakeLevel),
+            R(640, 684, 28f), R(700, 700, LakeLevel), R(738, 738, LakeLevel),   // last point inside the lake: no cut-off river end
         };
         public static readonly Vector3[] RiverOut =
         {

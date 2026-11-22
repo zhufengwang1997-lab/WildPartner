@@ -124,6 +124,7 @@ Shader "WildPartner/Toon"
                 #if defined(LOD_FADE_CROSSFADE)
                 LODFadeCrossFade(i.positionCS);
                 #endif
+                NearFade(i.positionCS);
 
                 half3 n = normalize(i.normalWS) * ((facing || _UpNormal > 0.5) ? 1 : -1);
                 float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS);
@@ -275,6 +276,7 @@ Shader "WildPartner/Toon"
                 #if defined(LOD_FADE_CROSSFADE)
                 LODFadeCrossFade(i.positionCS);
                 #endif
+                NearFade(i.positionCS);
                 return i.positionCS.z;
             }
             ENDHLSL
@@ -321,6 +323,7 @@ Shader "WildPartner/Toon"
                 #if defined(LOD_FADE_CROSSFADE)
                 LODFadeCrossFade(i.positionCS);
                 #endif
+                NearFade(i.positionCS);
                 return half4(normalize(i.normalWS), 0);
             }
             ENDHLSL
@@ -389,6 +392,7 @@ Shader "WildPartner/Toon"
                 #if defined(LOD_FADE_CROSSFADE)
                 LODFadeCrossFade(i.positionCS);
                 #endif
+                NearFade(i.positionCS);
                 return float4(CalcNdcMotionVectorFromCsPositions(i.curCS, i.prevCS), 0, 0);
             }
             ENDHLSL

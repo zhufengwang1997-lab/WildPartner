@@ -802,14 +802,14 @@ namespace WildPartner.EditorTools
         // =========================================================================================
         static readonly Dictionary<WorldLayout.Region, (string, float)[]> TreeMix = new Dictionary<WorldLayout.Region, (string, float)[]>
         {
-            { WorldLayout.Region.DeepForest, new[] { ("Tree_Broadleaf_A", .3f), ("Tree_Broadleaf_B", .2f), ("Tree_Pine_A", .25f), ("Tree_Pine_B", .15f), ("Tree_Birch_A", .1f) } },
-            { WorldLayout.Region.AutumnForest, new[] { ("Tree_Autumn_A", .45f), ("Tree_Autumn_B", .25f), ("Tree_Pine_A", .15f), ("Tree_Birch_A", .15f) } },
-            { WorldLayout.Region.Highland, new[] { ("Tree_Pine_A", .3f), ("Tree_Pine_B", .2f), ("Tree_Autumn_B", .3f), ("Tree_Broadleaf_A", .2f) } },
+            { WorldLayout.Region.DeepForest, new[] { ("Tree_Broadleaf_A", .35f), ("Tree_Broadleaf_B", .38f), ("Tree_Pine_A", .12f), ("Tree_Pine_B", .1f) } },
+            { WorldLayout.Region.AutumnForest, new[] { ("Tree_Autumn_B", .5f), ("Tree_Autumn_A", .2f), ("Tree_Broadleaf_A", .18f), ("Tree_Pine_A", .1f) } },
+            { WorldLayout.Region.Highland, new[] { ("Tree_Pine_A", .3f), ("Tree_Pine_B", .2f), ("Tree_Autumn_B", .2f), ("Tree_Broadleaf_B", .3f) } },
             { WorldLayout.Region.Edge, new[] { ("Tree_Pine_A", .5f), ("Tree_Pine_B", .5f) } },
-            { WorldLayout.Region.Lakeshore, new[] { ("Tree_Autumn_A", .5f), ("Tree_Autumn_B", .3f), ("Tree_Pine_A", .2f) } },
-            { WorldLayout.Region.Meadow, new[] { ("Tree_Broadleaf_A", .6f), ("Tree_Broadleaf_B", .25f), ("Tree_Birch_A", .15f) } },
-            { WorldLayout.Region.Riverbank, new[] { ("Tree_Broadleaf_A", .7f), ("Tree_Birch_A", .3f) } },
-            { WorldLayout.Region.Cabin, new[] { ("Tree_Pine_A", .6f), ("Tree_Birch_A", .4f) } },
+            { WorldLayout.Region.Lakeshore, new[] { ("Tree_Autumn_B", .4f), ("Tree_Broadleaf_A", .25f), ("Tree_Autumn_A", .2f), ("Tree_Pine_A", .15f) } },
+            { WorldLayout.Region.Meadow, new[] { ("Tree_Broadleaf_A", .55f), ("Tree_Broadleaf_B", .4f) } },
+            { WorldLayout.Region.Riverbank, new[] { ("Tree_Broadleaf_A", .55f), ("Tree_Broadleaf_B", .35f) } },
+            { WorldLayout.Region.Cabin, new[] { ("Tree_Pine_A", .5f), ("Tree_Broadleaf_B", .4f) } },
         };
 
         static readonly Dictionary<WorldLayout.Region, float> TreeDensity = new Dictionary<WorldLayout.Region, float>
@@ -825,6 +825,8 @@ namespace WildPartner.EditorTools
             { WorldLayout.Region.Lakeshore, .4f }, { WorldLayout.Region.Highland, .3f }, { WorldLayout.Region.AutumnForest, .15f },
             { WorldLayout.Region.DeepForest, .12f }, { WorldLayout.Region.Edge, .05f },
         };
+
+        static readonly Vector3[] ViewClearings = { new Vector3(420, 470, 10), new Vector3(640, 700, 30), new Vector3(545, 748, 14), new Vector3(720, 640, 10), new Vector3(345, 768, 10), new Vector3(298, 524, 10) };   // x, z (map units), radius (m)
 
         static bool Blocked(float x, float z, float pathClear, float waterClear)
         {
@@ -886,6 +888,8 @@ namespace WildPartner.EditorTools
             bool TreeOk(float px, float pz, float pathClear)
             {
                 if (Blocked(px, pz, pathClear, 3f)) return false;
+                foreach (var c in ViewClearings)   // small clearings at the scenic viewpoints (SceneShots) so no trunk sits in the lens
+                    if (Vector2.Distance(new Vector2(px, pz), new Vector2(c.x, c.y) * WorldLayout.K) < c.z) return false;
                 var reg = WorldLayout.RegionAt(px, pz);
                 return _td.GetSteepness(px / S, pz / S) <= (reg == WorldLayout.Region.Edge ? 46f : 40f);
             }
@@ -964,7 +968,7 @@ namespace WildPartner.EditorTools
                         var region = WorldLayout.RegionAt(tp.x, tp.y);
                         if (TreeOk(tp.x, tp.y, 5.5f))
                         {
-                            string n = region == WorldLayout.Region.AutumnForest || region == WorldLayout.Region.Lakeshore ? "Tree_Autumn_A" : "Tree_Broadleaf_A";
+                            string n = region == WorldLayout.Region.AutumnForest || region == WorldLayout.Region.Lakeshore ? "Tree_Autumn_B" : "Tree_Broadleaf_A";
                             Tree(n, tp.x, tp.y, TreeScale(n) * 1.1f);
                         }
                         var bp = at + nrm * sideSign * 3.6f + dir * 2.5f;

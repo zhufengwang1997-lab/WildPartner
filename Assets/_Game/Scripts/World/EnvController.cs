@@ -54,9 +54,9 @@ namespace WildPartner.World
             K(4.5f,"#8FA6FF", 0.15f, "#101838", "#2C3866", "#26305A", "#26305A"),
             K(6,   "#FF9A5C", 0.9f,  "#5C7BC8", "#FFB08A", "#D8A0A0", "#7E7FA8"),
             K(8,   "#FFE0AA", 1.9f,  "#3F86E6", "#F7D6D0", "#B4C8EA", "#8FA6D0"),
-            K(12,  "#FFF0D2", 2.3f,  "#347CE6", "#E6E2EA", "#B2CAEE", "#94A2D6"),
-            K(16,  "#FFC98A", 2.5f,  "#3B78DC", "#FCD2B8", "#B8C6EA", "#8A88CC"),
-            K(17,  "#FFB070", 2.2f,  "#4270CE", "#FFC09A", "#C4BCDC", "#8680C0"),
+            K(12,  "#FFF0D2", 2.3f,  "#2C76E8", "#DCE4F0", "#A8C6EC", "#94A2D6"),
+            K(16,  "#FFC98A", 2.5f,  "#2F70DE", "#F6D6C2", "#A4C2E8", "#8A88CC"),
+            K(17,  "#FFB070", 2.2f,  "#3A6AD2", "#FCC6A4", "#B4BEE0", "#8680C0"),
             K(18,  "#FF8A50", 1.3f,  "#4C5EA8", "#FF9A70", "#B88A98", "#7E709C"),
             K(19.5f,"#9AA8FF",0.25f, "#1E2650", "#5A4C80", "#3A3A66", "#3A3E70"),
             K(24,  "#8FA6FF", 0.18f, "#0B1230", "#24305A", "#1C2546", "#202A52"),
@@ -76,6 +76,9 @@ namespace WildPartner.World
         static readonly int FogParams2Id = Shader.PropertyToID("_WP_FogParams2");
         /// <summary>Height-fog density multiplier (settings / quality); 0 turns the haze off.</summary>
         public static float FogAmount = 1f;
+        /// <summary>Near-camera dither fade for Toon objects (m): hidden below x, fully visible above y.</summary>
+        public static Vector2 NearFade = new Vector2(0.6f, 2.4f);
+        static readonly int NearFadeId = Shader.PropertyToID("_WP_NearFade");
 
         void Awake()
         {
@@ -136,10 +139,11 @@ namespace WildPartner.World
             Color fogSun = Color.Lerp(sunCol, Color.white, 0.25f) * Mathf.Clamp01(sunI / 1.5f);
             Shader.SetGlobalColor(FogColId, Color.Lerp(fog, hor, 0.25f));
             Shader.SetGlobalColor(FogSunId, new Color(fogSun.r, fogSun.g, fogSun.b, night ? 0f : 0.75f * (1 - rain)));
-            float density = (night ? 0.0032f : 0.0045f) * (1 + rain * 2.2f) * FogAmount;
-            Shader.SetGlobalVector(FogParamsId, new Vector4(density, 0.04f, 26f, Mathf.Lerp(0.82f, 0.95f, rain)));
+            float density = (night ? 0.0032f : 0.0034f) * (1 + rain * 2.2f) * FogAmount;
+            Shader.SetGlobalVector(FogParamsId, new Vector4(density, 0.04f, 26f, Mathf.Lerp(0.74f, 0.95f, rain)));
             Shader.SetGlobalVector(FogParams2Id, new Vector4(Mathf.Lerp(30f, 8f, rain), 0.85f, 0, 0));
 
+            Shader.SetGlobalVector(NearFadeId, new Vector4(NearFade.x, NearFade.y, 0, 0));
             Shader.SetGlobalColor(ZenithId, zen);
             Shader.SetGlobalColor(HorizonId, hor);
             Shader.SetGlobalColor(GroundId, Color.Lerp(hor, fog, 0.6f) * 0.8f);

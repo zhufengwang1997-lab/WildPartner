@@ -117,7 +117,7 @@ namespace WildPartner.EditorTools
             if (brain) brain.enabled = false;
             var views = new[]
             {
-                new View { name = "01_start", pos = W(WorldLayout.PlayerStart - WorldLayout.CabinFacing * 3.2f, 2.0f), look = W(WorldLayout.PlayerStart + WorldLayout.CabinFacing * 30f, -4f), hour = 16.5f },
+                new View { name = "01_start", pos = W(WorldLayout.PlayerStart - WorldLayout.CabinFacing * 3.4f, 2.1f), look = W(WorldLayout.PlayerStart + WorldLayout.CabinFacing * 30f, -0.5f), hour = 16.5f },
                 new View { name = "02_cabin", pos = W(WorldLayout.Cabin + WorldLayout.CabinFacing * 95f + new Vector2(12, -30), 4f), look = W(WorldLayout.House, 6f), hour = 16f },
                 new View { name = "03_meadow", pos = G(420, 470, 6), look = G(320, 544, 2), hour = 11f },
                 new View { name = "04_lake", pos = G(640, 700, 10), look = G(812, 826, 0), hour = 17.5f },
@@ -150,6 +150,16 @@ namespace WildPartner.EditorTools
                 tex.Apply();
                 RenderTexture.active = null;
                 File.WriteAllBytes($"Logs/shots/{v.name}.png", tex.EncodeToPNG());
+                // which plants stand closest in front of the lens (helps tune viewpoints and clearings)
+                var near = new System.Text.StringBuilder();
+                foreach (Transform grp in veg.transform)
+                    foreach (Transform it in grp)
+                    {
+                        var d = it.position - v.pos; d.y = 0;
+                        if (d.magnitude < 22f && Vector3.Dot(d.normalized, cam.transform.forward) > 0.5f && !grp.name.StartsWith("Grass") && !grp.name.StartsWith("Flowers"))
+                            near.Append($" {grp.name}@{d.magnitude:0.0}m");
+                    }
+                Debug.Log($"[Shots] {v.name} near props:{near}");
             }
             CatPoses(cam, env, rt, tex);
             cam.targetTexture = null;
