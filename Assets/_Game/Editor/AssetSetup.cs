@@ -303,18 +303,26 @@ namespace WildPartner.EditorTools
         static void BuildCreature(CreatureDef def, Material placeholder)
         {
             var root = new GameObject(def.id);
-            var vis = Visual(def.model, def.model, placeholder, out bool ph, m =>
+            // Blender-rigged model when there is one (tools/blender/rig_cat.py ...), else the rigid model
+            // moved by ProceduralAnimator
+            bool ph = false;
+            var vis = RiggedVisual(def.model, def.model) ?? Visual(def.model, def.model, placeholder, out ph, m =>
             {
                 if (def.id == "moon_butterfly") m.SetFloat("_Emission", 0.3f);
             });
+            bool rigged = vis.GetComponentInChildren<Animator>() != null;
             vis.transform.SetParent(root.transform, false);
             var c = root.AddComponent<Creature>();
             c.defId = def.id;
-            var anim = root.AddComponent<ProceduralAnimator>();
-            anim.style = def.anim;
-            anim.scale = def.animScale;
-            anim.visual = vis.transform;
-            anim.stepLength = def.id == "white_deer" ? 1.6f : def.id == "cat" ? 0.3f : 0.6f;
+            if (rigged) c.animRunSpeed = ClipSpeeds(def.model).Run;
+            else
+            {
+                var anim = root.AddComponent<ProceduralAnimator>();
+                anim.style = def.anim;
+                anim.scale = def.animScale;
+                anim.visual = vis.transform;
+                anim.stepLength = def.id == "white_deer" ? 1.6f : def.id == "cat" ? 0.3f : 0.6f;
+            }
             var col = root.AddComponent<SphereCollider>();
             col.isTrigger = true; col.radius = 0.6f; col.center = new Vector3(0, 0.4f, 0);
             if (def.movement == Movement.Ground)
@@ -409,6 +417,39 @@ namespace WildPartner.EditorTools
             var t7 = T(sLand, sUp, 0.05f); t7.AddCondition(UnityEditor.Animations.AnimatorConditionMode.If, 0, "Jump");          // bunny hop
         }
 
+        /// <summary>Cat moods (玩法设计 tier 2), driven by the int "Mood": 1 sit + lick paw, 2 lie down + belly up,
+        /// 3 rub against the witch. Each has an entry clip with anticipation and a loop; leaving blends back to
+        /// locomotion. Skipped when the model has no such clips.</summary>
+        static void AddMoods(UnityEditor.Animations.AnimatorController ctrl, UnityEditor.Animations.AnimatorStateMachine sm,
+                             UnityEditor.Animations.AnimatorState loco, System.Func<string, AnimationClip> clip)
+        {
+            AnimationClip sitDown = clip("SitDown"), sitLick = clip("SitLick"), lieDown = clip("LieDown"), belly = clip("BellyUp"), rub = clip("Rub");
+            if (!sitDown || !sitLick || !lieDown || !belly || !rub) return;
+            ctrl.AddParameter("Mood", AnimatorControllerParameterType.Int);
+            var C = UnityEditor.Animations.AnimatorConditionMode.Equals; var NC = UnityEditor.Animations.AnimatorConditionMode.NotEqual;
+            UnityEditor.Animations.AnimatorState S(string n, AnimationClip m) { var st = sm.AddState(n); st.motion = m; return st; }
+            UnityEditor.Animations.AnimatorStateTransition T(UnityEditor.Animations.AnimatorState a, UnityEditor.Animations.AnimatorState b, float dur, float exit = -1)
+            {
+                var t = a.AddTransition(b); t.duration = dur; t.hasFixedDuration = true;
+                t.hasExitTime = exit >= 0; if (exit >= 0) t.exitTime = exit;
+                return t;
+            }
+            var sSit = S("SitDown", sitDown); var sLick = S("SitLick", sitLick);
+            var sLie = S("LieDown", lieDown); var sBelly = S("BellyUp", belly); var sRub = S("Rub", rub);
+            T(loco, sSit, 0.2f).AddCondition(C, 1, "Mood");
+            T(sSit, sLick, 0.15f, 0.96f);
+            T(sSit, loco, 0.25f).AddCondition(NC, 1, "Mood");
+            T(sLick, loco, 0.35f).AddCondition(NC, 1, "Mood");
+            foreach (var from in new[] { loco, sLick })
+                T(from, sLie, 0.3f).AddCondition(C, 2, "Mood");
+            T(sLie, sBelly, 0.15f, 0.97f);
+            T(sLie, loco, 0.35f).AddCondition(NC, 2, "Mood");
+            T(sBelly, loco, 0.45f).AddCondition(NC, 2, "Mood");
+            foreach (var from in new[] { loco, sLick })
+                T(from, sRub, 0.25f).AddCondition(C, 3, "Mood");
+            T(sRub, loco, 0.3f).AddCondition(NC, 3, "Mood");
+        }
+
         static UnityEditor.Animations.AnimatorController LocomotionController(string model, string fbx)
         {
             Directory.CreateDirectory(AnimDir);
@@ -434,6 +475,7 @@ namespace WildPartner.EditorTools
             tree.AddChild(Clip("Run"), sp.Run);
             sm.defaultState = state;
             AddJump(ctrl, sm, state, Clip);
+            AddMoods(ctrl, sm, state, Clip);
             EditorUtility.SetDirty(ctrl);
             return ctrl;
         }

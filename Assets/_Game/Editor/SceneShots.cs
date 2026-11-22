@@ -28,6 +28,55 @@ namespace WildPartner.EditorTools
             return new Vector3(x, t.SampleHeight(new Vector3(x, 0, z)) + up, z);
         }
 
+        /// <summary>Close-ups of the rigged cat's clips sampled at chosen times, in the real scene lighting
+        /// (animation check for 画面整改 8 without entering Play mode).</summary>
+        static void CatPoses(Camera cam, EnvController env, RenderTexture rt, Texture2D tex)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Game/Prefabs/Creatures/cat.prefab");
+            if (!prefab) return;
+            var cat = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            var anim = cat.GetComponentInChildren<Animator>();
+            if (!anim) { Object.DestroyImmediate(cat); return; }
+            var clips = anim.runtimeAnimatorController.animationClips;
+            var at = W(WorldLayout.PlayerStart + WorldLayout.CabinFacing * 1.6f, 0f);   // on the dirt path, not in tall grass
+            cat.transform.SetPositionAndRotation(at, Quaternion.LookRotation(new Vector3(-WorldLayout.CabinFacing.y, 0, WorldLayout.CabinFacing.x)));
+            env.timeOfDay = 16.3f; env.Apply();
+            foreach (var (clipName, time) in new[] { ("Idle", 2.1f), ("Walk", 0.2f), ("Run", 0.13f), ("SitLick", 1.3f), ("BellyUp", 1.0f), ("Rub", 0.45f) })
+            {
+                var clip = System.Array.Find(clips, c => c.name == clipName);
+                if (!clip) continue;
+                clip.SampleAnimation(anim.gameObject, time);
+                // batch mode does not skin before an editor-side Render: bake the posed mesh into a stand-in
+                var baked = new System.Collections.Generic.List<GameObject>();
+                foreach (var smr in cat.GetComponentsInChildren<SkinnedMeshRenderer>())
+                {
+                    var m = new Mesh(); smr.BakeMesh(m, true);
+                    var go = new GameObject("baked", typeof(MeshFilter), typeof(MeshRenderer));
+                    go.transform.SetPositionAndRotation(smr.transform.position, smr.transform.rotation);
+                    go.GetComponent<MeshFilter>().sharedMesh = m;
+                    go.GetComponent<MeshRenderer>().sharedMaterials = smr.sharedMaterials;
+                    smr.enabled = false; baked.Add(go);
+                }
+                var right = cat.transform.right;
+                var pos = at + right * 0.95f + cat.transform.forward * 0.9f + Vector3.up * 0.42f;
+                cam.transform.position = pos;
+                cam.transform.rotation = Quaternion.LookRotation(at + Vector3.up * 0.22f - pos);
+                cam.targetTexture = rt;
+                var grass = Object.FindFirstObjectByType<GrassRenderer>();
+                if (grass) { grass.Setup(); grass.Submit(cam, pos); }
+                cam.Render();
+                if (grass) grass.Submit(cam, pos);
+                cam.Render();
+                RenderTexture.active = rt;
+                tex.ReadPixels(new Rect(0, 0, 1600, 900), 0, 0); tex.Apply();
+                RenderTexture.active = null;
+                File.WriteAllBytes($"Logs/shots/cat_{clipName}.png", tex.EncodeToPNG());
+                foreach (var go in baked) Object.DestroyImmediate(go);
+                foreach (var smr in cat.GetComponentsInChildren<SkinnedMeshRenderer>()) smr.enabled = true;
+            }
+            Object.DestroyImmediate(cat);
+        }
+
         public static void Run()
         {
             EditorSceneManager.OpenScene("Assets/_Game/Scenes/World.unity");
@@ -78,6 +127,7 @@ namespace WildPartner.EditorTools
                 RenderTexture.active = null;
                 File.WriteAllBytes($"Logs/shots/{v.name}.png", tex.EncodeToPNG());
             }
+            CatPoses(cam, env, rt, tex);
             cam.targetTexture = null;
             Debug.Log($"[World] shots written: {views.Length}");
         }

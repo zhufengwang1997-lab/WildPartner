@@ -30,3 +30,4 @@ tools/__pycache__/
 out/
 Assets/Resources/build_commit.txt*
 Builds/
+*.blend1

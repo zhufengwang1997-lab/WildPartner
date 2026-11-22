@@ -48,6 +48,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: WildPartner.Runtime::WildPartner.Creatures.Creature
   defId: ink_koi
+  animRunSpeed: 0
 --- !u!114 &2388771962184755592
 MonoBehaviour:
   m_ObjectHideFlags: 0

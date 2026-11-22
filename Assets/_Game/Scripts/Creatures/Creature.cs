@@ -22,6 +22,14 @@ namespace WildPartner.Creatures
         public State Current { get; private set; } = State.Hidden;
         public float AlertLevel { get; private set; }
         public int CompanionSlot { get; set; }
+        /// <summary>Ground speed of the rigged Run clip at 1x (from the Blender export); 0 = not rigged.</summary>
+        public float animRunSpeed;
+        /// <summary>0 none, 1 sitting + licking, 2 lying belly-up, 3 rubbing against the witch (cat only).</summary>
+        public int Mood { get; private set; }
+
+        Animator _animator;
+        float _stillTime, _rubTime;
+        static readonly int SpeedId = Animator.StringToHash("Speed"), MoodId = Animator.StringToHash("Mood");
 
         NavMeshAgent _agent;
         ProceduralAnimator _anim;
@@ -41,6 +49,7 @@ namespace WildPartner.Creatures
             _agent = GetComponent<NavMeshAgent>();
             _anim = GetComponent<ProceduralAnimator>();
             _visual = transform.Find("Visual");
+            _animator = GetComponentInChildren<Animator>();
             if (_visual) _visualScale = _visual.localScale;
         }
 
@@ -163,7 +172,7 @@ namespace WildPartner.Creatures
             Vector3 toPlayer = pp - transform.position; toPlayer.y = 0;
             float dist = toPlayer.magnitude;
 
-            if (Current == State.Companion) { UpdateCompanion(player); return; }
+            if (Current == State.Companion) { UpdateCompanion(player); DriveAnimator(player); return; }
 
             // Senses
             float radius = Def.alertRadius * player.Noise;
@@ -269,6 +278,48 @@ namespace WildPartner.Creatures
             }
             transform.position = p;
             FaceTowards(_velocity);
+        }
+
+        void LateUpdate()
+        {
+            if (_animator && Current != State.Companion && Current != State.Hidden) DriveAnimator(PlayerController.Instance);
+        }
+
+        /// <summary>Rigged models: blend-tree speed from the actual ground speed (playback sped up above the Run
+        /// clip's own speed so the paws keep up), and the cat's moods while it keeps the witch company:
+        /// she stands still a moment -> sit and lick a paw; ~20 s -> lie down belly-up; she walks up to it -> rub.</summary>
+        void DriveAnimator(PlayerController player)
+        {
+            float dt = Time.deltaTime;
+            Vector3 v = _agent && _agent.enabled ? _agent.velocity : _velocity;
+            float speed = Vector3.ProjectOnPlane(v, Vector3.up).magnitude;
+            int mood = 0;
+            if (Def.id == "cat" && Current == State.Companion && player)
+            {
+                Vector3 toCat = transform.position - player.transform.position; toCat.y = 0;
+                bool approaching = player.Speed > 0.4f && toCat.magnitude < 1.6f && Vector3.Dot(player.transform.forward, toCat.normalized) > 0.6f;
+                if (approaching && _rubTime <= 0f && Mood != 3) _rubTime = 2.6f;
+                _rubTime -= dt;
+                _stillTime = player.Speed < 0.1f && speed < 0.25f ? _stillTime + dt : 0f;
+                mood = _rubTime > 0f ? 3 : _stillTime > 20f ? 2 : _stillTime > 2.5f ? 1 : 0;
+                if (mood == 3)
+                {
+                    // walk up to her legs and lean in
+                    Vector3 to = -toCat;
+                    FaceTowards(to);
+                    if (_agent && _agent.enabled)
+                    {
+                        _agent.isStopped = to.magnitude < 0.55f;
+                        if (to.magnitude >= 0.55f) { _agent.speed = 1.2f; _agent.SetDestination(player.transform.position - to.normalized * 0.45f); }
+                    }
+                }
+            }
+            Mood = mood;
+            if (!_animator) return;
+            float run = animRunSpeed > 0.01f ? animRunSpeed : 1f;
+            _animator.SetFloat(SpeedId, Mathf.Min(speed, run), 0.1f, dt);
+            _animator.SetInteger(MoodId, mood);
+            _animator.speed = mood == 0 ? Mathf.Clamp(speed / run, 1f, 2.6f) : 1f;
         }
 
         void FaceTowards(Vector3 dir)

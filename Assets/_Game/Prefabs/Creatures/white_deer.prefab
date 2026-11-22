@@ -139,6 +139,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: WildPartner.Runtime::WildPartner.Creatures.Creature
   defId: white_deer
+  animRunSpeed: 0
 --- !u!114 &6437673280862640824
 MonoBehaviour:
   m_ObjectHideFlags: 0
