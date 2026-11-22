@@ -48,10 +48,17 @@ namespace WildPartner.World
         /// <summary>School centres (world xz), fish count, gold or silver.</summary>
         static readonly (Vector2 c, int n, bool gold)[] Spots =
         {
-            (new Vector2(261f, 222f), 9, false),    // river below the bridge
-            (new Vector2(292f, 263f), 12, true),    // lake shallows, south shore
-            (new Vector2(230f, 140f), 8, false),    // pond below the cabin
-            (new Vector2(251f, 186f), 7, true),     // river, between the bridge and the bend
+            // 1123c-B5: ten schools along the whole river, the pond and the lake (tools: HabitatPicker)
+            (new Vector2(140.4f, 271.6f), 8, true),     // upper river, below the falls
+            (new Vector2(182.3f, 254.8f), 7, false),
+            (new Vector2(211.8f, 241.8f), 10, true),
+            (new Vector2(233.2f, 246.7f), 8, false),
+            (new Vector2(263.0f, 211.4f), 9, true),     // below the bridge
+            (new Vector2(264.6f, 189.0f), 7, false),
+            (new Vector2(258.5f, 165.2f), 8, true),     // the bend
+            (new Vector2(239.3f, 147.2f), 9, false),    // lower river, by the pond
+            (new Vector2(311.7f, 322.0f), 12, true),    // lake shallows, east
+            (new Vector2(259.1f, 324.1f), 10, false),   // lake, west
         };
 
         void Awake() => Instance = this;

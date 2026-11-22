@@ -242,10 +242,29 @@ namespace WildPartner.Creatures
             // Senses
             float radius = Def.alertRadius * player.Noise * (player.Sneaking ? Def.sneakRadiusMul : 1f);
             bool sensed = dist < radius;
+            float senseMul = 1f;
+            if (Def.viewAngle > 0f)
+            {
+                // 1123c-B1 (deer): eyes see a cone in front (much shorter while grazing, head down); ears hear all
+                // round by how much noise she makes (run > walk > sneak). Seen = the meter rises fast; only heard =
+                // slower, and it turns to look.
+                Vector3 fwd = transform.forward; fwd.y = 0;
+                SeesPlayer = Vector3.Angle(fwd, toPlayer) < Def.viewAngle * 0.5f &&
+                             dist < Def.alertRadius * (Grazing ? Def.grazeViewMul : 1f) * (player.Sneaking ? 0.75f : 1f);
+                HearsPlayer = dist < Def.hearRadius * player.Noise;
+                sensed = SeesPlayer || HearsPlayer;
+                radius = SeesPlayer ? Def.alertRadius : Def.hearRadius * player.Noise;
+                senseMul = SeesPlayer ? 1f : 0.6f;
+            }
             // Sneaking makes the meter rise much slower; holding capture while sneaking calms the creature
             // (it "accepts" you), holding it while not sneaking only halves the rise -> the hint "sneak up".
-            float rate = sensed ? Def.alertRate * Mathf.Lerp(2.2f, 1f, dist / Mathf.Max(radius, 0.01f)) * (player.Sneaking ? 0.35f : 1f) : -0.25f;
-            if (CaptureSystem.Target == this) rate = player.Sneaking ? -0.15f : (sensed ? rate * 0.5f : -0.1f);
+            // (in plain view sneaking helps less: 0.7 instead of 0.35)
+            float rate = sensed ? Def.alertRate * senseMul * Mathf.Lerp(2.2f, 1f, dist / Mathf.Max(radius, 0.01f)) * (player.Sneaking ? (SeesPlayer ? 0.7f : 0.35f) : 1f) : -0.25f;
+            if (CaptureSystem.Target == this)
+                rate = Def.viewAngle > 0f && SeesPlayer ? Mathf.Max(rate * 0.8f, 0.9f)   // casting the spell in front of a deer: it bolts (~1 s)
+                     : player.Sneaking ? -0.15f : (sensed ? rate * 0.5f : -0.1f);
+            // deer: once alert (head up), standing still lets it relax again
+            else if (Def.viewAngle > 0f && Current == State.Alert && player.Speed < 0.2f && !player.Airborne) rate = -0.3f;
             AlertLevel = Mathf.Clamp01(AlertLevel + rate * Time.deltaTime);
             if (_anim) _anim.alert = Current == State.Alert ? AlertLevel : 0;
 
@@ -254,12 +273,12 @@ namespace WildPartner.Creatures
                 case State.Wander:
                     if (AlertLevel > 0.25f) { SetState(State.Alert); break; }
                     // held by the capture spell: it stops and looks at you instead of strolling out of range
-                    if (CaptureSystem.Target == this) { if (_agent && _agent.enabled) _agent.isStopped = true; FaceTowards(toPlayer); break; }
+                    if (CaptureSystem.Target == this) { if (_agent && _agent.enabled) _agent.isStopped = true; if (Def.viewAngle <= 0f || SeesPlayer) FaceTowards(toPlayer); break; }   // a deer held from behind stays put (1123c-B1)
                     Wander();
                     break;
                 case State.Alert:
                     if (_agent && _agent.enabled) _agent.isStopped = true;
-                    FaceTowards(toPlayer);
+                    if (sensed || Def.viewAngle <= 0f) FaceTowards(toPlayer);   // a deer that lost track of her keeps looking where it was
                     if (AlertLevel >= 1f)
                     {
                         if (Def.startleFirst && CaptureSystem.Target == this) Startle();
@@ -419,6 +438,9 @@ namespace WildPartner.Creatures
         /// <summary>0..1 how far the ears are pricked up (smoke test / debug).</summary>
         public float EarsUp => _earsW;
         public bool Grazing => Current == State.Wander && _pauseUntil > _stateTime;
+        /// <summary>Deer senses this frame (1123c-B1): she is inside its view cone / within hearing.</summary>
+        public bool SeesPlayer { get; private set; }
+        public bool HearsPlayer { get; private set; }
 
         void FindRabbitBones()
         {
@@ -715,8 +737,72 @@ namespace WildPartner.Creatures
             Debug.Log($"[Ride] dismounted {Def.id}");
         }
 
+        // ---- 1123c-B2: only the current pet is out --------------------------------------------------------------
+        /// <summary>False while this collected pet is not the current one (kept out of sight, does nothing).</summary>
+        public bool PetShown { get; private set; } = true;
+        TrailRenderer _trail;
+        Light _glow;
+
+        public void SetPetShown(bool on)
+        {
+            if (PetShown == on) return;
+            PetShown = on;
+            foreach (var r in GetComponentsInChildren<Renderer>(true)) if (!(r is TrailRenderer)) r.enabled = on;
+            foreach (var c in GetComponents<Collider>()) c.enabled = on;
+            if (_trail) { _trail.Clear(); _trail.emitting = on; }
+            if (_glow) _glow.enabled = false;
+            if (!on)
+            {
+                if (Ridden && PlayerController.Instance) Dismount(PlayerController.Instance);
+                if (_agent && _agent.enabled) _agent.enabled = false;
+                if (RidePrompt != null && Def.rideable) RidePrompt = null;
+            }
+            else if (Def.movement == Movement.Ground && PlayerController.Instance) Place(PlayerController.Instance.transform.position);
+        }
+
+        /// <summary>The moon butterfly as current pet circles her shoulders, trailing purple light; at night it
+        /// carries a soft light (1123c-B2).</summary>
+        void UpdateButterflyPet(PlayerController player)
+        {
+            if (!_trail)
+            {
+                _trail = gameObject.AddComponent<TrailRenderer>();
+                _trail.time = 0.9f; _trail.minVertexDistance = 0.05f;
+                _trail.widthCurve = new AnimationCurve(new Keyframe(0, 0.12f), new Keyframe(1, 0f));
+                var g = new Gradient();
+                g.SetKeys(new[] { new GradientColorKey(new Color(0.85f, 0.6f, 1f), 0), new GradientColorKey(new Color(0.5f, 0.3f, 1f), 1) },
+                          new[] { new GradientAlphaKey(0.9f, 0), new GradientAlphaKey(0f, 1) });
+                _trail.colorGradient = g;
+                var sh = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+                if (sh)
+                {
+                    var m = new Material(sh);
+                    m.SetFloat("_Surface", 1); m.SetFloat("_Blend", 2);
+                    m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha); m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);
+                    m.SetFloat("_ZWrite", 0); m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT"); m.renderQueue = 3000;
+                    _trail.sharedMaterial = m;
+                }
+                _trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                var lg = new GameObject("PetGlow", typeof(Light));
+                lg.transform.SetParent(transform, false);
+                _glow = lg.GetComponent<Light>();
+                _glow.type = LightType.Point; _glow.color = new Color(0.75f, 0.6f, 1f); _glow.range = 9f; _glow.intensity = 2.2f; _glow.shadows = LightShadows.None;
+            }
+            float t = Time.time * 1.6f;
+            Vector3 c = player.transform.position + Vector3.up * (1.5f + 0.25f * Mathf.Sin(t * 1.7f));
+            Vector3 orbit = c + new Vector3(Mathf.Cos(t), 0, Mathf.Sin(t)) * 1.15f;
+            transform.position = Vector3.SmoothDamp(transform.position, orbit, ref _velocity, 0.18f, 30f);
+            if (Vector3.Distance(transform.position, orbit) > 30f) transform.position = orbit;
+            FaceTowards(_velocity.sqrMagnitude > 0.01f ? _velocity : player.transform.forward);
+            var env = EnvController.Instance;
+            bool night = env && (env.timeOfDay >= 19f || env.timeOfDay < 5.5f);
+            _glow.enabled = night || EnvController.Indoors;
+        }
+
         void UpdateCompanion(PlayerController player)
         {
+            if (!PetShown) { transform.position = player.transform.position + Vector3.down * 50f; return; }   // stowed away
+            if (Def.id == "moon_butterfly") { UpdateButterflyPet(player); return; }
             if (Def.rideable && UpdateRide(player)) return;
             if (Def.id == "cat" && Def.movement == Movement.Ground && UpdateLead(player)) return;
             if (Def.id == "cat" && Def.movement == Movement.Ground && UpdateSideSpot(player)) return;
