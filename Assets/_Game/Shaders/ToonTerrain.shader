@@ -96,7 +96,7 @@ Shader "WildPartner/ToonTerrain"
                 half3 n = normalize(i.normalWS);
                 // steep slopes become painted rock (画面整改 2/cliff): warm grey with horizontal strata and lighter
                 // ledges, instead of grass colour stretched over a cliff (read as one flat purple sheet in shade)
-                float steep = smoothstep(0.74, 0.50, n.y);
+                float steep = smoothstep(0.66, 0.42, n.y);
                 if (steep > 0.001)
                 {
                     float3 pw = i.positionWS;

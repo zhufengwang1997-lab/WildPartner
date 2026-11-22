@@ -86,7 +86,7 @@ namespace WildPartner.Core
             foreach (var c in _creatures)   // the default pet (cat) is with the witch from the start
                 if (c.Def.startsWithPlayer)
                 {
-                    Save.caught.Add(new CaughtEntry { id = c.defId, playTime = 0, gameHour = startHour });
+                    Save.caught.Add(new CaughtEntry { id = c.defId, playTime = 0, gameHour = startHour, position = c.transform.position });
                     c.RestoreAsCompanion(Save.caught.Count - 1, startPos);
                 }
             environment.timeOfDay = startHour;
@@ -173,7 +173,7 @@ namespace WildPartner.Core
         void OnCaptured(Creature c)
         {
             if (Save.HasCaught(c.defId)) return;
-            Save.caught.Add(new CaughtEntry { id = c.defId, playTime = Save.playTime, gameHour = environment.timeOfDay });
+            Save.caught.Add(new CaughtEntry { id = c.defId, playTime = Save.playTime, gameHour = environment.timeOfDay, position = c.transform.position });
             c.BecomeCompanion(Save.caught.Count - 1);
             Toast?.Invoke($"捕捉成功：{c.Def.name}！（{CaughtCount}/{Total}）");
             if (AllCaught) Toast?.Invoke("伙伴们都到齐了！回到悬崖木屋前的篝火吧。");

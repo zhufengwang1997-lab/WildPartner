@@ -22,6 +22,16 @@ namespace WildPartner.EditorTools
             return new Vector3(xz.x, t.SampleHeight(new Vector3(xz.x, 0, xz.y)) + up, xz.y);
         }
 
+        /// <summary>Keeps a close-up's original camera distance in metres on the shrunk map (the landmark model
+        /// did not shrink): moves pos away from look by 1/F, then re-grounds it.</summary>
+        static Vector3 Far(Vector3 pos, Vector3 look)
+        {
+            var p = look + (pos - look) / WorldLayout.F;
+            var t = Terrain.activeTerrain;
+            p.y = Mathf.Max(p.y, t.SampleHeight(p) + (pos.y - t.SampleHeight(pos)));
+            return p;
+        }
+
         static Vector3 G(float x, float z, float up)
         {
             var t = Terrain.activeTerrain;
@@ -121,13 +131,13 @@ namespace WildPartner.EditorTools
                 new View { name = "02_cabin", pos = W(WorldLayout.Cabin + WorldLayout.CabinFacing * 95f + new Vector2(12, -30), 4f), look = W(WorldLayout.House, 6f), hour = 16f },
                 new View { name = "03_meadow", pos = G(420, 470, 6), look = G(320, 544, 2), hour = 11f },
                 new View { name = "04_lake", pos = G(640, 700, 10), look = G(812, 826, 0), hour = 17.5f },
-                new View { name = "05_bridge", pos = G(720, 640, 5), look = G(748, 664, 0), hour = 13f },
+                new View { name = "05_bridge", pos = Far(G(720, 640, 5), G(748, 664, 0)), look = G(748, 664, 0), hour = 13f },
                 new View { name = "06_forest", pos = G(545, 748, 1.8f), look = G(522, 805, 2.4f), hour = 15f },
-                new View { name = "07_overview", pos = new Vector3(300, 230, -70), look = new Vector3(300, 30, 320), hour = 12f },
+                new View { name = "07_overview", pos = new Vector3(180, 150, -50), look = new Vector3(180, 30, 195), hour = 12f },
                 new View { name = "08_night", pos = W(WorldLayout.RampTop - WorldLayout.CabinFacing * 2f, 2.2f), look = W(WorldLayout.House, 2.5f), hour = 22f },
                 new View { name = "09_waterfall", pos = G(345, 768, 7), look = G(258, 884, 3), hour = 12f },
                 new View { name = "10_moonflower", pos = G(841, 825, 1.6f), look = G(846, 830, 1.0f), hour = 19.5f },
-                new View { name = "11_stones", pos = G(298, 524, 2.5f), look = G(320, 544, 1.5f), hour = 15f },
+                new View { name = "11_stones", pos = Far(G(298, 524, 2.5f), G(320, 544, 1.5f)), look = G(320, 544, 1.5f), hour = 15f },
                 new View { name = "13_sky", pos = G(420, 470, 4), look = G(320, 544, 45), hour = 16f },
                 new View { name = "12_yard", pos = W(WorldLayout.RampTop - WorldLayout.CabinFacing * 2f, 2.2f), look = W(WorldLayout.House, 2.0f), hour = 15.5f },
             };

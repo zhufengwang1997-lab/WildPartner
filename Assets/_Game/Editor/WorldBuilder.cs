@@ -144,10 +144,10 @@ namespace WildPartner.EditorTools
         static float BaseHeight(float x, float z)
         {
             // valley floor: broad swells (~120 m) + small hillocks (~30 m), never a flat plane (画面整改 2)
-            float h = 31f + (Fbm(x * 0.008f, z * 0.008f) - 0.5f) * 10f + (Fbm(x * 0.034f + 40, z * 0.034f + 10, 3) - 0.5f) * 4.5f;
-            h += Mathf.SmoothStep(0, 1, Mathf.InverseLerp(380, 560, z)) * 6f * Fbm(x * 0.017f + 5, z * 0.017f);
+            float h = 31f + (Fbm(x * 0.008f / WorldLayout.F, z * 0.008f / WorldLayout.F) - 0.5f) * 10f + (Fbm(x * 0.034f + 40, z * 0.034f + 10, 3) - 0.5f) * 4.5f;
+            h += Mathf.SmoothStep(0, 1, Mathf.InverseLerp(380 * WorldLayout.F, 560 * WorldLayout.F, z)) * 6f * Fbm(x * 0.017f / WorldLayout.F + 5, z * 0.017f / WorldLayout.F);
             // NW highland (waterfall source)
-            float dh = Vector2.Distance(new Vector2(x, z), new Vector2(165, 955) * K) / (220f * K);
+            float dh = Vector2.Distance(new Vector2(x, z), new Vector2(165, 955) * K) / (220f * K * 1.25f);
             h += (1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.55f, 1.0f, dh))) * 36f;
             return h;
         }
@@ -156,8 +156,8 @@ namespace WildPartner.EditorTools
         static float EdgeRise(float x, float z)
         {
             float e = Mathf.Min(Mathf.Min(x, S - x), Mathf.Min(z, S - z));
-            float t = 1 - Mathf.Clamp01((e - 4f) / 70f);
-            return t * t * (26f + Fbm(x * 0.025f, z * 0.025f) * 26f) + t * 6f;
+            float t = 1 - Mathf.Clamp01((e - 4f) / 55f);   // 70 m on the 600 m map; a little narrower on the 360 m map
+            return (t * t * (26f + Fbm(x * 0.025f, z * 0.025f) * 26f) + t * 6f) * 0.75f;   // lower rim on the 360 m map: same height over a shorter run turned the slopes into bare rock
         }
 
         public static float Height(float x, float z)
@@ -725,12 +725,13 @@ namespace WildPartner.EditorTools
         // "pyramids". Each ring is one mesh + one FarRidge material; nearer rings are darker and crisper,
         // farther ones paler and bluer, the last two carry snow. Queues are ordered farthest-first so nearer
         // silhouettes overlap farther ones (they don't write depth; see FarRidge.shader).
+        const float RidgeK = 0.72f;   // rings pulled in with the 360 m map
         static readonly (float radius, float baseH, float amp, float freq, Color rock, float fade, float snow, float seed)[] RidgeLayers =
         {
-            (1750f, 260f, 420f, 5f,  new Color(0.52f, 0.60f, 0.74f), 0.72f, 520f, 11f),
-            (1250f, 170f, 330f, 7f,  new Color(0.42f, 0.50f, 0.64f), 0.52f, 360f, 23f),
-            ( 880f, 100f, 210f, 9f,  new Color(0.32f, 0.42f, 0.50f), 0.34f, 255f, 37f),
-            ( 620f,  55f, 105f, 13f, new Color(0.24f, 0.36f, 0.36f), 0.20f, 9999f, 53f),
+            (1750f * RidgeK, 260f, 420f, 5f,  new Color(0.52f, 0.60f, 0.74f), 0.72f, 520f, 11f),
+            (1250f * RidgeK, 170f, 330f, 7f,  new Color(0.42f, 0.50f, 0.64f), 0.52f, 360f, 23f),
+            ( 880f * RidgeK, 100f, 210f, 9f,  new Color(0.32f, 0.42f, 0.50f), 0.34f, 255f, 37f),
+            ( 620f * RidgeK,  55f, 105f, 13f, new Color(0.24f, 0.36f, 0.36f), 0.20f, 9999f, 53f),
         };
 
         static void BuildBackground(Transform parent)
@@ -921,7 +922,7 @@ namespace WildPartner.EditorTools
                     if (Vector2.Distance(new Vector2(px, pz), new Vector2(c.x, c.y) * WorldLayout.K) < c.z) return false;
                 if (Vector2.Distance(new Vector2(px, pz), WorldLayout.Cabin + WorldLayout.CabinFacing * 95f + new Vector2(12, -30)) < 14f) return false;   // 02_cabin viewpoint
                 var reg = WorldLayout.RegionAt(px, pz);
-                return _td.GetSteepness(px / S, pz / S) <= (reg == WorldLayout.Region.Edge ? 46f : 40f);
+                return _td.GetSteepness(px / S, pz / S) <= (reg == WorldLayout.Region.Edge ? 50f : 44f);
             }
             var placedTrees = new List<Vector2>();
             void Tree(string n, float px, float pz, float scale)
@@ -949,7 +950,7 @@ namespace WildPartner.EditorTools
                     Tree(n, px, pz, TreeScale(n));
                 }
             // open ground: groups of 3–5 trees (one big, the rest smaller) with bushes and a rock, sight lines left open
-            const float gcell = 34f;
+            const float gcell = 28f;   // tighter groups on the smaller map (试玩反馈 4: denser, not emptier)
             for (float z = gcell / 2; z < S; z += gcell)
                 for (float x = gcell / 2; x < S; x += gcell)
                 {
@@ -989,7 +990,7 @@ namespace WildPartner.EditorTools
                     var a0 = path[i]; var a1 = path[i + 1];
                     float len = Vector2.Distance(a0, a1);
                     var dir = (a1 - a0) / len; var nrm = new Vector2(-dir.y, dir.x);
-                    for (float u = carry; u < len; u += 26f + (float)_rng.NextDouble() * 10f)
+                    for (float u = carry; u < len; u += 20f + (float)_rng.NextDouble() * 8f)
                     {
                         var at = a0 + dir * u;
                         if (Vector2.Distance(at, WorldLayout.Cabin) < WorldLayout.CabinRadius + 20) continue;
@@ -1307,10 +1308,10 @@ namespace WildPartner.EditorTools
             deocc.AvoidObstacles = avoid;
 
             var pivot = new GameObject("MenuPivot").transform;
-            pivot.position = new Vector3(S * 0.5f, 30, S * 0.5f);   // valley centre (600 m map)
+            pivot.position = new Vector3(S * 0.5f, 30, S * 0.5f);   // valley centre
             var mGo = new GameObject("MenuCam");
             mGo.transform.SetParent(pivot, false);
-            mGo.transform.localPosition = new Vector3(0, 70, -235);
+            mGo.transform.localPosition = new Vector3(0, 58, -235 * WorldLayout.F);
             var mcam = mGo.AddComponent<CinemachineCamera>();
             mcam.Lens = new LensSettings { FieldOfView = 40, NearClipPlane = 0.5f, FarClipPlane = 3000f };
             var lookAt = new GameObject("MenuLookAt").transform;

@@ -203,6 +203,8 @@ namespace WildPartner.Creatures
             {
                 case State.Wander:
                     if (AlertLevel > 0.25f) { SetState(State.Alert); break; }
+                    // held by the capture spell: it stops and looks at you instead of strolling out of range
+                    if (CaptureSystem.Target == this) { if (_agent && _agent.enabled) _agent.isStopped = true; FaceTowards(toPlayer); break; }
                     Wander();
                     break;
                 case State.Alert:

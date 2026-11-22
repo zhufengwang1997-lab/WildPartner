@@ -53,7 +53,7 @@ Material:
     - _RampSteps: 3
     - _ShadowStrength: 0.8
     - _Variation: 0.25
-    - _WorldSize: 600
+    - _WorldSize: 360
     m_Colors:
     - _ShadowColor: {r: 0.47, g: 0.53, b: 0.74, a: 1}
   m_BuildTextureStacks: []

@@ -11,14 +11,18 @@ namespace WildPartner.World
     /// </summary>
     public static class WorldLayout
     {
-        public const float Size = 600f;
-        /// <summary>Design coordinates are pixels of the 1024 px reference map; K maps them onto the 600 m world (PRD-补充 §2).</summary>
+        /// <summary>Playable world edge length. Shrunk from 600 m to 360 m on 2026-11-23 (试玩反馈 4): every
+        /// landmark keeps its place on the reference map, distances shrink by F; models keep their real size.</summary>
+        public const float Size = 360f;
+        /// <summary>Shrink factor against the original 600 m layout, for distances tuned in metres back then.</summary>
+        public const float F = Size / 600f;
+        /// <summary>Design coordinates are pixels of the 1024 px reference map; K maps them onto the world (PRD-补充 §2).</summary>
         public const float K = Size / 1024f;
         static Vector2 M(float x, float y) => new Vector2(x * K, y * K);
         static Vector3 R(float x, float y, float level) => new Vector3(x * K, y * K, level);
         public const float HeightScale = 160f;
         public const float LakeLevel = 27f;
-        public const float PlayableInset = 42f;
+        public const float PlayableInset = 42f * F;
         public const int Seed = 20261122;
 
         // Landmarks
@@ -86,7 +90,7 @@ namespace WildPartner.World
             if (z > 700 * K && x > 330 * K && x < 1000 * K && lake < 1.9f) return Region.AutumnForest;
             if (z > 760 * K && x > 330 * K) return Region.AutumnForest;
             // Deep green forest: west and south
-            float n = Mathf.PerlinNoise(x * 0.007f + 3, z * 0.007f + 7) * 35;
+            float n = Mathf.PerlinNoise(x * 0.007f / F + 3, z * 0.007f / F + 7) * 35 * F;
             if (x < 230 * K + n || z < 200 * K + n || (x > 900 * K && z < 640 * K)) return Region.DeepForest;
             return Region.Meadow;
         }

@@ -11,12 +11,16 @@ namespace WildPartner.Core
         public string id;
         public float playTime;     // seconds of play when caught
         public float gameHour;     // in-game time of day when caught
+        public Vector3 position;   // where it was caught (shown on the big map)
     }
 
     [Serializable]
     public class SaveData
     {
-        public int version = 1;
+        /// <summary>2 = the 360 m map (2026-11-23). Saves from the old 600 m map hold coordinates that no longer
+        /// fit, so they are discarded and the player starts a new game.</summary>
+        public const int Current = 2;
+        public int version = Current;
         public List<CaughtEntry> caught = new List<CaughtEntry>();
         public Vector3 playerPosition;
         public float playerYaw;
@@ -54,7 +58,7 @@ namespace WildPartner.Core
         static SettingsData _settings;
         public static SettingsData Settings => _settings ??= LoadSettings();
 
-        public static bool HasSave => File.Exists(SavePath);
+        public static bool HasSave => LoadGame() != null;
 
         public static SaveData LoadGame()
         {
@@ -62,6 +66,12 @@ namespace WildPartner.Core
             {
                 if (!File.Exists(SavePath)) return null;
                 var d = JsonUtility.FromJson<SaveData>(File.ReadAllText(SavePath));
+                if (d == null || d.version < SaveData.Current)
+                {
+                    Debug.LogWarning($"[Save] save version {(d == null ? 0 : d.version)} is from the old 600 m map: discarded, start a new game");
+                    File.Delete(SavePath);
+                    return null;
+                }
                 return d;
             }
             catch (Exception e)
