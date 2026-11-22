@@ -514,6 +514,48 @@ walk = lambda p: gait(p, WALK, arm_amp=19, arm_lag=0.04, elbow=12, elbow_amp=14,
                       lean=3, sway=0.012, pel_yaw=7, pel_roll=4, chest_counter=1.0, head_amp=1.2)
 run = lambda p: gait(p, RUN, arm_amp=30, arm_lag=0.03, elbow=62, elbow_amp=26, arm_in=15,
                      lean=11, sway=0.008, pel_yaw=9, pel_roll=3, chest_counter=1.2, head_amp=2.0)
+# --- sneaking and capturing (玩法设计 tier 3) ---------------------------------------------------------
+# sneak walk: the walk cycle sunk into a crouch (hips/knees flexed, ankles dorsiflexed so the feet stay flat),
+# torso leaning forward, short careful steps, arms held a little forward for balance, head up and level
+SNEAK = dict(hip=[(q, v * 0.7 + 40) for q, v in WALK["hip"]], knee=[(q, v * 0.75 + 52) for q, v in WALK["knee"]],
+             ankle=[(q, v + 14) for q, v in WALK["ankle"]])
+def sneak(p):
+    rot, loc = gait(p, SNEAK, arm_amp=7, arm_lag=0.05, elbow=42, elbow_amp=8, arm_in=17,
+                    lean=40, sway=0.01, pel_yaw=4, pel_roll=2.5, chest_counter=0.8, head_amp=0.8)
+    for sfx in ("L", "R"):
+        rot[f"UpperArm.{sfx}"].append(("x", -16))
+        rot[f"Hand.{sfx}"].append(("x", -6))
+    return rot, loc
+
+def sneak_idle(p):
+    """Crouched and still, weight a little forward, breathing, eyes scanning left and right."""
+    br = math.sin(TAU * 2 * p); look = curve([(0.0, 0), (0.2, 0), (0.3, 14), (0.5, 14), (0.6, -10), (0.8, -10), (0.9, 0)], p)
+    dr = math.sin(TAU * p)
+    rot = {"Hips": [("x", 20 + 0.6 * dr)], "Spine": [("x", 12 + 0.8 * br)], "Chest": [("x", 10 + 1.2 * br), ("z", -look * 0.2)],
+           "Neck": [("x", -18 - 0.6 * br), ("z", look * 0.3)], "Head": [("x", -16), ("z", look * 0.5)],
+           "Thigh.L": [("x", -52 - 1.5 * dr)], "Shin.L": [("x", 74 + 2 * dr)], "Foot.L": [("x", -24)],
+           "Thigh.R": [("x", -34 + 1.5 * dr), ("z", -4)], "Shin.R": [("x", 70 - 2 * dr)], "Foot.R": [("x", -36)]}
+    for sfx, side in (("L", 1), ("R", -1)):
+        rot[f"UpperArm.{sfx}"] = [("y", (16 + 1.0 * br) * side), ("x", -20 - 2 * dr), ("z", 4 * side)]
+        rot[f"ForeArm.{sfx}"] = [("x", -44 - 3 * br)]
+        rot[f"Hand.{sfx}"] = [("x", -12), ("z", 8 * side)]
+    return rot, {"Hips": Vector((0, 0.03 * HEIGHT, 0))}
+
+def capture(p):
+    """Both hands reach towards the creature, palms out, and draw it in with slow pulses (two per loop);
+    staggered stance, front knee soft, a little lean into it."""
+    pul = math.sin(TAU * 2 * p); dr = math.sin(TAU * p)
+    rot = {"Hips": [("x", 4), ("z", -6)], "Spine": [("x", 4 + 1.0 * pul), ("z", 3)], "Chest": [("x", 4 + 1.5 * pul), ("z", 3)],
+           "Neck": [("x", -4 - pul)], "Head": [("x", -2 + 1.5 * pul), ("z", 1.5 * dr)],
+           "Thigh.L": [("x", -24)], "Shin.L": [("x", 22 + 3 * pul)], "Foot.L": [("x", 2)],
+           "Thigh.R": [("x", 10)], "Shin.R": [("x", 12 + 2 * pul)], "Foot.R": [("x", -20)]}
+    for sfx, side, ph in (("L", 1, 0.0), ("R", -1, 0.25)):
+        w = math.sin(TAU * 2 * p + ph)
+        rot[f"UpperArm.{sfx}"] = [("y", (2 + 2 * w) * side), ("x", -62 - 6 * pul), ("z", (-10 + 3 * w) * side)]
+        rot[f"ForeArm.{sfx}"] = [("x", -16 + 8 * pul)]
+        rot[f"Hand.{sfx}"] = [("x", 26 + 6 * w), ("z", 4 * side)]
+    return rot, {"Hips": Vector()}
+
 Z = (0, 0, 1, 0)
 acts = {
     #                                    hair lift           hair side          skirt flare        back               front              swing          lag
@@ -531,6 +573,9 @@ acts = {
                         hair=[(0, 30), (0.2, 0), (0.42, 12), (0.7, 4), (1, 3)], side=[(0, 0), (1, 0)],
                         flare=[(0, 18), (0.2, 0), (0.42, 7), (0.7, 2), (1, 1.5)], back=[(0, 16), (0.2, 1), (0.42, 8), (0.7, 3), (1, 1.5)],
                         front=[(0, 12), (0.2, 0), (0.42, 5), (0.7, 2), (1, 0.8)], swing=[(0, 0), (1, 0)]), loop=False),
+    "SneakIdle": make_action("SneakIdle", 120, loop_sec(sneak_idle, 120, (6.0, 1.2, 2, 0), (0, 1.0, 1, 0), (4.0, 0.6, 2, 0), (6.0, 0.6, 2, 0), (1.0, 0.4, 2, 0), (0, 1.0, 1, 0.2), 0.06)),
+    "Sneak": make_action("Sneak", 36, loop_sec(sneak, 36, (8.0, 2.5, 2, 0), (0, 3.5, 1, 0.25), (5.0, 1.5, 2, 0), (8.0, 2.0, 2, 0), (1.5, 1.5, 2, 0.5), (0, 3.0, 1, 0.25), 0.1)),
+    "Capture": make_action("Capture", 60, loop_sec(capture, 60, (3.0, 2.0, 2, 0), (0, 1.5, 1, 0), (2.0, 1.0, 2, 0), (2.0, 1.0, 2, 0), (1.0, 0.6, 2, 0), (0, 1.5, 1, 0.2), 0.08)),
 }
 # ground speed of each clip at 1x = speed of the planted foot sliding back (in-place loop); Unity's
 # blend-tree thresholds use these so the feet do not skate (written next to the FBX as JSON)
@@ -542,7 +587,7 @@ def clip_speed(act):
         hd = PB["Foot.L"].head; ys.append(hd.y); zs.append(hd.z - FOOT_REST["L"][0])
     v = sorted((ys[f + 1] - ys[f]) * FPS for f in range(n) if zs[f] < 0.015 and zs[f + 1] < 0.015)
     return round(v[len(v) // 2], 3) if v else 0.0
-SPEEDS = {k: clip_speed(acts[k]) for k in ("Walk", "Run")}
+SPEEDS = {k: clip_speed(acts[k]) for k in ("Walk", "Run", "Sneak")}
 SPEEDS["JumpLaunch"] = round(JUMP_LAUNCH * acts["JumpUp"].frame_range[1] / FPS, 3)   # s of crouch before take-off
 print("SPEEDS " + json.dumps(SPEEDS))
 rig.animation_data.action = acts["Idle"]

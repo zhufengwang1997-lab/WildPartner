@@ -39,13 +39,16 @@ namespace WildPartner.EditorTools
             var deer = CreatureDefs.Get("white_deer");
             PoseShots(cam, env, rt, tex, "white_deer", W(deer.anchors[0], 0f), new Vector3(1, 0, 0.3f), 2.3f,
                       new[] { ("Idle", 1.5f), ("Walk", 0.3f), ("Run", 0.2f), ("GrazeDown", 0.6f), ("Graze", 0.4f), ("Graze", 1.1f) });
+            PoseShots(cam, env, rt, tex, "witch", W(WorldLayout.PlayerStart + WorldLayout.CabinFacing * 1.6f, 0f),
+                      new Vector3(-WorldLayout.CabinFacing.y, 0, WorldLayout.CabinFacing.x), 2.6f,
+                      new[] { ("Idle", 1.0f), ("Walk", 0.3f), ("SneakIdle", 1.0f), ("Sneak", 0.4f), ("Sneak", 0.9f), ("Capture", 0.5f) });
         }
 
         /// <summary>Close-ups of a rigged creature prefab sampled at given clip times -> Logs/shots/&lt;id&gt;_&lt;clip&gt;.png</summary>
         static void PoseShots(Camera cam, EnvController env, RenderTexture rt, Texture2D tex, string id, Vector3 at, Vector3 facing, float k,
                               (string, float)[] poses)
         {
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"Assets/_Game/Prefabs/Creatures/{id}.prefab");
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(id == "witch" ? "Assets/_Game/Prefabs/Player.prefab" : $"Assets/_Game/Prefabs/Creatures/{id}.prefab");
             if (!prefab) return;
             var cat = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             var anim = cat.GetComponentInChildren<Animator>();

@@ -378,7 +378,7 @@ namespace WildPartner.EditorTools
             return v;
         }
 
-        [System.Serializable] public class Speeds { public float Walk = 1f, Run = 3.2f, JumpLaunch = 0f; }
+        [System.Serializable] public class Speeds { public float Walk = 1f, Run = 3.2f, JumpLaunch = 0f, Sneak = 0f; }
         public static Speeds ClipSpeeds(string model)
         {
             string p = $"{Rigged}/{model}_speeds.json";
@@ -472,6 +472,37 @@ namespace WildPartner.EditorTools
             T(sLoop, loco, 0.5f).AddCondition(UnityEditor.Animations.AnimatorConditionMode.NotEqual, 1, "Mood");
         }
 
+        /// <summary>Witch sneaking + capturing (玩法设计 tier 3): bool "Sneak" -> crouched blend tree (SneakIdle 0 /
+        /// Sneak at its clip speed); bool "Capture" -> hands-out Capture loop. Jumping still works from the crouch.</summary>
+        static void AddSneakCapture(UnityEditor.Animations.AnimatorController ctrl, UnityEditor.Animations.AnimatorStateMachine sm,
+                                    UnityEditor.Animations.AnimatorState loco, System.Func<string, AnimationClip> clip, float sneakSpeed)
+        {
+            AnimationClip sIdle = clip("SneakIdle"), sWalk = clip("Sneak"), cap = clip("Capture");
+            if (!sIdle || !sWalk || !cap || sneakSpeed <= 0.01f) return;
+            ctrl.AddParameter("Sneak", AnimatorControllerParameterType.Bool);
+            ctrl.AddParameter("Capture", AnimatorControllerParameterType.Bool);
+            var tree = new UnityEditor.Animations.BlendTree { name = "SneakTree", blendType = UnityEditor.Animations.BlendTreeType.Simple1D,
+                                                             blendParameter = "Speed", useAutomaticThresholds = false, hideFlags = HideFlags.HideInHierarchy };
+            AssetDatabase.AddObjectToAsset(tree, ctrl);
+            tree.AddChild(sIdle, 0f); tree.AddChild(sWalk, sneakSpeed);
+            var sSneak = sm.AddState("Sneak"); sSneak.motion = tree;
+            var sCap = sm.AddState("Capture"); sCap.motion = cap;
+            UnityEditor.Animations.AnimatorStateTransition T(UnityEditor.Animations.AnimatorState a, UnityEditor.Animations.AnimatorState b, float dur)
+            {
+                var t = a.AddTransition(b); t.duration = dur; t.hasFixedDuration = true; t.hasExitTime = false; return t;
+            }
+            var If = UnityEditor.Animations.AnimatorConditionMode.If; var IfNot = UnityEditor.Animations.AnimatorConditionMode.IfNot;
+            T(loco, sSneak, 0.3f).AddCondition(If, 0, "Sneak");
+            T(sSneak, loco, 0.3f).AddCondition(IfNot, 0, "Sneak");
+            foreach (var from in new[] { loco, sSneak }) T(from, sCap, 0.25f).AddCondition(If, 0, "Capture");
+            T(sCap, loco, 0.35f).AddCondition(IfNot, 0, "Capture");
+            foreach (var st in sm.states)
+            {
+                if (st.state.name == "JumpUp") T(sSneak, st.state, 0.08f).AddCondition(If, 0, "Jump");
+                if (st.state.name == "Fall") T(sSneak, st.state, 0.2f).AddCondition(IfNot, 0, "Grounded");
+            }
+        }
+
         static UnityEditor.Animations.AnimatorController LocomotionController(string model, string fbx)
         {
             Directory.CreateDirectory(AnimDir);
@@ -499,6 +530,7 @@ namespace WildPartner.EditorTools
             AddJump(ctrl, sm, state, Clip);
             AddMoods(ctrl, sm, state, Clip);
             AddGraze(ctrl, sm, state, Clip);
+            AddSneakCapture(ctrl, sm, state, Clip, sp.Sneak);
             EditorUtility.SetDirty(ctrl);
             return ctrl;
         }
@@ -514,7 +546,7 @@ namespace WildPartner.EditorTools
             cc.height = 1.6f; cc.radius = 0.35f; cc.center = new Vector3(0, 0.82f, 0); cc.stepOffset = 0.45f; cc.slopeLimit = 50;
             var pc = root.AddComponent<PlayerController>();
             pc.visual = vis.transform;
-            if (rigged) { var sp = ClipSpeeds("Witch"); pc.animRunSpeed = sp.Run; pc.jumpWindup = sp.JumpLaunch; }
+            if (rigged) { var sp = ClipSpeeds("Witch"); pc.animRunSpeed = sp.Run; pc.jumpWindup = sp.JumpLaunch; pc.animSneakSpeed = sp.Sneak; }
             if (!rigged)   // fallback when there is no Blender-rigged model yet
             {
                 var anim = root.AddComponent<ProceduralAnimator>();

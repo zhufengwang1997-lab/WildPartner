@@ -69,7 +69,7 @@ namespace WildPartner.EditorTools
         }
 
         static readonly System.Collections.Generic.HashSet<string> LoopClips = new System.Collections.Generic.HashSet<string>
-        { "Idle", "Walk", "Run", "Sneak", "Ride", "Hop", "Swim", "Flap", "Fall", "Eat", "SitLoop", "LieLoop", "RubLoop", "SitLick", "BellyUp", "Rub", "Graze" };
+        { "Idle", "Walk", "Run", "Sneak", "Ride", "Hop", "Swim", "Flap", "Fall", "Eat", "SitLoop", "LieLoop", "RubLoop", "SitLick", "BellyUp", "Rub", "Graze", "SneakIdle", "Capture" };
 
         void OnPreprocessTexture()
         {

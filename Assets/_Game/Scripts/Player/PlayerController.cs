@@ -26,6 +26,7 @@ namespace WildPartner.Player
         public Transform visual;
         Animator _animator;
         static readonly int SpeedId = Animator.StringToHash("Speed");
+        static readonly int SneakId = Animator.StringToHash("Sneak"), CaptureId = Animator.StringToHash("Capture");
         static readonly int JumpId = Animator.StringToHash("Jump");
         static readonly int GroundedId = Animator.StringToHash("Grounded");
         static readonly int AirTimeId = Animator.StringToHash("AirTime");
@@ -37,6 +38,8 @@ namespace WildPartner.Player
         public event System.Action Jumped, Landed;
         [Tooltip("Ground speed of the Run clip at 1x (measured in Blender, Rigged/<Name>_speeds.json); faster movement speeds the animator up")]
         public float animRunSpeed = 3.2f;
+        /// <summary>Ground speed of the rigged Sneak clip at 1x (0 = no sneak clips).</summary>
+        public float animSneakSpeed;
 
         public float Speed { get; private set; }
         public bool Sneaking { get; private set; }
@@ -149,7 +152,21 @@ namespace WildPartner.Player
                 bool air = _jumping || _airTime > 0.25f;   // short drops (stairs, bumps) stay on Locomotion
                 _animator.SetBool(GroundedId, !air);
                 _animator.SetFloat(AirTimeId, _airTime);
-                _animator.speed = air ? 1f : Mathf.Max(1f, Speed / animRunSpeed);
+                bool capturing = Creatures.CaptureSystem.Target != null;
+                bool sneakAnim = animSneakSpeed > 0.01f && Sneaking && !air && !capturing;
+                if (animSneakSpeed > 0.01f)
+                {
+                    _animator.SetBool(SneakId, sneakAnim);
+                    _animator.SetBool(CaptureId, capturing && !air);
+                }
+                _animator.speed = air || capturing ? 1f : sneakAnim ? Mathf.Clamp(Speed / animSneakSpeed, 1f, 2f) : Mathf.Max(1f, Speed / animRunSpeed);
+                if (capturing)
+                {
+                    // turn to face the creature while drawing it in
+                    Vector3 to = Creatures.CaptureSystem.Target.transform.position - transform.position; to.y = 0;
+                    if (to.sqrMagnitude > 0.01f)
+                        transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(to), 360f * Time.deltaTime);
+                }
             }
 
             Noise = _jumping ? 1.2f : Speed < 0.2f ? (Sneaking ? 0.35f : 0.55f) : Sneaking ? 0.45f : Running ? 1.6f : 1f;
