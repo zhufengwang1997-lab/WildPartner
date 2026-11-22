@@ -104,6 +104,7 @@ Shader "WildPartner/Toon"
                 return o;
             }
 
+            float _WP_RimOff;   // global: 1 indoors (EnvController)
             half Ramp(half x)
             {
                 // Quantise 0..1 into _RampSteps flat bands with a softened edge between bands.
@@ -147,7 +148,8 @@ Shader "WildPartner/Toon"
                 // Rim light, strongest on the lit side.
                 // Characters and pets (画面整改 6) also get a soft sky-coloured rim on the shaded side, which
                 // separates them from busy grass and foliage behind them.
-                half rim = pow(1 - saturate(dot(n, v)), _RimPower) * _RimColor.a;
+                // 1123c-A3: no rim indoors (the sun-coloured edge glint read as white lines on the furniture)
+                half rim = pow(1 - saturate(dot(n, v)), _RimPower) * _RimColor.a * (1 - _WP_RimOff);
                 col += _RimColor.rgb * rim * ((0.3 + 0.7 * lit) * sun + _RimAmbient * (ambient * 1.4 + 0.12));
 
                 // Point/spot lights (lamps, campfire): simple banded add.

@@ -59,6 +59,8 @@ namespace WildPartner.Core
             CaptureSystem.Captured += OnCaptured;
             CaptureSystem.Interrupted += c => Toast?.Invoke($"{c.Def.name}受惊逃走了！试试按住 Ctrl 潜行靠近。");
             CaptureSystem.Startled += c => Toast?.Invoke($"{c.Def.name}竖起了耳朵——站着别动，等它放松下来再试。");
+            Player.PlayerController.EdgeReached += () => Toast?.Invoke("山太陡了，林子也太密——山谷外面去不了，回去吧。");
+            Player.PlayerController.Recovered += () => Toast?.Invoke("好像迷路了……回到了刚才走过的地方。");
             if (!Automation) SetState(FlowState.MainMenu);
         }
 

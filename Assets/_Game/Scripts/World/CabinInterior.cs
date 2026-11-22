@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Playables;
+using UnityEngine.Animations;
 using UnityEngine.UI;
 using WildPartner.Core;
 using WildPartner.Creatures;
@@ -221,31 +223,58 @@ namespace WildPartner.World
             _fade.color = Color.black;
             SetInside(true);
             pc.Frozen = true;
-            pc.Teleport(bedLie, bedYaw);
-            var vis = pc.visual;
-            Quaternion vr = vis ? vis.localRotation : Quaternion.identity;
-            Vector3 vp = vis ? vis.localPosition : Vector3.zero;
-            if (vis) { vis.localRotation = Quaternion.Euler(-90, 0, 0); vis.localPosition = vp + Vector3.up * 0.12f; }
-            // the camera looks at her lying body, not at where her head would be standing
+            // 1123c-A5: the WakeUp clip carries the whole motion (lying on her back -> sitting up -> legs over the
+            // edge -> standing) relative to the standing spot in front of the bed, facing away from it
+            pc.Teleport(bedStand, bedYaw + 90);
+            var anim = pc.GetComponentInChildren<Animator>();
+            PlayableGraph graph = default;
+            AnimationClipPlayable clipPlay = default;
+            if (anim && wakeClip)
+            {
+                graph = PlayableGraph.Create("WakeUp");
+                graph.SetTimeUpdateMode(DirectorUpdateMode.GameTime);
+                clipPlay = AnimationClipPlayable.Create(graph, wakeClip);
+                clipPlay.SetApplyFootIK(false);
+                var output = AnimationPlayableOutput.Create(graph, "WakeUp", anim);
+                output.SetSourcePlayable(clipPlay);
+                clipPlay.SetTime(0); clipPlay.SetSpeed(0);
+                graph.Play();
+            }
+            WakePlaying = true;
+            // the camera looks at her on the bed from the room side
             var camTarget = pc.transform.Find("CameraTarget");
             Vector3 ct = camTarget ? camTarget.localPosition : Vector3.zero;
-            if (camTarget) camTarget.position = bedLie + Vector3.up * 0.55f + Quaternion.Euler(0, bedYaw, 0) * Vector3.back * 0.8f;
-            Vector3 side = roomCenter - bedLie; side.y = 0;
-            pc.SetCameraOrbit(Mathf.Atan2(-side.x, -side.z) * Mathf.Rad2Deg, 30f);
-            BringCompanions(bedStand, bedYaw + 90);
+            Vector3 toBed = bed - bedStand; toBed.y = 0;
+            if (camTarget) camTarget.position = bedStand + toBed.normalized * 0.55f + Vector3.up * 0.75f;
+            pc.SetCameraOrbit(Mathf.Atan2(toBed.x, toBed.z) * Mathf.Rad2Deg + 35f, 22f);
+            pc.SetCameraDistance(0.8f);
+            BringCompanions(bedStand + Quaternion.Euler(0, bedYaw + 90, 0) * new Vector3(0.9f, 0, 0.6f), bedYaw + 90);
             yield return new WaitForSecondsRealtime(0.4f);
-            yield return Fade(_fade, 0, 1.4f);
-            yield return new WaitForSecondsRealtime(1.3f);
-            yield return Fade(_fade, 1, 0.35f);
-            if (vis) { vis.localRotation = vr; vis.localPosition = vp; }
+            yield return Fade(_fade, 0, 1.2f);
+            if (clipPlay.IsValid())
+            {
+                clipPlay.SetSpeed(1);
+                float len = wakeClip.length, t = 0;
+                while (t < len)
+                {
+                    t += Time.deltaTime;
+                    // ease the camera target from the bed to her standing head height as she gets up
+                    if (camTarget) camTarget.position = Vector3.Lerp(bedStand + toBed.normalized * 0.55f + Vector3.up * 0.75f, pc.transform.TransformPoint(ct), Mathf.SmoothStep(0, 1, (t / len - 0.45f) / 0.5f));
+                    yield return null;
+                }
+                graph.Destroy();
+            }
+            else yield return new WaitForSecondsRealtime(1.3f);
+            WakePlaying = false;
             if (camTarget) camTarget.localPosition = ct;
-            pc.Teleport(bedStand, bedYaw + 90);
-            yield return null;
-            yield return Fade(_fade, 0, 0.5f);
             pc.Frozen = false;
             _busy = false;
-            Debug.Log("[Cabin] woke up in bed");
+            Debug.Log("[Cabin] woke up in bed (" + (wakeClip ? "WakeUp clip" : "no clip") + ")");
         }
+
+        /// <summary>True while the wake-up clip plays (smoke test / screenshots).</summary>
+        public static bool WakePlaying { get; private set; }
+        public AnimationClip wakeClip;
 
         /// <summary>Where the witch is on the world map: indoors she is in the cabin.</summary>
         public static Vector3 MapPosition(Vector3 p) =>

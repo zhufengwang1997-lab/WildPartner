@@ -52,7 +52,9 @@ namespace WildPartner.Core
     /// </summary>
     public static class SaveSystem
     {
-        public static string Dir => Application.persistentDataPath;
+        /// <summary>The smoke test keeps its own save folder so a game the user has open is never touched.</summary>
+        public static string Dir => System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-smoketest") >= 0
+            ? System.IO.Path.Combine(Application.persistentDataPath, "smoke_save") : Application.persistentDataPath;
         static string SavePath => Path.Combine(Dir, "save.json");
         static string SettingsPath => Path.Combine(Dir, "settings.json");
 

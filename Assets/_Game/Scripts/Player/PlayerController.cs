@@ -46,6 +46,8 @@ namespace WildPartner.Player
         /// <summary>The creature she is sitting on (null on foot).</summary>
         public Transform Mount { get; private set; }
         public bool Riding => Mount != null;
+        public bool Swimming { get; private set; }
+        public bool Climbing { get; private set; }
         float _seat;
         Transform[] _thighs, _shins;
         Transform _hipsBone;
@@ -122,6 +124,78 @@ namespace WildPartner.Player
         /// <summary>Raised on teleports/cuts so the upscaler can reset its history (IN-08).</summary>
         public static event System.Action CameraCut;
 
+        // ---- world bounds (试玩反馈 1123c-A1) ----
+        /// <summary>Hard limit: she never gets closer than this to the terrain edge. The edge hills turn into a
+        /// cliff band just outside it (WorldBuilder.EdgeRise), so the stop reads as "too steep", not an air wall.</summary>
+        public const float BoundaryInset = 17f;
+        /// <summary>Raised after pushing against the edge for a while (the HUD shows a hint).</summary>
+        public static event System.Action EdgeReached;
+        /// <summary>Raised after she fell out of the world / got wedged and was put back on safe ground.</summary>
+        public static event System.Action Recovered;
+        Vector3 _safePos; float _safeYaw, _safeTimer = -1f, _edgeTime, _edgeHintAt = -99f, _wedged;
+        Vector3 _lastPos;
+        public int Recoveries { get; private set; }
+
+        public static Vector3 ClampToWorld(Vector3 p)
+        {
+            float lo = BoundaryInset, hi = World.WorldLayout.Size - BoundaryInset;
+            return new Vector3(Mathf.Clamp(p.x, lo, hi), p.y, Mathf.Clamp(p.z, lo, hi));
+        }
+
+        static float GroundAt(Vector3 p)
+        {
+            var t = Terrain.activeTerrain;
+            return t ? t.SampleHeight(p) + t.transform.position.y : float.NegativeInfinity;
+        }
+
+        /// <summary>Runs after every move (walking, jumping, riding, swimming, climbing): clamp to the bounds, keep a
+        /// last safe spot, and put her back there if she fell under the terrain or got wedged in the air.</summary>
+        void GuardWorld(float dt, bool grounded)
+        {
+            if (World.EnvController.Indoors) { _safeTimer = -1f; return; }
+            var p = transform.position;
+            if (float.IsNaN(p.x) || float.IsNaN(p.y) || float.IsNaN(p.z)) { Recover(); return; }
+            var c = ClampToWorld(p);
+            if ((c - p).sqrMagnitude > 1e-8f)
+            {
+                Place(c); p = c;
+                _edgeTime += dt;
+                if (_edgeTime > 1.0f && Time.time - _edgeHintAt > 12f) { _edgeHintAt = Time.time; EdgeReached?.Invoke(); }
+            }
+            else _edgeTime = Mathf.Max(0, _edgeTime - dt);
+
+            float ground = GroundAt(p);
+            if (p.y < ground - 1.5f || p.y < -30f) { Recover(); return; }
+            // wedged: airborne for seconds without falling (stuck on a rock lip / between colliders)
+            bool hung = !grounded && !Riding && Mathf.Abs(p.y - _lastPos.y) < 0.002f && !Swimming && !Climbing;
+            _wedged = hung ? _wedged + dt : 0f;
+            _lastPos = p;
+            if (_wedged > 3f) { Recover(); return; }
+
+            if (_safeTimer < 0f) { _safePos = p; _safeYaw = transform.eulerAngles.y; _safeTimer = 0f; }
+            _safeTimer += dt;
+            bool dry = !World.WorldLayout.WaterSurface(p.x, p.z, out float wl) || wl < ground + 0.3f;
+            if (_safeTimer > 0.5f && grounded && dry && !Riding && Mathf.Abs(p.y - ground) < 0.5f && (ClampToWorld(p) - p).sqrMagnitude < 1e-6f
+                && p.x > BoundaryInset + 1 && p.z > BoundaryInset + 1 && p.x < World.WorldLayout.Size - BoundaryInset - 1 && p.z < World.WorldLayout.Size - BoundaryInset - 1)
+            { _safeTimer = 0f; _safePos = p; _safeYaw = transform.eulerAngles.y; }
+        }
+
+        void Recover()
+        {
+            Recoveries++;
+            var p = _safeTimer >= 0f ? _safePos : new Vector3(World.WorldLayout.PlayerStart.x, 0, World.WorldLayout.PlayerStart.y);
+            float g = GroundAt(p);
+            if (!float.IsInfinity(g)) p.y = Mathf.Max(p.y, g + 0.1f);
+            _vy = -2f; _wedged = 0f; _jumping = false;
+            Teleport(p, _safeYaw);
+            _lastPos = p;
+            Debug.Log($"[Bounds] recovered to {p}");
+            Recovered?.Invoke();
+        }
+
+        /// <summary>Smoke test hook: drop her under the terrain to check the recovery.</summary>
+        public void DebugFallThrough() { Place(transform.position + Vector3.down * 6f); }
+
         void Update()
         {
             // Camera orbit
@@ -189,6 +263,7 @@ namespace WildPartner.Player
             else _vy += gravity * dt;
             _airTime = grounded && _vy <= 0f ? 0f : _airTime + dt;
             _cc.Move((transform.forward * Speed + Vector3.up * _vy) * dt);
+            GuardWorld(dt, _cc.isGrounded);
 
             if (_animator)
             {

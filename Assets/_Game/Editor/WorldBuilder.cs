@@ -43,6 +43,7 @@ namespace WildPartner.EditorTools
             var t0 = DateTime.Now;
             RenderFeatures.Ensure();
             _rng = new Random(WorldLayout.Seed);
+            RocksLowered = RocksRemoved = 0; _rockVerts.Clear();
             Directory.CreateDirectory(TerrainDir);
             Directory.CreateDirectory("Assets/_Game/Scenes");
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -60,6 +61,7 @@ namespace WildPartner.EditorTools
             BuildBackground(landmarks);
             var vegetation = BuildVegetation();
             BuildGrass(vegetation);
+            Debug.Log($"[World] rocks grounded: lowered {RocksLowered}, removed {RocksRemoved} (no seat on the slope)");
 
             // ---- lights, sky, post -----------------------------------------------------------------
             var sunGo = new GameObject("Sun", typeof(Light));
@@ -170,7 +172,13 @@ namespace WildPartner.EditorTools
         {
             float e = Mathf.Min(Mathf.Min(x, S - x), Mathf.Min(z, S - z));
             float t = 1 - Mathf.Clamp01((e - 4f) / 55f);   // 70 m on the 600 m map; a little narrower on the 360 m map
-            return (t * t * (26f + Fbm(x * 0.025f, z * 0.025f) * 26f) + t * 6f) * 0.75f;   // lower rim on the 360 m map: same height over a shorter run turned the slopes into bare rock
+            float hill = (t * t * (26f + Fbm(x * 0.025f, z * 0.025f) * 26f) + t * 6f) * 0.75f;   // lower rim on the 360 m map: same height over a shorter run turned the slopes into bare rock
+            // 试玩反馈 1123c-A1: the player is stopped 17 m from the edge (PlayerController.BoundaryInset). Just
+            // outside that line the hills turn into a rock cliff band (~14 m over 6 m), so the stop reads as
+            // "too steep to climb" instead of an invisible wall; the wobble keeps the cliff foot from being a ruler line.
+            float foot = 17.5f + (Fbm(x * 0.05f + 9, z * 0.05f + 4, 2) - 0.5f) * 3f;
+            float cliff = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(foot, foot - 6f, e)) * (14f + Fbm(x * 0.04f + 2, z * 0.04f + 6, 2) * 8f);
+            return hill + cliff;
         }
 
         public static float Height(float x, float z)
@@ -344,6 +352,75 @@ namespace WildPartner.EditorTools
             return layer;
         }
 
+        // ---- 试玩反馈 1123c-A2: rocks must sit in the ground (no hovering, no visible underside on slopes) ----
+        static readonly Dictionary<GameObject, Vector3[]> _rockVerts = new Dictionary<GameObject, Vector3[]>();
+        public static int RocksLowered, RocksRemoved;
+
+        static Vector3[] PrefabVerts(GameObject prefab)
+        {
+            if (_rockVerts.TryGetValue(prefab, out var v)) return v;
+            var list = new List<Vector3>();
+            foreach (var mf in prefab.GetComponentsInChildren<MeshFilter>(true))
+            {
+                if (!mf.sharedMesh || mf.name.Contains("LOD1") || mf.name.Contains("LOD2")) continue;
+                var m = prefab.transform.worldToLocalMatrix * mf.transform.localToWorldMatrix;
+                foreach (var p in mf.sharedMesh.vertices) list.Add(m.MultiplyPoint3x4(p));
+            }
+            v = list.ToArray(); _rockVerts[prefab] = v; return v;
+        }
+
+        /// <summary>How far a rock at this pose must go down so that, across the inner 85 % of its footprint, its
+        /// lowest surface is at least 5 cm under the terrain. NaN when that would bury more than 60 % of its height
+        /// (too steep a spot: the caller drops the rock).</summary>
+        static float GroundDrop(GameObject prefab, Vector3 pos, Quaternion rot, Vector3 scale)
+        {
+            var verts = PrefabVerts(prefab);
+            if (verts.Length == 0) return 0f;
+            var m = Matrix4x4.TRS(pos, rot, scale);
+            var w = new Vector3[verts.Length];
+            Vector3 mn = Vector3.positiveInfinity, mx = Vector3.negativeInfinity;
+            for (int i = 0; i < verts.Length; i++) { w[i] = m.MultiplyPoint3x4(verts[i]); mn = Vector3.Min(mn, w[i]); mx = Vector3.Max(mx, w[i]); }
+            const int N = 10;
+            var low = new float[N, N];
+            for (int a = 0; a < N; a++) for (int b = 0; b < N; b++) low[a, b] = float.PositiveInfinity;
+            float sx = Mathf.Max(mx.x - mn.x, 1e-3f), sz = Mathf.Max(mx.z - mn.z, 1e-3f);
+            foreach (var p in w)
+            {
+                int a = Mathf.Clamp((int)((p.x - mn.x) / sx * N), 0, N - 1), b = Mathf.Clamp((int)((p.z - mn.z) / sz * N), 0, N - 1);
+                if (p.y < low[a, b]) low[a, b] = p.y;
+            }
+            float drop = float.NegativeInfinity;
+            for (int a = 0; a < N; a++)
+                for (int b = 0; b < N; b++)
+                {
+                    float u = (a + 0.5f) / N * 2 - 1, q = (b + 0.5f) / N * 2 - 1;
+                    if (u * u + q * q > 0.85f * 0.85f || float.IsInfinity(low[a, b])) continue;
+                    float x = mn.x + (a + 0.5f) / N * sx, z = mn.z + (b + 0.5f) / N * sz;
+                    drop = Mathf.Max(drop, low[a, b] - (TerrainH(x, z) - 0.05f));
+                }
+            if (float.IsNegativeInfinity(drop)) return 0f;
+            if (drop > 0.6f * (mx.y - mn.y)) return float.NaN;
+            return Mathf.Max(drop, 0f);
+        }
+
+        /// <summary>Lower a placed rock until it is grounded; destroy it if it can't be.</summary>
+        static bool GroundRock(GameObject go, Vector2 inward = default)
+        {
+            var src = PrefabUtility.GetCorrespondingObjectFromSource(go);
+            if (!src) return true;
+            float d = GroundDrop(src, go.transform.position, go.transform.rotation, go.transform.lossyScale);
+            // cliff rocks: slide them into the face (towards the plateau) until they sit in it instead of deleting them
+            for (float k = 0.5f; float.IsNaN(d) && inward != default && k <= 6f; k += 0.5f)
+            {
+                var q = go.transform.position + new Vector3(inward.x, 0, inward.y) * 0.5f;
+                d = GroundDrop(src, q, go.transform.rotation, go.transform.lossyScale);
+                go.transform.position = q;
+            }
+            if (float.IsNaN(d)) { UnityEngine.Object.DestroyImmediate(go); RocksRemoved++; return false; }
+            if (d > 0.01f) { go.transform.position += Vector3.down * d; RocksLowered++; }
+            return true;
+        }
+
         static float TerrainH(float x, float z) => _td.GetInterpolatedHeight(x / S, z / S);
 
         // =========================================================================================
@@ -449,17 +526,100 @@ namespace WildPartner.EditorTools
                     bool steep = Mathf.Abs(samples[i].y - samples[i - 1].y) > 0.6f;
                     var list = steep ? falls : calm;
                     list.AddRange(new[] { i0, i0 + 2, i0 + 1, i0 + 1, i0 + 2, i0 + 3 });
-                    if (steep && (i + 1 >= samples.Count || Mathf.Abs(samples[i + 1].y - samples[i].y) <= 0.6f))
-                        Mist(root, samples[i]);
                 }
             }
             var m = new Mesh { name = name, indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
             m.SetVertices(verts); m.SetUVs(0, uvs);
             m.subMeshCount = 2;
-            m.SetTriangles(calm, 0); m.SetTriangles(falls, 1);
+            // 试玩反馈 1123c-A4: the steep ribbon pieces are no longer drawn (depth-faded, they vanished up close);
+            // each fall gets its own sheet + pool foam + spray + mist + sound (BuildFall)
+            m.subMeshCount = 1;
+            m.SetTriangles(calm, 0);
             m.RecalculateNormals(); m.RecalculateBounds();
-            var go = MeshObject(name, root, m, river);
-            go.GetComponent<MeshRenderer>().sharedMaterials = new[] { river, fall };
+            MeshObject(name, root, m, river);
+            for (int i = 0; i < pts.Length - 1; i++)
+                if (pts[i].z - pts[i + 1].z > 3f) BuildFall(root, pts, i);
+        }
+
+        /// <summary>One waterfall between river points i and i+1 (level drop over t 0.55..0.95 of the segment, as in
+        /// Ribbon/WorldLayout): a curved sheet that runs flat for 2.5 m, bends over the lip and falls on a ballistic
+        /// arc to the plunge pool, plus a foam disc, spray, mist and the roar. Everything is double-sided.</summary>
+        static void BuildFall(Transform root, Vector3[] pts, int i)
+        {
+            Vector3 p0 = pts[Mathf.Max(i - 1, 0)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Mathf.Min(i + 2, pts.Length - 1)];
+            Vector2 XZ(float t) => CatmullRom(new Vector2(p0.x, p0.y), new Vector2(p1.x, p1.y), new Vector2(p2.x, p2.y), new Vector2(p3.x, p3.y), t);
+            Vector2 lip = XZ(0.55f), foot = XZ(0.97f);
+            float top = p1.z + 0.18f, bottom = p2.z + 0.18f, H = top - bottom;
+            var dir = (foot - lip).normalized;
+            float reach = Vector2.Distance(lip, foot);
+            var across = new Vector2(-dir.y, dir.x);
+            float halfW = WorldLayout.RiverHalfWidth * 0.85f;
+            var mat = AssetSetup.FallMat("M_WaterfallSheet", 0f);
+            var foamMat = AssetSetup.FallMat("M_WaterfallFoam", 1f);
+            var go = new GameObject($"Waterfall_{i}");
+            go.transform.SetParent(root, false);
+
+            // centre line: 2.5 m flat run-in, then x = reach*u, y = top - H*u^2 (a ballistic arc ending at the pool)
+            var line = new List<Vector3>();
+            for (int k = 0; k <= 5; k++) { var q = lip - dir * (2.5f * (1 - k / 5f)); line.Add(new Vector3(q.x, top, q.y)); }
+            const int Rows = 28;
+            for (int k = 1; k <= Rows; k++)
+            {
+                float u = k / (float)Rows;
+                var q = lip + dir * (reach * (0.25f * u + 0.75f * Mathf.Sqrt(u) * u));   // leaves the lip fast, steepens
+                line.Add(new Vector3(q.x, top - H * u * u, q.y));
+            }
+            const int Cols = 12;
+            var v = new List<Vector3>(); var uv = new List<Vector2>(); var col = new List<Color>(); var tri = new List<int>();
+            float along = 0;
+            for (int r = 0; r < line.Count; r++)
+            {
+                if (r > 0) along += Vector3.Distance(line[r], line[r - 1]);
+                float fallT = Mathf.Clamp01((line[r].y - top) / -H);
+                float w = halfW * (1f - 0.18f * fallT);                       // the sheet narrows a little as it falls
+                for (int c = 0; c <= Cols; c++)
+                {
+                    float x = c / (float)Cols;
+                    float bulge = Mathf.Sin(x * Mathf.PI) * 0.35f * fallT;    // middle pushed out (more water there)
+                    var off = across * ((x - 0.5f) * 2f * w) + dir * bulge;
+                    v.Add(line[r] + new Vector3(off.x, 0, off.y));
+                    uv.Add(new Vector2(x, along));
+                    col.Add(new Color(1, 1, 1, r == line.Count - 1 ? 0.6f : 1f));
+                    if (r > 0 && c > 0)
+                    {
+                        int a = (r - 1) * (Cols + 1) + c - 1, b = a + 1, d = a + Cols + 1, e = d + 1;
+                        tri.AddRange(new[] { a, d, b, b, d, e });
+                    }
+                }
+            }
+            var mesh = new Mesh { name = $"WaterfallSheet_{i}" };
+            mesh.SetVertices(v); mesh.SetUVs(0, uv); mesh.SetColors(col); mesh.SetTriangles(tri, 0);
+            mesh.RecalculateNormals(); mesh.RecalculateBounds();
+            var sheet = MeshObject($"WaterfallSheet_{i}", go.transform, mesh, mat);
+            var smr = sheet.GetComponent<MeshRenderer>();
+            var sm = new MaterialPropertyBlock(); sm.SetFloat("_Length", along); smr.SetPropertyBlock(sm);
+            smr.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
+            var surf = sheet.AddComponent<WaterfallSurface>(); surf.sound = true;
+
+            // plunge pool foam disc (with travelling rings), a little beyond the foot
+            var poolC = foot + dir * 1.2f;
+            var disc = new Mesh { name = $"WaterfallFoam_{i}" };
+            var dv = new List<Vector3> { new Vector3(poolC.x, bottom + 0.04f, poolC.y) }; var duv = new List<Vector2> { Vector2.zero }; var dt = new List<int>();
+            const int Seg = 32; float R = halfW * 1.5f;
+            for (int k = 0; k <= Seg; k++)
+            {
+                float a = k / (float)Seg * Mathf.PI * 2;
+                var o = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                dv.Add(new Vector3(poolC.x + o.x * R, bottom + 0.04f, poolC.y + o.y * R * 0.8f)); duv.Add(o);
+                if (k > 0) dt.AddRange(new[] { 0, k + 1, k });
+            }
+            disc.SetVertices(dv); disc.SetUVs(0, duv); disc.SetTriangles(dt, 0); disc.RecalculateNormals(); disc.RecalculateBounds();
+            var foam = MeshObject($"WaterfallFoam_{i}", go.transform, disc, foamMat);
+            foam.GetComponent<MeshRenderer>().motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
+            foam.AddComponent<WaterfallSurface>();
+
+            Mist(go.transform, new Vector3(foot.x, bottom, foot.y), halfW, H);
+            Debug.Log($"[World] waterfall {i}: drop {H:0.0} m, reach {reach:0.0} m, width {halfW * 2:0.0} m");
         }
 
         static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
@@ -482,24 +642,33 @@ namespace WildPartner.EditorTools
             return go;
         }
 
-        static void Mist(Transform root, Vector3 at)
+        /// <summary>Spray thrown up where the fall lands, and mist rolling off the pool and drifting up the face.</summary>
+        static void Mist(Transform root, Vector3 at, float halfW, float height)
         {
             var go = new GameObject("WaterfallMist", typeof(ParticleSystem));
             go.transform.SetParent(root, false);
-            go.transform.position = at + Vector3.up * 0.5f;
+            go.transform.position = at + Vector3.up * 0.8f;
             var ps = go.GetComponent<ParticleSystem>();
             var main = ps.main;
-            main.startLifetime = 2.5f; main.startSpeed = 1.2f; main.startSize = new ParticleSystem.MinMaxCurve(1.5f, 3.5f);
-            main.startColor = new Color(1, 1, 1, 0.35f); main.maxParticles = 120; main.simulationSpace = ParticleSystemSimulationSpace.World;
-            var em = ps.emission; em.rateOverTime = 25;
-            var sh = ps.shape; sh.shapeType = ParticleSystemShapeType.Sphere; sh.radius = 3f;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(2.5f, 4.5f); main.startSpeed = new ParticleSystem.MinMaxCurve(0.6f, 1.8f);
+            main.startSize = new ParticleSystem.MinMaxCurve(2f, 4.5f);
+            main.startColor = new Color(1, 1, 1, 0.3f); main.maxParticles = 220; main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.gravityModifier = -0.04f;   // drifts up
+            main.startRotation = new ParticleSystem.MinMaxCurve(0, Mathf.PI * 2);
+            var em = ps.emission; em.rateOverTime = 45;
+            var sh = ps.shape; sh.shapeType = ParticleSystemShapeType.Box; sh.scale = new Vector3(halfW * 2.2f, 1.5f, 3f);
+            var vel = ps.velocityOverLifetime; vel.enabled = true; vel.space = ParticleSystemSimulationSpace.World;
+            vel.y = new ParticleSystem.MinMaxCurve(0.3f, Mathf.Clamp(height * 0.08f, 0.5f, 1.2f));
+            vel.x = new ParticleSystem.MinMaxCurve(0f); vel.z = new ParticleSystem.MinMaxCurve(0f);
+            var sz = ps.sizeOverLifetime; sz.enabled = true; sz.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0, 0.6f, 1, 1.6f));
             var col = ps.colorOverLifetime; col.enabled = true;
             var g = new Gradient();
             g.SetKeys(new[] { new GradientColorKey(Color.white, 0), new GradientColorKey(Color.white, 1) },
-                      new[] { new GradientAlphaKey(0, 0), new GradientAlphaKey(0.5f, 0.3f), new GradientAlphaKey(0, 1) });
+                      new[] { new GradientAlphaKey(0, 0), new GradientAlphaKey(0.55f, 0.25f), new GradientAlphaKey(0, 1) });
             col.color = g;
-            go.GetComponent<ParticleSystemRenderer>().sharedMaterial = ParticleMat("M_Mist", new Color(1, 1, 1, 0.5f), true);
-            em.rateOverTime = 40; main.startSize = new ParticleSystem.MinMaxCurve(2f, 5f); main.maxParticles = 200;
+            var mr = go.GetComponent<ParticleSystemRenderer>();
+            mr.sharedMaterial = ParticleMat("M_Mist", new Color(1, 1, 1, 0.5f), true);
+            go.AddComponent<WaterfallSurface>();
 
             // white droplets thrown up where the water lands (画面整改 7)
             var sgo = new GameObject("WaterfallSplash", typeof(ParticleSystem));
@@ -507,17 +676,19 @@ namespace WildPartner.EditorTools
             sgo.transform.SetPositionAndRotation(at + Vector3.up * 0.2f, Quaternion.Euler(-90, 0, 0));
             var sp = sgo.GetComponent<ParticleSystem>();
             var sm = sp.main;
-            sm.startLifetime = new ParticleSystem.MinMaxCurve(0.6f, 1.1f); sm.startSpeed = new ParticleSystem.MinMaxCurve(2.5f, 5f);
-            sm.startSize = new ParticleSystem.MinMaxCurve(0.15f, 0.45f); sm.gravityModifier = 1.1f;
-            sm.startColor = new Color(1, 1, 1, 0.85f); sm.maxParticles = 300; sm.simulationSpace = ParticleSystemSimulationSpace.World;
-            var se = sp.emission; se.rateOverTime = 120;
-            var ss = sp.shape; ss.shapeType = ParticleSystemShapeType.Cone; ss.angle = 28; ss.radius = 2.2f;
+            sm.startLifetime = new ParticleSystem.MinMaxCurve(0.6f, 1.2f); sm.startSpeed = new ParticleSystem.MinMaxCurve(2.5f, 5.5f);
+            sm.startSize = new ParticleSystem.MinMaxCurve(0.15f, 0.5f); sm.gravityModifier = 1.1f;
+            sm.startColor = new Color(1, 1, 1, 0.9f); sm.maxParticles = 400; sm.simulationSpace = ParticleSystemSimulationSpace.World;
+            var se = sp.emission; se.rateOverTime = 160;
+            var ss = sp.shape; ss.shapeType = ParticleSystemShapeType.Box; ss.scale = new Vector3(halfW * 1.6f, 1.2f, 0.2f);
+            ss.randomDirectionAmount = 0.35f;
             var sc = sp.colorOverLifetime; sc.enabled = true;
             var sg = new Gradient();
             sg.SetKeys(new[] { new GradientColorKey(Color.white, 0), new GradientColorKey(Color.white, 1) },
                        new[] { new GradientAlphaKey(0.9f, 0), new GradientAlphaKey(0.6f, 0.6f), new GradientAlphaKey(0, 1) });
             sc.color = sg;
             sgo.GetComponent<ParticleSystemRenderer>().sharedMaterial = ParticleMat("M_Splash", new Color(1, 1, 1, 0.9f), true);
+            sgo.AddComponent<WaterfallSurface>();
         }
 
         static Material FishMat(string name, Color c)
@@ -596,7 +767,7 @@ namespace WildPartner.EditorTools
             var rampDir = (RampTop - c).normalized;
             float yaw = FaceYaw(toRamp);
             var cc = WorldLayout.House;
-            Place("Cabin", root, cc, yaw, 1f, -0.15f);   // Tripo cabin: door, windows, chimney are part of the model
+            DoubleSided(Place("Cabin", root, cc, yaw, 1f, -0.15f));   // Tripo cabin: door, windows, chimney are part of the model
             // yard dressing in the cabin's frame: x = to the cabin's right (seen from outside), y = out of the door
             Vector2 side = new Vector2(-toRamp.y, toRamp.x);
             Vector2 L(float x, float y) => cc + side * x + toRamp * y;
@@ -680,6 +851,7 @@ namespace WildPartner.EditorTools
                         var pos = rock.transform.position; pos.y = ring == 0 ? Mathf.Min(topY - 2.6f * sc, TerrainH(p.x, p.y) + 0.4f * sc) : Mathf.Min(topY - 2.6f * sc, TerrainH(p.x, p.y) - 0.35f * sc); rock.transform.position = pos;   // never hovering over the slope
                         rock.transform.rotation = Quaternion.Euler(((float)_rng.NextDouble() - 0.5f) * 24f, _rng.Next(360), ((float)_rng.NextDouble() - 0.5f) * 24f);
                         rock.transform.localScale = new Vector3(sc, sc * (0.8f + (float)_rng.NextDouble() * 0.6f), sc);
+                        GroundRock(rock, -dir);
                     }
                     for (int b = 0; b < 2; b++) if (_rng.NextDouble() < 0.6)   // bushes on the slope below the crag
                     {
@@ -942,14 +1114,26 @@ namespace WildPartner.EditorTools
             var go = new GameObject("Vegetation");
             var sp = go.AddComponent<VegetationSpawner>();
             var batches = new Dictionary<string, VegetationSpawner.Batch>();
-            void Add(string prefab, float x, float z, float yaw, float scale, float sink = 0.15f)
+            void Add(string prefab, float x, float z, float yaw, float scale, float sink = 0.15f, Vector2 into = default)
             {
                 if (!batches.TryGetValue(prefab, out var b))
                 {
                     b = new VegetationSpawner.Batch { prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.EnvPrefabs}/{prefab}.prefab") };
                     batches[prefab] = b;
                 }
-                b.items.Add(new Vector4(x, TerrainH(x, z) - sink, z, VegetationSpawner.Pack(yaw, scale)));
+                float y = TerrainH(x, z) - sink;
+                if (prefab.StartsWith("Rock") && b.prefab)
+                {
+                    float d = GroundDrop(b.prefab, new Vector3(x, y, z), Quaternion.Euler(0, yaw, 0), Vector3.one * scale);
+                    for (int k = 1; float.IsNaN(d) && into != default && k <= 12; k++)   // slide into the slope
+                    {
+                        x += into.x * 0.5f; z += into.y * 0.5f; y = TerrainH(x, z) - sink;
+                        d = GroundDrop(b.prefab, new Vector3(x, y, z), Quaternion.Euler(0, yaw, 0), Vector3.one * scale);
+                    }
+                    if (float.IsNaN(d)) { RocksRemoved++; return; }
+                    if (d > 0.01f) { y -= d; RocksLowered++; }
+                }
+                b.items.Add(new Vector4(x, y, z, VegetationSpawner.Pack(yaw, scale)));
             }
             float J(float cell) => ((float)_rng.NextDouble() - 0.5f) * cell * 0.9f;
 
@@ -1084,7 +1268,8 @@ namespace WildPartner.EditorTools
                 float inset = 8f + (float)_rng.NextDouble() * 26f;
                 Vector2 p = side == 0 ? new Vector2(u, inset) : side == 1 ? new Vector2(S - inset, u) : side == 2 ? new Vector2(S - u, S - inset) : new Vector2(inset, S - u);
                 if (_rng.NextDouble() < 0.35) continue;
-                Add("Rock_A", p.x, p.y, (float)_rng.NextDouble() * 360f, 2.2f + (float)_rng.NextDouble() * 2.6f, 1.8f);
+                Vector2 outward = side == 0 ? Vector2.down : side == 1 ? Vector2.right : side == 2 ? Vector2.up : Vector2.left;
+                Add("Rock_A", p.x, p.y, (float)_rng.NextDouble() * 360f, 2.2f + (float)_rng.NextDouble() * 2.6f, 1.8f, outward);
             }
             // (the lawn itself is GrassRenderer; no grass prefabs any more)
             // flower clusters: dense along path edges, scattered patches in the meadow

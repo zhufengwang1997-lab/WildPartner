@@ -68,6 +68,8 @@ namespace WildPartner.EditorTools
             var water = WaterMat("M_Water_Lake", 4f, 0.05f, 0.1f, 0.15f);
             WaterMat("M_Water_River", 2f, 0.9f, 0.35f, 0.08f);
             WaterMat("M_Waterfall", 1.5f, 3.5f, 0.75f, 0.0f);
+            FallMat("M_WaterfallSheet", 0f);
+            FallMat("M_WaterfallFoam", 1f);
             var sky = new Material(Shader.Find("WildPartner/Sky"));
             SaveMat(sky, "M_Sky");
 
@@ -194,6 +196,18 @@ namespace WildPartner.EditorTools
             m.SetColor("_FoamColor", new Color(1f, 1f, 0.97f, 1f));
             m.SetFloat("_FoamWidth", lake ? 0.9f : 0.5f);
             m.SetFloat("_Reflect", lake ? 0.55f : fall ? 0.15f : 0.45f);
+            EditorUtility.SetDirty(m);
+            return m;
+        }
+
+        /// <summary>Waterfall sheet / plunge-pool foam (试玩反馈 1123c-A4, WildPartner/Waterfall).</summary>
+        public static Material FallMat(string name, float foamMode)
+        {
+            string path = $"{MatDir}/{name}.mat";
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (!m) { m = new Material(Shader.Find("WildPartner/Waterfall")); AssetDatabase.CreateAsset(m, path); }
+            m.shader = Shader.Find("WildPartner/Waterfall");
+            m.SetFloat("_Foam", foamMode);
             EditorUtility.SetDirty(m);
             return m;
         }

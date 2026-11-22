@@ -165,6 +165,55 @@ namespace WildPartner.EditorTools
             Object.DestroyImmediate(cat);
         }
 
+        /// <summary>Custom viewpoints from a text file (1123c before/after shots):
+        /// <c>-views &lt;file&gt; -shotdir &lt;dir&gt;</c>, one view per line: <c>name x z dy lookX lookZ lookDy hour</c>
+        /// (heights are metres above the terrain; a dy of 900+ means absolute height dy-1000).</summary>
+        public static void RunViews()
+        {
+            var args = System.Environment.GetCommandLineArgs();
+            string file = null, dir = "Logs/shots/custom";
+            for (int i = 0; i < args.Length - 1; i++) { if (args[i] == "-views") file = args[i + 1]; if (args[i] == "-shotdir") dir = args[i + 1]; }
+            EditorSceneManager.OpenScene("Assets/_Game/Scenes/World.unity");
+            Directory.CreateDirectory(dir);
+            var veg = Object.FindFirstObjectByType<VegetationSpawner>();
+            veg.Spawn();
+            var env = Object.FindFirstObjectByType<EnvController>();
+            Shader.SetGlobalVector("_WP_Wind", new Vector4(0.8f, 0.6f, 1, 0));
+            var cam = Camera.main;
+            var brain = cam.GetComponent<Unity.Cinemachine.CinemachineBrain>();
+            if (brain) brain.enabled = false;
+            var terrain = Terrain.activeTerrain;
+            float H(float x, float z, float dy) => dy >= 900f ? dy - 1000f : terrain.SampleHeight(new Vector3(x, 0, z)) + terrain.transform.position.y + dy;
+            var rt = new RenderTexture(1600, 900, 24, RenderTextureFormat.ARGB32) { antiAliasing = 1 };
+            var tex = new Texture2D(1600, 900, TextureFormat.RGB24, false);
+            int n = 0;
+            foreach (var line in File.ReadAllLines(file))
+            {
+                var f = line.Trim().Split(new[] { ' ', '\t' }, System.StringSplitOptions.RemoveEmptyEntries);
+                if (f.Length < 8 || f[0].StartsWith("#")) continue;
+                float P(int i) => float.Parse(f[i], System.Globalization.CultureInfo.InvariantCulture);
+                var pos = new Vector3(P(1), H(P(1), P(2), P(3)), P(2));
+                var look = new Vector3(P(4), H(P(4), P(5), P(6)), P(5));
+                env.timeOfDay = P(7);
+                env.Apply();
+                cam.transform.SetPositionAndRotation(pos, Quaternion.LookRotation(look - pos));
+                cam.targetTexture = rt;
+                var grass = Object.FindFirstObjectByType<GrassRenderer>();
+                if (grass) { grass.Setup(); grass.Submit(cam, pos); }
+                cam.Render();
+                if (grass) grass.Submit(cam, pos);
+                cam.Render();
+                RenderTexture.active = rt;
+                tex.ReadPixels(new Rect(0, 0, 1600, 900), 0, 0);
+                tex.Apply();
+                RenderTexture.active = null;
+                File.WriteAllBytes($"{dir}/{f[0]}.png", tex.EncodeToPNG());
+                n++;
+            }
+            cam.targetTexture = null;
+            Debug.Log($"[World] custom shots written: {n} -> {dir}");
+        }
+
         public static void Run()
         {
             EditorSceneManager.OpenScene("Assets/_Game/Scenes/World.unity");

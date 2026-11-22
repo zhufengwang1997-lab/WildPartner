@@ -115,6 +115,7 @@ namespace WildPartner.EditorTools
             var leaf = Prop("WoodDoor", hinge, P(0, 0, -RoomD / 2 - 0.1f), FaceYaw(new Vector2(0, 1)), 1f, true);
             leaf.transform.localScale = new Vector3(doorW / 1.46f * 1.02f, doorH / 2.0f, 0.45f);
             var outside = Panel(root, "DoorDaylight", P(0, doorH / 2, -RoomD / 2 - 0.6f), Quaternion.identity, new Vector2(doorW + 0.6f, doorH + 0.4f), glassMat);
+            DoorInfill(root, hinge, leaf, P(0, 0, -RoomD / 2), doorW, doorH, wallMat, beamMat);
 
             // ---- the cabin model's own door leaf (split off by tools/blender/cut_cabin_door.py) -----------------------
             Transform outLeaf = null;
@@ -153,7 +154,15 @@ namespace WildPartner.EditorTools
             ci.bed = bed.transform.position;
             ci.bedLie = P(RoomW / 2 - 0.85f, 0.6f, RoomD / 2 - 1.15f - 0.97f + 0.3f);   // feet end of the mattress
             ci.bedYaw = 180;   // feet towards the door, head on the pillow by the back wall
-            ci.bedStand = P(RoomW / 2 - 2.0f, 0.08f, RoomD / 2 - 1.15f);
+            // 1123c-A5: the WakeUp clip (tools/blender/add_wakeup.py) ends with her standing 0.35 m in front of the
+            // bed's near edge, facing away from it; it starts with her lying on the mattress
+            var bedB = new Bounds(bed.transform.position, Vector3.zero);
+            foreach (var r in bed.GetComponentsInChildren<Renderer>()) bedB.Encapsulate(r.bounds);
+            ci.bedStand = new Vector3(bedB.min.x - 0.35f, O.y + 0.08f, bed.transform.position.z);
+            Debug.Log($"[World] bed bounds {bedB.min - O} .. {bedB.max - O} (room space); stand {ci.bedStand - O}");
+            foreach (var o in AssetDatabase.LoadAllAssetsAtPath($"{AssetSetup.Rigged}/Witch.fbx"))
+                if (o is AnimationClip c && c.name == "WakeUp") ci.wakeClip = c;
+            if (!ci.wakeClip) Debug.LogWarning("[World] Witch.fbx has no WakeUp clip (run tools/blender/add_wakeup.py)");
             ci.book = book.transform.position;
             ci.lights = lamps.ToArray();
             ci.fireLight = fireLight;
@@ -162,6 +171,61 @@ namespace WildPartner.EditorTools
             ci.roomCenter = P(0, 1.2f, 0);
             Debug.Log("[World] cabin interior built" + (outLeaf ? "" : " (no outside door leaf)"));
             return ci;
+        }
+
+        /// <summary>试玩反馈 1123c-A3. The Tripo door leaf is arched but the wall opening is a rectangle: fill the two
+        /// corners above the arch with wall (following the leaf's real outline, measured from its vertices), and put a
+        /// dark board behind the leaf (swinging with it) so cracks in the decimated mesh no longer show the bright
+        /// daylight panel as white lines. `wallIn` is the inner wall face at the door centre, on the floor.</summary>
+        static void DoorInfill(Transform root, Transform hinge, GameObject leaf, Vector3 wallIn, float doorW, float doorH, Material wallMat, Material backMat)
+        {
+            // leaf outline: the Tripo leaf is a rectangle with a semicircular top whose apex touches the opening top
+            // (its vertices can't be used: the decimated arch frame is ragged). Bands get finer towards the top.
+            const int Bands = 64;
+            float rad = doorW / 2 - 0.005f, cy = doorH - rad;
+            var lo = new float[Bands]; var hi = new float[Bands];
+            for (int b = 0; b < Bands; b++)
+            {
+                float y = (b + 0.5f) / Bands * doorH;
+                float hw = y <= cy ? doorW / 2 : Mathf.Sqrt(Mathf.Max(rad * rad - (y - cy) * (y - cy), 0f));
+                lo[b] = -hw; hi[b] = hw;
+            }
+            float L = -doorW / 2, R = doorW / 2;
+            var vIn = new System.Collections.Generic.List<Vector3>(); var tIn = new System.Collections.Generic.List<int>();
+            var vBk = new System.Collections.Generic.List<Vector3>(); var tBk = new System.Collections.Generic.List<int>();
+            void Quad(System.Collections.Generic.List<Vector3> vs, System.Collections.Generic.List<int> ts, float x0, float x1, float y0, float y1, float z)
+            {
+                if (x1 - x0 < 0.003f) return;
+                int i = vs.Count;
+                vs.Add(new Vector3(x0, y0, z)); vs.Add(new Vector3(x1, y0, z)); vs.Add(new Vector3(x0, y1, z)); vs.Add(new Vector3(x1, y1, z));
+                ts.AddRange(new[] { i, i + 2, i + 1, i + 1, i + 2, i + 3, i, i + 1, i + 2, i + 1, i + 3, i + 2 });   // both sides
+            }
+            int filled = 0;
+            for (int b = 0; b < Bands; b++)
+            {
+                float y0 = b / (float)Bands * doorH, y1 = (b + 1) / (float)Bands * doorH + 0.002f;
+                float a = lo[b] + 0.015f, c = hi[b] - 0.015f;   // overlap the leaf edge a little
+                if (a > L + 0.01f) { Quad(vIn, tIn, L - 0.02f, a, y0, y1, 0.012f); filled++; }
+                if (c < R - 0.01f) { Quad(vIn, tIn, c, R + 0.02f, y0, y1, 0.012f); filled++; }
+                Quad(vBk, tBk, lo[b] + 0.03f, hi[b] - 0.03f, y0, y1, -0.16f);   // board just outside the leaf
+            }
+            GameObject Make(string name, System.Collections.Generic.List<Vector3> vs, System.Collections.Generic.List<int> ts, Material m, Transform parent, Vector3 at)
+            {
+                var mesh = new Mesh { name = name };
+                var uv = new System.Collections.Generic.List<Vector2>();
+                foreach (var q in vs) uv.Add(new Vector2(q.x / 1.5f, q.y / 1.5f));
+                mesh.SetVertices(vs); mesh.SetUVs(0, uv); mesh.SetTriangles(ts, 0); mesh.RecalculateNormals(); mesh.RecalculateBounds();
+                AssetDatabase.CreateAsset(mesh, $"{TerrainDir}/{name}.asset");
+                var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
+                go.transform.SetParent(parent, true);
+                go.transform.position = at;
+                go.GetComponent<MeshFilter>().sharedMesh = mesh;
+                var mr = go.GetComponent<MeshRenderer>(); mr.sharedMaterial = m; mr.shadowCastingMode = ShadowCastingMode.Off;
+                return go;
+            }
+            Make("DoorArchInfill", vIn, tIn, wallMat, root, wallIn);
+            Make("DoorBacking", vBk, tBk, backMat, hinge, wallIn);   // child of the hinge: swings with the leaf
+            Debug.Log($"[World] door infill: {filled} strips above the arch, backing board behind the leaf");
         }
 
         // ------------------------------------------------------------------------------------------------ helpers
@@ -186,7 +250,18 @@ namespace WildPartner.EditorTools
                 GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.NavigationStatic);
             }
             foreach (var mr in go.GetComponentsInChildren<MeshRenderer>()) mr.shadowCastingMode = ShadowCastingMode.Off;
+            DoubleSided(go);
             return go;
+        }
+
+        /// <summary>1123c-A3: the decimated Tripo props are full of hairline cracks (thousands of open edges, see
+        /// DECISIONS). Drawing back faces too means a crack shows the inside of the same wood, not the room behind.</summary>
+        static void DoubleSided(GameObject go)
+        {
+            if (!go) return;
+            foreach (var r in go.GetComponentsInChildren<Renderer>())
+                foreach (var m in r.sharedMaterials)
+                    if (m && m.HasProperty("_Cull") && m.shader.name == "WildPartner/Toon" && m.GetFloat("_Cull") != 0f) { m.SetFloat("_Cull", 0f); EditorUtility.SetDirty(m); }
         }
 
         static GameObject Box(Transform parent, string name, Vector3 pos, Vector3 size, Material mat)

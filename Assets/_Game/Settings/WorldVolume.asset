@@ -1,34 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!114 &-4990610644432389864
-MonoBehaviour:
-  m_ObjectHideFlags: 3
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 899c54efeace73346a0a16faa3afe726, type: 3}
-  m_Name: Vignette
-  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.Vignette
-  active: 1
-  color:
-    m_OverrideState: 1
-    m_Value: {r: 0.12, g: 0.08, b: 0.22, a: 1}
-  center:
-    m_OverrideState: 1
-    m_Value: {x: 0.5, y: 0.5}
-  intensity:
-    m_OverrideState: 1
-    m_Value: 0.24
-  smoothness:
-    m_OverrideState: 1
-    m_Value: 0.45
-  rounded:
-    m_OverrideState: 1
-    m_Value: 0
---- !u!114 &-4296880799788549288
+--- !u!114 &-6525434358450992258
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
@@ -68,7 +40,26 @@ MonoBehaviour:
   maxNits:
     m_OverrideState: 1
     m_Value: 1000
---- !u!114 &-1748736797535703111
+--- !u!114 &-6461546183637587712
+MonoBehaviour:
+  m_ObjectHideFlags: 3
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 221518ef91623a7438a71fef23660601, type: 3}
+  m_Name: WhiteBalance
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.WhiteBalance
+  active: 1
+  temperature:
+    m_OverrideState: 1
+    m_Value: -2
+  tint:
+    m_OverrideState: 1
+    m_Value: -3
+--- !u!114 &-2628172231790802211
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
@@ -131,14 +122,14 @@ MonoBehaviour:
   m_Name: WorldVolume
   m_EditorClassIdentifier: Unity.RenderPipelines.Core.Runtime::UnityEngine.Rendering.VolumeProfile
   components:
-  - {fileID: -4296880799788549288}
-  - {fileID: -1748736797535703111}
-  - {fileID: 448337217776538349}
-  - {fileID: 1616229574992875439}
-  - {fileID: 2777409766527593007}
-  - {fileID: 2867089212358585638}
-  - {fileID: -4990610644432389864}
---- !u!114 &448337217776538349
+  - {fileID: -6525434358450992258}
+  - {fileID: -2628172231790802211}
+  - {fileID: 1188617968799533014}
+  - {fileID: 1791558187064427419}
+  - {fileID: 5982218309957115156}
+  - {fileID: -6461546183637587712}
+  - {fileID: 8811421997722405137}
+--- !u!114 &1188617968799533014
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
@@ -166,7 +157,7 @@ MonoBehaviour:
   saturation:
     m_OverrideState: 1
     m_Value: 4
---- !u!114 &1616229574992875439
+--- !u!114 &1791558187064427419
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
@@ -200,7 +191,7 @@ MonoBehaviour:
   highlightsEnd:
     m_OverrideState: 1
     m_Value: 1
---- !u!114 &2777409766527593007
+--- !u!114 &5982218309957115156
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
@@ -222,7 +213,7 @@ MonoBehaviour:
   balance:
     m_OverrideState: 1
     m_Value: 10
---- !u!114 &2867089212358585638
+--- !u!114 &8811421997722405137
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
@@ -231,13 +222,22 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 221518ef91623a7438a71fef23660601, type: 3}
-  m_Name: WhiteBalance
-  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.WhiteBalance
+  m_Script: {fileID: 11500000, guid: 899c54efeace73346a0a16faa3afe726, type: 3}
+  m_Name: Vignette
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.Vignette
   active: 1
-  temperature:
+  color:
     m_OverrideState: 1
-    m_Value: -2
-  tint:
+    m_Value: {r: 0.12, g: 0.08, b: 0.22, a: 1}
+  center:
     m_OverrideState: 1
-    m_Value: -3
+    m_Value: {x: 0.5, y: 0.5}
+  intensity:
+    m_OverrideState: 1
+    m_Value: 0.24
+  smoothness:
+    m_OverrideState: 1
+    m_Value: 0.45
+  rounded:
+    m_OverrideState: 1
+    m_Value: 0

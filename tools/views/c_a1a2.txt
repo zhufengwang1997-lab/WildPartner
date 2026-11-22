@@ -1,0 +1,11 @@
+# name x z dy lookX lookZ lookDy hour
+a2_cabin_w     261 130 3    303 113 1046 15.5
+a2_cabin_sw    272  78 2    303 113 1046 15.5
+a2_cabin_nw    278 152 2    303 113 1046 15.5
+a2_cabin_s     300  70 2    303 113 1046 15.5
+a2_yard_east   305 112 1.7  340 100 6    15.5
+a2_yard_south  303 110 1.7  318  78 4    15.5
+a2_rim_down    288 120 1.6  262 132 0    15.5
+a1_edge_north  180 325 1.7  180 352 8    14
+a1_edge_east   325 200 1.7  352 200 8    14
+a1_edge_air    180 290 1060 180 350 0    14

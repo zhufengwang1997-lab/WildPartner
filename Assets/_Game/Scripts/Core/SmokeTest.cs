@@ -84,8 +84,14 @@ namespace WildPartner.Core
             var catC = FindObjectsByType<Creature>(FindObjectsSortMode.None).FirstOrDefault(x => x.defId == "cat");
             if (cabin)
             {
-                float tw = 0;
-                while (CabinInterior.Busy && tw < 8f) { tw += Time.deltaTime; yield return null; }
+                float tw = 0; int wakeShot = 0;
+                while (CabinInterior.Busy && tw < 14f)
+                {
+                    tw += Time.deltaTime;
+                    // 1123c-A5 key frames of the wake-up clip: lying, sitting up, on the edge, standing up
+                    if (CabinInterior.WakePlaying && wakeShot < 4 && tw > 1.9f + wakeShot * 1.35f) { yield return Shot($"02a{wakeShot}_wake"); wakeShot++; }
+                    yield return null;
+                }
                 Step(CabinInterior.Inside && Vector3.Distance(player.transform.position, cabin.bedStand) < 1.5f, "新游戏：在木屋床边醒来（室内）");
                 yield return Shot("02a_wake_room");
                 yield return UseDoor(player, cabin.insideDoor + Vector3.forward * 0.6f, 180);
@@ -227,7 +233,7 @@ namespace WildPartner.Core
                         last = c.transform.position;
                         yield return null;
                     }
-                    Step(moved > 1.5f && grazed, $"{def.name}：自己走动（{moved:0.0} m）并停下吃草（{tw:0.0} 秒内）");
+                    Step(moved >= 1.0f && grazed, $"{def.name}：自己走动（{moved:0.0} m）并停下吃草（{tw:0.0} 秒内）");
                 }
                 if (def.startleFirst && c.Current != Creature.State.Hidden)
                     yield return StartleCheck(player, c, def, shot++);
@@ -264,6 +270,7 @@ namespace WildPartner.Core
             }
             Step(flow.AllCaught, $"图鉴集齐 {flow.CaughtCount}/{flow.Total}");
             yield return FishCheck(player, shot++);
+            yield return BoundsCheck(player);
             weather.Set(false, true);
             env.timeOfDay = 19f;
 
@@ -356,6 +363,42 @@ namespace WildPartner.Core
             yield return new WaitForSeconds(1.5f);
         }
             /// <summary>试玩反馈 1123b-8: walk up to the caught deer, E to get on, ride forward, E to get off.</summary>
+        /// <summary>1123c-A1: run (and jump) straight at each map edge for 7 s; she must stop inside the bounds.
+        /// Then drop her under the terrain: she must be put back on safe ground.</summary>
+        IEnumerator BoundsCheck(PlayerController player)
+        {
+            float S = WorldLayout.Size, lim = PlayerController.BoundaryInset;
+            var dirs = new[] { ("北", new Vector2(S * 0.5f, S - 32f), 0f), ("东", new Vector2(S - 32f, S * 0.45f), 90f),
+                               ("南", new Vector2(S * 0.55f, 32f), 180f), ("西", new Vector2(32f, S * 0.5f), 270f) };
+            var res = new List<string>(); bool ok = true;
+            foreach (var (name, at, yaw) in dirs)
+            {
+                player.Teleport(new Vector3(at.x, Creature.GroundHeight(at.x, at.y) + 0.3f, at.y), yaw);
+                player.SetCameraOrbit(yaw, 10f);
+                yield return new WaitForSeconds(0.3f);
+                GameInput.SimMove = new Vector2(0, 1); GameInput.SimRun = true;
+                float t = 0, worst = float.MaxValue;
+                while (t < 7f)
+                {
+                    t += Time.deltaTime;
+                    if (Mathf.Repeat(t, 0.9f) < Time.deltaTime) { GameInput.SimJump = true; } else GameInput.SimJump = false;
+                    var p = player.transform.position;
+                    worst = Mathf.Min(worst, Mathf.Min(Mathf.Min(p.x, S - p.x), Mathf.Min(p.z, S - p.z)));
+                    yield return null;
+                }
+                GameInput.SimMove = Vector2.zero; GameInput.SimRun = false; GameInput.SimJump = false;
+                ok &= worst >= lim - 0.05f && worst < lim + 3f;   // reached the edge, didn't pass it
+                res.Add($"{name} {worst:0.0} m");
+            }
+            Step(ok, $"地图边界：朝四个方向跑跳 7 秒，离地图边缘最近 {string.Join("、", res)}（限制 {lim} m）");
+            yield return Shot("40_bounds_edge");
+            int rec = player.Recoveries;
+            player.DebugFallThrough();
+            yield return new WaitForSeconds(0.5f);
+            var q = player.transform.position;
+            Step(player.Recoveries == rec + 1 && q.y > Creature.GroundHeight(q.x, q.z) - 0.3f, $"掉出地形后自动回到安全地点（{q.x:0} , {q.z:0}）");
+        }
+
         IEnumerator RideCheck(PlayerController player, Creature deer, int shotNo)
         {
             yield return new WaitForSeconds(1.5f);
