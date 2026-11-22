@@ -311,6 +311,8 @@ namespace WildPartner.EditorTools
                 if (def.id == "moon_butterfly") m.SetFloat("_Emission", 0.3f);
             });
             bool rigged = vis.GetComponentInChildren<Animator>() != null;
+            if (rigged && def.id == "moon_butterfly")
+                foreach (var r in vis.GetComponentsInChildren<SkinnedMeshRenderer>()) r.sharedMaterial.SetFloat("_Emission", 0.3f);
             vis.transform.SetParent(root.transform, false);
             var c = root.AddComponent<Creature>();
             c.defId = def.id;

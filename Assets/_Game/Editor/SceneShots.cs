@@ -39,6 +39,13 @@ namespace WildPartner.EditorTools
             var deer = CreatureDefs.Get("white_deer");
             PoseShots(cam, env, rt, tex, "white_deer", W(deer.anchors[0], 0f), new Vector3(1, 0, 0.3f), 2.3f,
                       new[] { ("Idle", 1.5f), ("Walk", 0.3f), ("Run", 0.2f), ("GrazeDown", 0.6f), ("Graze", 0.4f), ("Graze", 1.1f) });
+            var rabbit = CreatureDefs.Get("moon_rabbit");
+            PoseShots(cam, env, rt, tex, "moon_rabbit", W(rabbit.anchors[0], 0f), new Vector3(1, 0, 0.3f), 1.0f,
+                      new[] { ("Idle", 0.7f), ("Idle", 1.6f), ("Walk", 0.12f), ("Walk", 0.25f), ("Run", 0.2f), ("Run", 0.36f) });
+            PoseShots(cam, env, rt, tex, "moon_butterfly", W(WorldLayout.PlayerStart + WorldLayout.CabinFacing * 1.6f, 0f) + Vector3.up * 0.9f,
+                      new Vector3(1, 0, 0.6f), 0.9f, new[] { ("Idle", 0.0f), ("Idle", 0.12f), ("Run", 0.1f) });
+            PoseShots(cam, env, rt, tex, "ink_koi", W(WorldLayout.PlayerStart + WorldLayout.CabinFacing * 1.6f, 0f) + Vector3.up * 0.3f,
+                      new Vector3(1, 0, 0.6f), 0.8f, new[] { ("Walk", 0.0f), ("Walk", 0.3f), ("Run", 0.2f) });
             PoseShots(cam, env, rt, tex, "witch", W(WorldLayout.PlayerStart + WorldLayout.CabinFacing * 1.6f, 0f),
                       new Vector3(-WorldLayout.CabinFacing.y, 0, WorldLayout.CabinFacing.x), 2.6f,
                       new[] { ("Idle", 1.0f), ("Walk", 0.3f), ("SneakIdle", 1.0f), ("Sneak", 0.4f), ("Sneak", 0.9f), ("Capture", 0.5f) });
