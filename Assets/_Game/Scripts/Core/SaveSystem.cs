@@ -28,6 +28,7 @@ namespace WildPartner.Core
         public float playTime;
         public bool introShown;
         public bool finished;
+        public bool indoors;             // saved inside the cabin (试玩反馈 1123b-3)
         public bool HasCaught(string id) => caught.Exists(c => c.id == id);
     }
 

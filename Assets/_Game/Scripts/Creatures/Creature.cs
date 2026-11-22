@@ -164,6 +164,20 @@ namespace WildPartner.Creatures
             if (_agent && _agent.enabled) { _agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance; _agent.avoidancePriority = 40 + slot; _agent.stoppingDistance = 0.8f; }
         }
 
+        /// <summary>Companion follows the witch through a cut (cabin door): appear next to `p` at once.</summary>
+        public void WarpNear(Vector3 p, float yaw)
+        {
+            if (Def.movement == Movement.Ground && _agent)
+            {
+                if (NavMesh.SamplePosition(p, out var hit, 3f, NavMesh.AllAreas)) p = hit.position;
+                if (_agent.enabled) _agent.Warp(p); else transform.position = p;
+                if (_agent.enabled && _agent.isOnNavMesh) _agent.ResetPath();
+            }
+            else transform.position = p + Vector3.up * (Def.id == "ink_koi" ? 1.3f : 1.8f);
+            transform.rotation = Quaternion.Euler(0, yaw, 0);
+            _velocity = Vector3.zero;
+        }
+
         /// <summary>Spawn directly as a companion next to the player (loading a save).</summary>
         public void RestoreAsCompanion(int slot, Vector3 near)
         {

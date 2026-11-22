@@ -26,7 +26,7 @@ namespace WildPartner.EditorTools
     /// list, lights, post-processing, cameras, gameplay systems and the NavMesh. Re-running gives an
     /// identical scene.
     /// </summary>
-    public static class WorldBuilder
+    public static partial class WorldBuilder
     {
         const string ScenePath = "Assets/_Game/Scenes/World.unity";
         const string TerrainDir = "Assets/_Game/Settings/Terrain";
@@ -51,6 +51,7 @@ namespace WildPartner.EditorTools
             BuildWater();
             var landmarks = new GameObject("Landmarks").transform;
             var campfire = BuildCabin(landmarks);
+            BuildInterior(landmarks);   // 试玩反馈 1123b-3: the room behind the front door
             BuildStoneCircle(landmarks);
             Place("Watchtower", landmarks, WorldLayout.Watchtower, 30, 1f);
             BuildBridge(landmarks);

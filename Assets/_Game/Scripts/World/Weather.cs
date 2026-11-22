@@ -55,7 +55,7 @@ namespace WildPartner.World
                 if (cam) rain.transform.position = cam.transform.position + Vector3.up * 12f + cam.transform.forward * 6f;
                 var em = rain.emission;
                 var tier = Zfw.QualityTiers.QualityTiers.Settings;
-                em.rateOverTime = 3500f * RainAmount * (tier ? tier.particleDensity : 1f);
+                em.rateOverTime = EnvController.Indoors ? 0f : 3500f * RainAmount * (tier ? tier.particleDensity : 1f);   // a roof overhead in the cabin
                 if (RainAmount > 0.01f && !rain.isPlaying) rain.Play();
                 if (RainAmount <= 0.01f && rain.isPlaying) rain.Stop();
             }

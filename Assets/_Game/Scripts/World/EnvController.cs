@@ -76,6 +76,10 @@ namespace WildPartner.World
         static readonly int FogParams2Id = Shader.PropertyToID("_WP_FogParams2");
         /// <summary>Height-fog density multiplier (settings / quality); 0 turns the haze off.</summary>
         public static float FogAmount = 1f;
+        /// <summary>True while the player is inside the cabin (set by CabinInterior).</summary>
+        public static bool Indoors;
+        /// <summary>Sky colour and daylight for the cabin windows.</summary>
+        public static Color OutdoorSky = Color.white, OutdoorLight = Color.white;
         /// <summary>Near-camera dither fade for Toon objects (m): hidden below x, fully visible above y.</summary>
         public static Vector2 NearFade = new Vector2(0.6f, 2.4f);
         static readonly int NearFadeId = Shader.PropertyToID("_WP_NearFade");
@@ -143,7 +147,8 @@ namespace WildPartner.World
             Shader.SetGlobalVector(FogParamsId, new Vector4(density, 0.04f, 26f, Mathf.Lerp(0.74f, 0.95f, rain)));
             Shader.SetGlobalVector(FogParams2Id, new Vector4(Mathf.Lerp(30f, 8f, rain), 0.85f, 0, 0));
 
-            Shader.SetGlobalVector(NearFadeId, new Vector4(NearFade.x, NearFade.y, 0, 0));
+            // indoors the camera is often 1–2 m from the witch: only dither what is really in the lens
+            Shader.SetGlobalVector(NearFadeId, Indoors ? new Vector4(0.15f, 0.55f, 0, 0) : new Vector4(NearFade.x, NearFade.y, 0, 0));
             Shader.SetGlobalColor(ZenithId, zen);
             Shader.SetGlobalColor(HorizonId, hor);
             Shader.SetGlobalColor(GroundId, Color.Lerp(hor, fog, 0.6f) * 0.8f);
@@ -151,6 +156,21 @@ namespace WildPartner.World
             Vector3 toSun = sun ? -sun.transform.forward : Vector3.up;
             float starF = Mathf.Clamp01(night ? 1 - Mathf.Abs(nightT - 0.5f) * 1.2f : 0) * (1 - rain);
             Shader.SetGlobalVector(SunDirId, new Vector4(toSun.x, toSun.y, toSun.z, starF));
+
+            // what the windows of the cabin show (试玩反馈 1123b-3)
+            OutdoorSky = Color.Lerp(hor, zen, 0.35f);
+            OutdoorLight = (night ? new Color(0.45f, 0.55f, 0.85f) * 0.25f : sunCol * Mathf.Clamp01(sunI / 1.8f)) * (1 - 0.5f * rain);
+            if (Indoors)
+            {
+                // inside the cabin: no sun, no valley haze; a warm low fill, the fire and lamps do the rest
+                if (sun) { sun.intensity = 0f; sun.shadows = LightShadows.None; }
+                Color warm = new Color(0.42f, 0.30f, 0.22f) * (night ? 0.55f : 0.8f);
+                RenderSettings.ambientSkyColor = warm;
+                RenderSettings.ambientEquatorColor = warm * 0.85f;
+                RenderSettings.ambientGroundColor = warm * 0.6f;
+                Shader.SetGlobalVector(FogParamsId, Vector4.zero);
+            }
+            else if (sun) sun.shadows = LightShadows.Soft;
         }
 
         void LateUpdate()

@@ -39,6 +39,19 @@ namespace WildPartner.Core
             _log.WriteLine(line); _log.Flush();
         }
 
+
+        /// <summary>Stand at `at` facing `yaw`, press E once, wait for the door transition to finish.</summary>
+        IEnumerator UseDoor(PlayerController player, Vector3 at, float yaw, string midShot = null)
+        {
+            player.Teleport(at, yaw);
+            yield return new WaitForSeconds(0.6f);
+            GameInput.SimInteract = true; yield return null; GameInput.SimInteract = false;
+            float t = 0; yield return null;
+            if (midShot != null) { yield return new WaitForSeconds(0.42f); yield return Shot(midShot); }
+            while (CabinInterior.Busy && t < 6f) { t += Time.deltaTime; yield return null; }
+            yield return new WaitForSeconds(0.5f);
+        }
+
         IEnumerator Shot(string name)
         {
             yield return new WaitForEndOfFrame();
@@ -65,6 +78,22 @@ namespace WildPartner.Core
             int starters = CreatureDefs.All.Count(d => d.startsWithPlayer);
             Step(flow.State == GameFlow.FlowState.Playing && flow.CaughtCount == starters, $"新游戏：进入游戏，已收集 {starters}（默认宠物）");
             yield return Shot("02_newgame");
+
+            // 试玩反馈 1123b-3: wake up in the cabin, go out through the door, come back in, sleep, go out again
+            var cabin = CabinInterior.Instance;
+            var catC = FindObjectsByType<Creature>(FindObjectsSortMode.None).FirstOrDefault(x => x.defId == "cat");
+            if (cabin)
+            {
+                float tw = 0;
+                while (CabinInterior.Busy && tw < 8f) { tw += Time.deltaTime; yield return null; }
+                Step(CabinInterior.Inside && Vector3.Distance(player.transform.position, cabin.bedStand) < 1.5f, "新游戏：在木屋床边醒来（室内）");
+                yield return Shot("02a_wake_room");
+                yield return UseDoor(player, cabin.insideDoor + Vector3.forward * 0.6f, 180);
+                Step(!CabinInterior.Inside && Vector3.Distance(player.transform.position, cabin.outsideSpot) < 1.5f &&
+                     catC && Vector3.Distance(catC.transform.position, player.transform.position) < 4f, "出门：门口按 E 开门，淡出淡入到屋外，猫跟出来");
+                yield return Shot("02b_outside");
+            }
+            else Step(false, "木屋室内不存在（CabinInterior）");
 
             // Space = jump: rises ~jumpHeight, plays the jump animation, lands again
             {
@@ -96,6 +125,27 @@ namespace WildPartner.Core
                 var gaps = new List<string>(); for (int i = 1; i < times.Count; i++) gaps.Add((times[i] - times[i - 1]).ToString("0.00"));
                 Debug.Log($"[Smoke] footsteps {steps}, gaps {string.Join(" ", gaps)} s, surfaces {string.Join("/", surfaces)}");
                 Step(steps >= 4, $"脚步声：走 3 秒触发 {steps} 次（动画落脚帧），地面 {string.Join("/", surfaces)}");
+            }
+
+            if (cabin)
+            {
+                var fwd = new Vector3(WorldLayout.CabinFacing.x, 0, WorldLayout.CabinFacing.y);
+                yield return UseDoor(player, cabin.outsideDoor + fwd * 1.7f + Vector3.up * 0.4f, Mathf.Atan2(-fwd.x, -fwd.z) * Mathf.Rad2Deg, "02c0_door_opening");
+                Step(CabinInterior.Inside && Vector3.Distance(player.transform.position, cabin.insideSpot) < 1.5f &&
+                     catC && Vector3.Distance(catC.transform.position, player.transform.position) < 4f, "进门：门口按 E 开门，进到室内，猫跟进来");
+                yield return Shot("02c_inside");
+                // bed: sleep switches day/night and saves
+                float h0 = EnvController.Instance.timeOfDay;
+                player.Teleport(cabin.bedStand, 0);
+                yield return null; yield return null;
+                GameInput.SimInteract = true; yield return null; GameInput.SimInteract = false;
+                float ts = 0; yield return null;
+                while (CabinInterior.Busy && ts < 6f) { ts += Time.deltaTime; yield return null; }
+                float h1 = EnvController.Instance.timeOfDay;
+                bool dayBefore = h0 >= 6f && h0 < 18.5f, dayAfter = h1 >= 6f && h1 < 18.5f;
+                Step(dayBefore != dayAfter, $"室内：床上按 E 睡觉，{h0:0.0} 点 → {h1:0.0} 点");
+                yield return UseDoor(player, cabin.insideDoor + Vector3.forward * 0.6f, 180);
+                Step(!CabinInterior.Inside, "再次出门（后续测试在屋外）");
             }
 
             var env = EnvController.Instance;
@@ -134,6 +184,7 @@ namespace WildPartner.Core
                     var cp = c.transform.position; var away = player.transform.position - cp; away.y = 0; away.Normalize();
                     var st = cp + away * 20f; st.y = Creature.GroundHeight(st.x, st.z) + 0.1f;
                     player.Teleport(st, Quaternion.LookRotation(-away).eulerAngles.y);
+                    cat.WarpNear(st + away * 1.5f, Quaternion.LookRotation(-away).eulerAngles.y);   // leading starts only within 12 m of her
                     yield return new WaitForSeconds(0.6f);
                     cat.LeadSoon();
                     GameInput.SimMove = new Vector2(0, 1);

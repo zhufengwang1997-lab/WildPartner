@@ -18,7 +18,8 @@ namespace WildPartner.Audio
         const int Rate = 44100;
         AudioSource _wind, _rain, _music, _sfx, _steps;
         AudioLowPassFilter _rainLp;
-        AudioClip _step, _chime, _fail, _meow, _drip;
+        AudioClip _step, _chime, _fail, _meow, _drip, _creak, _thud;
+        AudioSource _fire;
         AudioClip[] _grass, _dirt, _wood, _water;
         int _lastVariant = -1;
         float _rainVol, _nextDrip;
@@ -45,6 +46,10 @@ namespace WildPartner.Audio
             if (PlayerController.Instance) PlayerController.Instance.Footstep += PlayStep;
             CaptureSystem.Captured += _ => _sfx.PlayOneShot(_chime, 0.7f);
             CaptureSystem.Interrupted += _ => _sfx.PlayOneShot(_fail, 0.5f);
+            _creak = MakeCreak(); _thud = MakeThud();
+            _fire = Loop(MakeCrackle(6f), 0f);
+            CabinInterior.DoorOpened += () => _sfx.PlayOneShot(_creak, 0.55f);
+            CabinInterior.DoorClosed += () => _sfx.PlayOneShot(_thud, 0.5f);
             _meow = MakeMeow();
             Creature.Meowed += p =>
             {
@@ -69,8 +74,8 @@ namespace WildPartner.Audio
             return list.ToArray();
         }
 
-        /// <summary>Inside the cabin (wooden floor, rain on the roof).</summary>
-        static bool Indoors(Vector3 p) => Vector2.Distance(new Vector2(p.x, p.z), WorldLayout.House) < 3.6f;
+        /// <summary>Inside the cabin (wooden floor, rain on the roof, fire crackling).</summary>
+        static bool Indoors(Vector3 p) => EnvController.Indoors;
 
         public static Surface SurfaceAt(Vector3 p)
         {
@@ -124,12 +129,73 @@ namespace WildPartner.Audio
                 _sfx.PlayOneShot(_drip, _rainVol * (0.4f + (float)_rng.NextDouble() * 0.5f));
                 _sfx.pitch = 1f;
             }
-            _wind.volume = 0.18f + rain * 0.04f;
+            _wind.volume = (0.18f + rain * 0.04f) * (inside ? 0.25f : 1f);
+            _fire.volume = Mathf.MoveTowards(_fire.volume, inside ? 0.3f : 0f, Time.unscaledDeltaTime * 0.6f);
             bool menu = GameFlow.Instance && GameFlow.Instance.State == GameFlow.FlowState.MainMenu;
             _music.volume = Mathf.MoveTowards(_music.volume, menu ? 0.3f : 0.18f, Time.unscaledDeltaTime * 0.2f);
         }
 
         // ---------------------------------------------------------------- synthesis
+        /// <summary>Wooden door creak (~0.75 s): a stick-slip buzz whose pitch wanders down, through a wood resonance.</summary>
+        AudioClip MakeCreak()
+        {
+            int n = (int)(Rate * 0.75f);
+            var d = new float[n];
+            float ph = 0, lp = 0, bp1 = 0, bp2 = 0;
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)n;
+                float f = Mathf.Lerp(190f, 120f, t) * (1 + 0.12f * Mathf.Sin(t * 23f) + 0.05f * Mathf.Sin(t * 71f));
+                ph += f / Rate;
+                float pulse = Mathf.Pow(Mathf.Repeat(ph, 1f), 6f) * 2 - 0.3f;           // sharp stick-slip pulses
+                float noise = ((float)_rng.NextDouble() * 2 - 1) * 0.15f;
+                float x = pulse + noise;
+                // two resonators (~700 Hz, ~1.6 kHz) for the hollow wooden body
+                bp1 += 0.12f * (x - bp1); bp2 += 0.3f * (x - bp2);
+                lp += 0.5f * ((bp1 - bp2 * 0.6f) - lp);
+                float env = Mathf.Clamp01(t * 12f) * Mathf.Clamp01((1 - t) * 4f) * (0.6f + 0.4f * Mathf.Sin(t * 9f));
+                d[i] = lp * env * 0.9f;
+            }
+            var c = AudioClip.Create("creak", n, 1, Rate, false); c.SetData(d, 0); return c;
+        }
+
+        /// <summary>Door shutting: a low wooden knock with a short rattle.</summary>
+        AudioClip MakeThud()
+        {
+            int n = (int)(Rate * 0.4f);
+            var d = new float[n];
+            float y = 0;
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)Rate;
+                float body = Mathf.Sin(2 * Mathf.PI * 95f * t) * Mathf.Exp(-t * 18f) + Mathf.Sin(2 * Mathf.PI * 210f * t) * Mathf.Exp(-t * 30f) * 0.5f;
+                y += 0.25f * (((float)_rng.NextDouble() * 2 - 1) - y);
+                float rattle = y * Mathf.Exp(-t * 40f) * 0.5f;
+                d[i] = (body + rattle) * 0.8f;
+            }
+            var c = AudioClip.Create("thud", n, 1, Rate, false); c.SetData(d, 0); return c;
+        }
+
+        /// <summary>Fireplace: a soft roar with random crackles and pops (loops).</summary>
+        AudioClip MakeCrackle(float seconds)
+        {
+            int n = (int)(Rate * seconds);
+            var d = new float[n];
+            float roar = 0, pop = 0, popEnv = 0;
+            for (int i = 0; i < n; i++)
+            {
+                roar += 0.02f * (((float)_rng.NextDouble() * 2 - 1) - roar);
+                if (_rng.NextDouble() < 0.00045) popEnv = 0.4f + (float)_rng.NextDouble() * 0.6f;
+                pop = ((float)_rng.NextDouble() * 2 - 1) * popEnv;
+                popEnv *= 0.993f;
+                d[i] = roar * 1.2f + pop * 0.5f;
+            }
+            int fade = Rate / 20;   // seamless loop: cross-fade the tail into the head
+            for (int i = 0; i < fade; i++) { float k = i / (float)fade; d[i] = d[i] * k + d[n - fade + i] * (1 - k); }
+            var c = AudioClip.Create("fire", n - fade, 1, Rate, false);
+            var o = new float[n - fade]; System.Array.Copy(d, o, n - fade); c.SetData(o, 0); return c;
+        }
+
         AudioClip MakeNoise(float seconds, float lp, float gain)
         {
             int n = (int)(Rate * seconds);

@@ -57,6 +57,10 @@ PrefabInstance:
       value: StandingStone
       objectReference: {fileID: 0}
     - target: {fileID: 926080896237293863, guid: ab7e9e2354dc24f1cae16e201292e234, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 926080896237293863, guid: ab7e9e2354dc24f1cae16e201292e234, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
       objectReference: {fileID: 2100000, guid: 2a4abeb1418284eb7b59c403402b8350, type: 2}

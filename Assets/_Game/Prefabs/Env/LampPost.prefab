@@ -112,6 +112,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: WildPartner.Runtime::WildPartner.World.NightLight
   alwaysOn: 0
   flicker: 0
+  indoor: 0
 --- !u!1001 &8608267610731979711
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -158,6 +159,10 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 85233c21e47d349799e5356220c83abf, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -4974260947765205997, guid: 85233c21e47d349799e5356220c83abf, type: 3}
+      propertyPath: m_Enabled
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -4974260947765205997, guid: 85233c21e47d349799e5356220c83abf, type: 3}

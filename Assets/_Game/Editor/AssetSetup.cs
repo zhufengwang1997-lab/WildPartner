@@ -225,6 +225,13 @@ namespace WildPartner.EditorTools
                 if (!r) break;
                 list.Add(new LOD(heights[i], new Renderer[] { r }));
             }
+            // a model with more LOD meshes than levels here kept drawing the extra ones on top of LOD0 all the time
+            // (e.g. Cabin_LOD2 with its closed door, found in 1123b-3): switch them off
+            for (int i = list.Count; i < 6; i++)
+            {
+                var extra = FindLod(go, name, i);
+                if (extra) extra.enabled = false;   // (a child of a model prefab instance cannot be destroyed)
+            }
             lg.SetLODs(list.ToArray());
             lg.fadeMode = LODFadeMode.None;
             lg.RecalculateBounds();
@@ -256,6 +263,14 @@ namespace WildPartner.EditorTools
                     mc.sharedMesh = mf.sharedMesh;
                     mc.convex = name.StartsWith("Rock") || name == "Crate";
                 }
+                // the cabin's door leaf is cut out of LOD0 (tools/blender/cut_cabin_door.py): it closes the hole
+                foreach (var t in go.GetComponentsInChildren<MeshFilter>())
+                    if (t.name == "Cabin_Door")
+                    {
+                        var b = t.sharedMesh.bounds;
+                        var bc = t.gameObject.AddComponent<BoxCollider>();
+                        bc.center = b.center; bc.size = b.size;
+                    }
             }
             else if (name == "LampPost" || name == "FlagPole")
             {

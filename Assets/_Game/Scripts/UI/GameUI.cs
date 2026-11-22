@@ -37,6 +37,7 @@ namespace WildPartner.UI
         GameFlow _flow;
         Canvas _canvas;
         RectTransform _hud, _menu, _pause, _settings, _journal, _ending;
+        RectTransform _alertRoot;
         Text _objective, _clock, _prompt, _toast, _hint, _endingText, _journalBody;
         Image _progressFill, _progressBg, _alertFill;
         RectTransform _journalGrid, _settingsList;
@@ -122,7 +123,7 @@ namespace WildPartner.UI
             _progressBg = UIKit.Box(bar, new Color(0.12f, 0.08f, 0.2f, 0.7f), UIKit.PlumFrame, 0.3f);
             var fill = UIKit.Rect(bar, "Fill", Vector2.zero, new Vector2(0, 1), new Vector2(0, 0.5f), Vector2.zero, Vector2.zero);
             _progressFill = UIKit.Panel(fill, new Color(0.75f, 0.6f, 1f));
-            var alert = UIKit.Rect(prompt, "Alert", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, -12), new Vector2(420, 8));
+            var alert = _alertRoot = UIKit.Rect(prompt, "Alert", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, -12), new Vector2(420, 8));
             UIKit.Panel(alert, new Color(0, 0, 0, 0.4f));
             var af = UIKit.Rect(alert, "Fill", Vector2.zero, new Vector2(0, 1), new Vector2(0, 0.5f), Vector2.zero, Vector2.zero);
             _alertFill = UIKit.Panel(af, new Color(1f, 0.45f, 0.3f));
@@ -362,9 +363,17 @@ namespace WildPartner.UI
             var cand = CaptureSystem.Candidate;
             var target = CaptureSystem.Target;
             bool show = cand != null;
-            _prompt.transform.parent.gameObject.SetActive(show);
+            string interact = WildPartner.World.CabinInterior.Prompt;
+            _prompt.transform.parent.gameObject.SetActive(show || interact != null);
+            if (!show && interact != null)
+            {
+                _prompt.text = interact;   // cabin door / bed / book (试玩反馈 1123b-3)
+                _progressBg.gameObject.SetActive(false);
+                _alertRoot.gameObject.SetActive(false);
+            }
             if (show)
             {
+                _alertRoot.gameObject.SetActive(true);
                 var c = target ? target : cand;
                 _prompt.text = target ? $"正在捕捉 {c.Def.name}…" : $"按住 E 捕捉 {c.Def.name}";
                 _progressFill.rectTransform.anchorMax = new Vector2(CaptureSystem.Progress, 1);

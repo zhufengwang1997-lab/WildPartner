@@ -83,6 +83,16 @@ namespace WildPartner.Player
             CameraCut?.Invoke();
         }
 
+        /// <summary>Orbit distance factor (0.65..1.9, 1 = default); the cabin interior starts close.</summary>
+        public void SetCameraDistance(float k) { if (_orbit) _orbit.RadialAxis.Value = k; }
+
+        /// <summary>Point the orbit camera from a given yaw/pitch (cut, no damping).</summary>
+        public void SetCameraOrbit(float yaw, float pitch)
+        {
+            if (_orbit) { _orbit.HorizontalAxis.Value = yaw; _orbit.VerticalAxis.Value = pitch; }
+            if (vcam) vcam.PreviousStateIsValid = false;
+        }
+
         /// <summary>Raised on teleports/cuts so the upscaler can reset its history (IN-08).</summary>
         public static event System.Action CameraCut;
 

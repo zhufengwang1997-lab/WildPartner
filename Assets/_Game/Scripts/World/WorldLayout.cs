@@ -38,6 +38,11 @@ namespace WildPartner.World
         public static readonly Vector2 StoneCircle = M(320, 544);
         public static readonly Vector2 Watchtower = M(150, 452);
         public static readonly Vector2 PlayerStart = House + CabinFacing * 6.5f;
+        /// <summary>Front door of the cabin model (door plane 2.31 m out from the cabin centre, 试玩反馈 1123b-3).</summary>
+        public static readonly Vector2 CabinDoor = House + CabinFacing * 2.31f;
+        /// <summary>The cabin interior is a separate room outside the map, below the level of the rim hills (no terrain,
+        /// heightfield collider, sun or haze reaches it; nothing inside the valley can see it).</summary>
+        public static readonly Vector3 InteriorOrigin = new Vector3(-70f, -10f, House.y);
         public static readonly float PlayerStartYaw = Mathf.Atan2(CabinFacing.x, CabinFacing.y) * Mathf.Rad2Deg;
 
         // Lake (ellipse) + islands

@@ -57,6 +57,10 @@ PrefabInstance:
       value: Cauldron
       objectReference: {fileID: 0}
     - target: {fileID: 1461346807615712638, guid: 092d503c1a7cc4f4c928414c05575e24, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1461346807615712638, guid: 092d503c1a7cc4f4c928414c05575e24, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
       objectReference: {fileID: 2100000, guid: 9ccb8feec65c24fa5b2b21fc5a15d142, type: 2}

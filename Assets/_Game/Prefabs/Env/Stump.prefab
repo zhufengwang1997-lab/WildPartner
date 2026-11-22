@@ -53,6 +53,10 @@ PrefabInstance:
       value: Stump
       objectReference: {fileID: 0}
     - target: {fileID: 1216970639642708110, guid: f7eb877d54e99449980fbb2a6aed729a, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1216970639642708110, guid: f7eb877d54e99449980fbb2a6aed729a, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
       objectReference: {fileID: 2100000, guid: 52a7245fa84614719b7da3caa3d209af, type: 2}

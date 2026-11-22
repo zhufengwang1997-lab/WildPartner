@@ -169,7 +169,7 @@ namespace WildPartner.UI
             var cam = Camera.main;
             if (!pc || !cam || _flow == null) return;
             float S = WorldLayout.Size;
-            Vector3 p = pc.transform.position;
+            Vector3 p = CabinInterior.MapPosition(pc.transform.position);   // indoors: the cabin
             float phi = pc.transform.eulerAngles.y;
 
             if (_flow.State == GameFlow.FlowState.Map)

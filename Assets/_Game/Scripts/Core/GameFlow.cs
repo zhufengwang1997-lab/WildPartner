@@ -70,6 +70,7 @@ namespace WildPartner.Core
             Cursor.lockState = playing ? CursorLockMode.Locked : CursorLockMode.None;
             Cursor.visible = !playing;
             if (player) player.enabled = s != FlowState.MainMenu;
+            if (s == FlowState.MainMenu && EnvController.Indoors) CabinInterior.SetInside(false);   // the menu flies over the valley
             StateChanged?.Invoke(s);
         }
 
@@ -80,9 +81,12 @@ namespace WildPartner.Core
             Save = new SaveData { timeOfDay = startHour };
             _endingTriggered = false;
             foreach (var c in _creatures) c.Init(0, true);
+            // 试玩反馈 1123b-3: the witch wakes up in her bed inside the cabin
+            var cabin = CabinInterior.Instance;
             var start = WorldLayout.PlayerStart;
-            var startPos = new Vector3(start.x, Creature.GroundHeight(start.x, start.y) + 0.2f, start.y);
-            player.Teleport(startPos, WorldLayout.PlayerStartYaw);
+            var startPos = cabin ? cabin.bedStand : new Vector3(start.x, Creature.GroundHeight(start.x, start.y) + 0.2f, start.y);
+            if (cabin) CabinInterior.SetInside(true);
+            player.Teleport(startPos, cabin ? cabin.bedYaw + 90 : WorldLayout.PlayerStartYaw);
             foreach (var c in _creatures)   // the default pet (cat) is with the witch from the start
                 if (c.Def.startsWithPlayer)
                 {
@@ -92,8 +96,10 @@ namespace WildPartner.Core
             environment.timeOfDay = startHour;
             weather.Set(false, true);
             SetState(FlowState.Playing);
+            if (cabin) cabin.WakeUp();
             Hints?.Invoke(new[]
             {
+                "你在木屋里醒来。走到门口按 E 开门；床可以睡觉存档，桌上的书是图鉴",
                 "WASD 移动，鼠标转动视角，Shift 奔跑，空格跳跃",
                 "按住 Ctrl 潜行：动物不容易发现你",
                 "靠近动物后按住 E 捕捉；Tab 打开图鉴查看线索",
@@ -111,6 +117,7 @@ namespace WildPartner.Core
             Save = d;
             _endingTriggered = d.finished;   // a finished save keeps exploring instead of replaying the ending
             environment.timeOfDay = d.timeOfDay;
+            CabinInterior.SetInside(d.indoors && CabinInterior.Instance);
             player.Teleport(d.playerPosition, d.playerYaw);
             foreach (var c in _creatures) c.Init(0, true);
             int slot = 0;
@@ -196,6 +203,7 @@ namespace WildPartner.Core
             Save.playerPosition = player.transform.position;
             Save.playerYaw = player.transform.eulerAngles.y;
             Save.timeOfDay = environment.timeOfDay;
+            Save.indoors = EnvController.Indoors;
             SaveSystem.SaveGame(Save);
         }
 
