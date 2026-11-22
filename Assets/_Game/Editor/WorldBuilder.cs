@@ -1,0 +1,924 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using Unity.AI.Navigation;
+using Unity.Cinemachine;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.AI;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
+using WildPartner.Audio;
+using WildPartner.Core;
+using WildPartner.Creatures;
+using WildPartner.Player;
+using WildPartner.UI;
+using WildPartner.World;
+using Random = System.Random;
+
+namespace WildPartner.EditorTools
+{
+    /// <summary>
+    /// Generates the whole game scene from <see cref="WorldLayout"/> with a fixed seed (FR-G01/G02):
+    ///   tools/unity.sh WildPartner.EditorTools.WorldBuilder.Build
+    /// Terrain (~1 km², meadow / sparse forest / river valley), water, landmarks, vegetation placement
+    /// list, lights, post-processing, cameras, gameplay systems and the NavMesh. Re-running gives an
+    /// identical scene.
+    /// </summary>
+    public static class WorldBuilder
+    {
+        const string ScenePath = "Assets/_Game/Scenes/World.unity";
+        const string TerrainDir = "Assets/_Game/Settings/Terrain";
+        const float S = WorldLayout.Size;
+        const int HeightRes = 1025;
+        const int SplatRes = 1024;
+
+        static Random _rng;
+        static TerrainData _td;
+
+        [MenuItem("WildPartner/Build World")]
+        public static void Build()
+        {
+            var t0 = DateTime.Now;
+            _rng = new Random(WorldLayout.Seed);
+            Directory.CreateDirectory(TerrainDir);
+            Directory.CreateDirectory("Assets/_Game/Scenes");
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            var terrain = BuildTerrain();
+            BuildWater();
+            var landmarks = new GameObject("Landmarks").transform;
+            var campfire = BuildCabin(landmarks);
+            BuildStoneCircle(landmarks);
+            Place("Watchtower", landmarks, WorldLayout.Watchtower, 30, 1f);
+            BuildBridge(landmarks);
+            BuildBackground(landmarks);
+            var vegetation = BuildVegetation();
+
+            // ---- lights, sky, post -----------------------------------------------------------------
+            var sunGo = new GameObject("Sun", typeof(Light));
+            var sun = sunGo.GetComponent<Light>();
+            sun.type = LightType.Directional; sun.shadows = LightShadows.Soft; sun.intensity = 1.8f;
+            sunGo.AddComponent<UniversalAdditionalLightData>();
+            RenderSettings.sun = sun;
+            RenderSettings.skybox = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Sky.mat");
+            var volume = BuildVolume();
+
+            // ---- systems --------------------------------------------------------------------------
+            var systems = new GameObject("Systems");
+            var env = systems.AddComponent<EnvController>();
+            env.sun = sun;
+            var weatherGo = new GameObject("Weather");
+            weatherGo.transform.SetParent(systems.transform);
+            var weather = weatherGo.AddComponent<Weather>();
+            weather.rain = BuildRain(weatherGo.transform);
+            env.weather = weather;
+
+            // ---- player + cameras -----------------------------------------------------------------
+            var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Game/Prefabs/Player.prefab");
+            var player = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab);
+            var ps = WorldLayout.PlayerStart;
+            player.transform.SetPositionAndRotation(new Vector3(ps.x, Height(ps.x, ps.y) + 0.1f, ps.y), Quaternion.Euler(0, WorldLayout.PlayerStartYaw, 0));
+            var cams = BuildCameras(player.transform);
+            player.GetComponent<PlayerController>().vcam = cams.player;
+
+            // ---- creatures ------------------------------------------------------------------------
+            var creatures = new GameObject("Creatures").transform;
+            foreach (var def in CreatureDefs.All)
+            {
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.CreaturePrefabs}/{def.id}.prefab");
+                var c = (GameObject)PrefabUtility.InstantiatePrefab(prefab, creatures);
+                var a = def.anchors[0];
+                c.transform.position = new Vector3(a.x, Height(a.x, a.y), a.y);
+            }
+
+            var flow = systems.AddComponent<GameFlow>();
+            flow.player = player.GetComponent<PlayerController>();
+            flow.environment = env;
+            flow.weather = weather;
+            flow.campfire = campfire;
+            var boot = systems.AddComponent<Bootstrap>();
+            boot.volume = volume;
+            boot.menuCamera = cams.menu;
+            boot.playerCamera = cams.player;
+            boot.menuPivot = cams.menuPivot;
+            systems.AddComponent<GameUI>();
+            systems.AddComponent<ProceduralAudio>();
+
+            // ---- navmesh (vegetation colliders spawned temporarily so trunks are obstacles) --------
+            BakeNavMesh(vegetation);
+
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+            AssetDatabase.SaveAssets();
+            int count = 0; foreach (var b in vegetation.batches) count += b.items.Count;
+            Debug.Log($"[World] built {ScenePath}: vegetation={count} in {(DateTime.Now - t0).TotalSeconds:0}s");
+        }
+
+        // =========================================================================================
+        // Height field
+        // =========================================================================================
+        static float Fbm(float x, float z, int oct = 4)
+        {
+            float a = 0.5f, f = 1, s = 0, n = 0;
+            for (int i = 0; i < oct; i++) { s += a * Mathf.PerlinNoise(x * f + 17.3f * i, z * f + 9.1f * i); n += a; a *= 0.5f; f *= 2.03f; }
+            return s / n;
+        }
+
+        static float SegDist(Vector2 p, Vector2 a, Vector2 b, out float t)
+        {
+            var ab = b - a;
+            t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
+            return Vector2.Distance(p, a + ab * t);
+        }
+
+        static readonly Vector2 RampTop = new Vector2(826, 316);
+        static readonly Vector2 RampBottom = new Vector2(768, 352);
+
+        static float BaseHeight(float x, float z)
+        {
+            float h = 31f + (Fbm(x * 0.005f, z * 0.005f) - 0.5f) * 9f + (Fbm(x * 0.03f, z * 0.03f, 2) - 0.5f) * 1.6f;
+            h += Mathf.SmoothStep(0, 1, Mathf.InverseLerp(650, 950, z)) * 7f * Fbm(x * 0.01f + 5, z * 0.01f);
+            // NW highland (waterfall source)
+            float dh = Vector2.Distance(new Vector2(x, z), new Vector2(165, 955)) / 220f;
+            h += (1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.55f, 1.0f, dh))) * 36f;
+            return h;
+        }
+
+        public static float Height(float x, float z)
+        {
+            var p = new Vector2(x, z);
+            float h = BaseHeight(x, z);
+
+            // stone circle: gentle flat clearing
+            float ds = Vector2.Distance(p, WorldLayout.StoneCircle);
+            h = Mathf.Lerp(BaseHeight(WorldLayout.StoneCircle.x, WorldLayout.StoneCircle.y), h, Mathf.SmoothStep(0, 1, Mathf.InverseLerp(18, 40, ds)));
+
+            // cabin plateau with steep cliffs + a ramp down to the meadow
+            float dc = Vector2.Distance(p, WorldLayout.Cabin);
+            float rock = (Fbm(x * 0.08f, z * 0.08f, 2) - 0.5f) * 6f;
+            float plateau = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(WorldLayout.CabinRadius - 2 + rock, WorldLayout.CabinRadius + 7 + rock, dc));
+            h = Mathf.Lerp(h, WorldLayout.CabinPlateau + (Fbm(x * 0.05f, z * 0.05f, 2) - 0.5f) * 1.2f, plateau);
+            float dr = SegDist(p, RampTop, RampBottom, out float rt);
+            float rampH = Mathf.Lerp(WorldLayout.CabinPlateau, BaseHeight(RampBottom.x, RampBottom.y), Mathf.SmoothStep(0, 1, rt));
+            float rampMask = (1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(4.5f, 10f, dr))) * (rt > 0.001f && rt < 0.999f ? 1 : 0.0f);
+            h = Mathf.Lerp(h, rampH, rampMask);
+
+            // world edge: rising cliffs
+            float e = Mathf.Min(Mathf.Min(x, S - x), Mathf.Min(z, S - z));
+            float edgeT = 1 - Mathf.Clamp01((e - 12f) / 80f);
+            h += edgeT * edgeT * (70f + Fbm(x * 0.02f, z * 0.02f) * 40f);
+
+            // lake basin + islands
+            float L = WorldLayout.LakeDistance(x, z);
+            if (L < 1.4f)
+            {
+                float bed = WorldLayout.LakeLevel - 8f + Fbm(x * 0.02f, z * 0.02f) * 3f;
+                foreach (var isl in WorldLayout.Islands)
+                {
+                    float di = Vector2.Distance(p, new Vector2(isl.x, isl.y)) / isl.z;
+                    bed = Mathf.Max(bed, Mathf.Lerp(WorldLayout.LakeLevel + 3f, bed, Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.4f, 1.1f, di))));
+                }
+                float shoreT = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.85f, 1.25f, L));
+                h = Mathf.Lerp(bed, Mathf.Max(h, WorldLayout.LakeLevel + 1.2f), shoreT);
+            }
+
+            // river channel: bed below the local water level, banks always above it
+            float d = WorldLayout.RiverDistance(x, z, out float wl);
+            float half = WorldLayout.RiverHalfWidth;
+            if (d < half + 16f)
+            {
+                float bankH = Mathf.Max(h, wl + 0.9f + Mathf.Max(d - half, 0) * 0.12f);
+                float bed = wl - 2.2f + Mathf.Clamp01(d / half) * 1.4f;
+                h = Mathf.Lerp(bed, bankH, Mathf.SmoothStep(0, 1, Mathf.InverseLerp(half - 1f, half + 14f, d)));
+            }
+            return h;
+        }
+
+        // =========================================================================================
+        // Terrain
+        // =========================================================================================
+        static Terrain BuildTerrain()
+        {
+            _td = new TerrainData { heightmapResolution = HeightRes };
+            _td.size = new Vector3(S, WorldLayout.HeightScale, S);
+            AssetDatabase.DeleteAsset($"{TerrainDir}/WorldTerrain.asset");
+            AssetDatabase.CreateAsset(_td, $"{TerrainDir}/WorldTerrain.asset");
+            var heights = new float[HeightRes, HeightRes];
+            for (int zi = 0; zi < HeightRes; zi++)
+                for (int xi = 0; xi < HeightRes; xi++)
+                {
+                    float x = xi * S / (HeightRes - 1), z = zi * S / (HeightRes - 1);
+                    heights[zi, xi] = Mathf.Clamp01(Height(x, z) / WorldLayout.HeightScale);
+                }
+            _td.SetHeights(0, 0, heights);
+
+            // layers
+            var layers = new[]
+            {
+                Layer("Grass", new Color(0.5f, 0.64f, 0.3f), new Color(0.38f, 0.53f, 0.24f), 7f, 0),
+                Layer("ForestFloor", new Color(0.33f, 0.52f, 0.24f), new Color(0.27f, 0.42f, 0.2f), 6f, 1),
+                Layer("Dirt", new Color(0.8f, 0.62f, 0.4f), new Color(0.7f, 0.52f, 0.33f), 4f, 2),
+                Layer("Rock", new Color(0.58f, 0.56f, 0.6f), new Color(0.46f, 0.44f, 0.5f), 9f, 3),
+            };
+            _td.terrainLayers = layers;
+            _td.alphamapResolution = SplatRes;
+            var a = new float[SplatRes, SplatRes, 4];
+            for (int zi = 0; zi < SplatRes; zi++)
+                for (int xi = 0; xi < SplatRes; xi++)
+                {
+                    float x = (xi + 0.5f) * S / SplatRes, z = (zi + 0.5f) * S / SplatRes;
+                    float slope = _td.GetSteepness(x / S, z / S);
+                    var region = WorldLayout.RegionAt(x, z);
+                    float forest = region == WorldLayout.Region.DeepForest || region == WorldLayout.Region.AutumnForest ||
+                                   region == WorldLayout.Region.Highland || region == WorldLayout.Region.Edge ? 1 : 0;
+                    float n = Fbm(x * 0.03f, z * 0.03f, 2);
+                    float w0 = 1 - forest, w1 = forest * (0.7f + 0.3f * n), w2 = 0, w3 = 0;
+                    float path = WorldLayout.PathDistance(x, z);
+                    float pathW = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(1.6f + n, 3.4f + n, path));
+                    float river = WorldLayout.RiverDistance(x, z, out _);
+                    float bank = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(WorldLayout.RiverHalfWidth + 0.5f, WorldLayout.RiverHalfWidth + 3f, river));
+                    float lake = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(1.0f, 1.08f, WorldLayout.LakeDistance(x, z)));
+                    float yard = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(6f, 11f, Vector2.Distance(new Vector2(x, z), WorldLayout.Campfire)));
+                    float circle = Mathf.Abs(Vector2.Distance(new Vector2(x, z), WorldLayout.StoneCircle) - 14f) < 2.5f ? 0.7f : 0;
+                    w2 = Mathf.Max(Mathf.Max(pathW, bank * 0.9f), Mathf.Max(lake * 0.9f, Mathf.Max(yard, circle)));
+                    w3 = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(30f, 40f, slope + n * 4f));
+                    float rest = (1 - w3) * (1 - w2);
+                    w0 *= rest; w1 *= rest; w2 *= (1 - w3);
+                    float sum = w0 + w1 + w2 + w3 + 1e-5f;
+                    a[zi, xi, 0] = w0 / sum; a[zi, xi, 1] = w1 / sum; a[zi, xi, 2] = w2 / sum; a[zi, xi, 3] = w3 / sum;
+                }
+            _td.SetAlphamaps(0, 0, a);
+            EditorUtility.SetDirty(_td);
+            AssetDatabase.SaveAssets();
+
+            var go = Terrain.CreateTerrainGameObject(_td);
+            go.name = "Terrain";
+            var t = go.GetComponent<Terrain>();
+            var mat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Terrain.mat");
+            if (!mat) { mat = new Material(Shader.Find("WildPartner/ToonTerrain")); AssetDatabase.CreateAsset(mat, $"{AssetSetup.MatDir}/M_Terrain.mat"); }
+            t.materialTemplate = mat;
+            t.drawTreesAndFoliage = false;
+            t.heightmapPixelError = 4;
+            t.basemapDistance = 2000;
+            t.drawInstanced = false;
+            t.shadowCastingMode = ShadowCastingMode.On;
+            GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.NavigationStatic | StaticEditorFlags.BatchingStatic);
+            return t;
+        }
+
+        static TerrainLayer Layer(string name, Color a, Color b, float tile, int seed)
+        {
+            string texPath = $"{TerrainDir}/T_{name}.png";
+            var rnd = new Random(seed + 100);
+            int N = 256;
+            var tex = new Texture2D(N, N, TextureFormat.RGB24, true);
+            for (int y = 0; y < N; y++)
+                for (int x = 0; x < N; x++)
+                {
+                    // tileable noise: sample on a torus
+                    float u = x / (float)N * Mathf.PI * 2, v = y / (float)N * Mathf.PI * 2;
+                    float n = Mathf.PerlinNoise(Mathf.Cos(u) * 2 + 10 + seed, Mathf.Sin(u) * 2 + Mathf.Cos(v) * 2) * 0.6f +
+                              Mathf.PerlinNoise(Mathf.Cos(u) * 6 + seed, Mathf.Sin(v) * 6 + Mathf.Sin(u) * 3) * 0.4f;
+                    var c = Color.Lerp(b, a, Mathf.SmoothStep(0.3f, 0.7f, n));
+                    if (name == "Grass" && rnd.NextDouble() < 0.02) c *= 1.12f;
+                    if (name == "Dirt" && rnd.NextDouble() < 0.015) c = Color.Lerp(c, new Color(0.9f, 0.85f, 0.75f), 0.5f);
+                    if (name == "Rock") c *= 0.9f + 0.2f * Mathf.Repeat(y / 23f + n * 0.5f, 1f);
+                    tex.SetPixel(x, y, c);
+                }
+            tex.Apply();
+            File.WriteAllBytes(texPath, tex.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(texPath);
+            var layer = new TerrainLayer
+            {
+                diffuseTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(texPath),
+                tileSize = new Vector2(tile, tile),
+            };
+            AssetDatabase.CreateAsset(layer, $"{TerrainDir}/L_{name}.terrainlayer");
+            return layer;
+        }
+
+        static float TerrainH(float x, float z) => _td.GetInterpolatedHeight(x / S, z / S);
+
+        // =========================================================================================
+        // Water
+        // =========================================================================================
+        static void BuildWater()
+        {
+            var root = new GameObject("Water").transform;
+            var lakeMat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Water_Lake.mat");
+            var riverMat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Water_River.mat");
+            var fallMat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Waterfall.mat");
+
+            // lake: one plane at lake level (terrain hides it everywhere outside the basin)
+            var c = WorldLayout.LakeCentre;
+            MeshObject("Lake", root, Grid(new Vector3(c.x, WorldLayout.LakeLevel + 0.15f, c.y), WorldLayout.LakeRadii.x * 1.45f, WorldLayout.LakeRadii.y * 1.6f, 24), lakeMat);
+            MeshObject("Pond", root, Grid(new Vector3(WorldLayout.Pond.x, 25.35f, WorldLayout.Pond.y), WorldLayout.PondRadius + 4, WorldLayout.PondRadius + 4, 8), lakeMat);
+
+            Ribbon(root, WorldLayout.RiverIn, riverMat, fallMat, "RiverIn");
+            Ribbon(root, WorldLayout.RiverOut, riverMat, fallMat, "RiverOut");
+        }
+
+        static Mesh Grid(Vector3 centre, float rx, float rz, int n)
+        {
+            var m = new Mesh { name = "WaterGrid" };
+            var v = new List<Vector3>(); var uv = new List<Vector2>(); var t = new List<int>();
+            for (int j = 0; j <= n; j++)
+                for (int i = 0; i <= n; i++)
+                {
+                    float x = (i / (float)n * 2 - 1) * rx, z = (j / (float)n * 2 - 1) * rz;
+                    v.Add(new Vector3(x, 0, z)); uv.Add(new Vector2(x * 0.05f, z * 0.05f));
+                }
+            for (int j = 0; j < n; j++)
+                for (int i = 0; i < n; i++)
+                {
+                    int a = j * (n + 1) + i, b = a + 1, cc = a + n + 1, d = cc + 1;
+                    t.AddRange(new[] { a, cc, b, b, cc, d });
+                }
+            m.SetVertices(v); m.SetUVs(0, uv); m.SetTriangles(t, 0); m.RecalculateNormals(); m.RecalculateBounds();
+            m.bounds = new Bounds(m.bounds.center, m.bounds.size + Vector3.up);
+            var go = new GameObject("tmp"); go.transform.position = centre;
+            UnityEngine.Object.DestroyImmediate(go);
+            // bake the centre into the vertices so the GameObject can sit at the origin
+            for (int i = 0; i < v.Count; i++) v[i] += centre;
+            m.SetVertices(v); m.RecalculateBounds();
+            return m;
+        }
+
+        static void Ribbon(Transform root, Vector3[] pts, Material river, Material fall, string name)
+        {
+            // resample the polyline every ~2 m (Catmull-Rom in xz, linear water level)
+            var samples = new List<Vector3>();
+            for (int i = 0; i < pts.Length - 1; i++)
+            {
+                Vector3 p0 = pts[Mathf.Max(i - 1, 0)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Mathf.Min(i + 2, pts.Length - 1)];
+                float len = Vector2.Distance(new Vector2(p1.x, p1.y), new Vector2(p2.x, p2.y));
+                int steps = Mathf.Max(2, Mathf.CeilToInt(len / 2f));
+                for (int s = 0; s < steps; s++)
+                {
+                    float t = s / (float)steps;
+                    var xz = CatmullRom(new Vector2(p0.x, p0.y), new Vector2(p1.x, p1.y), new Vector2(p2.x, p2.y), new Vector2(p3.x, p3.y), t);
+                    // waterfalls: keep level flat, then drop over the last 25% of the segment
+                    float drop = p1.z - p2.z;
+                    float lt = drop > 3f ? Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.55f, 0.95f, t)) : t;
+                    samples.Add(new Vector3(xz.x, Mathf.Lerp(p1.z, p2.z, lt), xz.y));
+                }
+            }
+            var last = pts[pts.Length - 1];
+            samples.Add(new Vector3(last.x, last.z, last.y));
+
+            // split into calm and falling pieces
+            var calm = new List<int>(); var falls = new List<int>();
+            var verts = new List<Vector3>(); var uvs = new List<Vector2>();
+            float dist = 0; float w = WorldLayout.RiverHalfWidth + 6f;
+            for (int i = 0; i < samples.Count; i++)
+            {
+                Vector3 a = samples[Mathf.Max(i - 1, 0)], b = samples[Mathf.Min(i + 1, samples.Count - 1)];
+                var dir = new Vector2(b.x - a.x, b.z - a.z).normalized;
+                var side = new Vector3(-dir.y, 0, dir.x) * w;
+                var p = samples[i] + Vector3.up * 0.18f;
+                if (i > 0) dist += Vector3.Distance(samples[i], samples[i - 1]);
+                verts.Add(p - side); verts.Add(p + side);
+                uvs.Add(new Vector2(0, dist / 8f)); uvs.Add(new Vector2(1, dist / 8f));
+                if (i > 0)
+                {
+                    int i0 = (i - 1) * 2;
+                    bool steep = Mathf.Abs(samples[i].y - samples[i - 1].y) > 0.6f;
+                    var list = steep ? falls : calm;
+                    list.AddRange(new[] { i0, i0 + 2, i0 + 1, i0 + 1, i0 + 2, i0 + 3 });
+                    if (steep && (i + 1 >= samples.Count || Mathf.Abs(samples[i + 1].y - samples[i].y) <= 0.6f))
+                        Mist(root, samples[i]);
+                }
+            }
+            var m = new Mesh { name = name, indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            m.SetVertices(verts); m.SetUVs(0, uvs);
+            m.subMeshCount = 2;
+            m.SetTriangles(calm, 0); m.SetTriangles(falls, 1);
+            m.RecalculateNormals(); m.RecalculateBounds();
+            var go = MeshObject(name, root, m, river);
+            go.GetComponent<MeshRenderer>().sharedMaterials = new[] { river, fall };
+        }
+
+        static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
+        {
+            float t2 = t * t, t3 = t2 * t;
+            return 0.5f * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+        }
+
+        static GameObject MeshObject(string name, Transform parent, Mesh mesh, Material mat)
+        {
+            string path = $"{TerrainDir}/{name}.asset";
+            AssetDatabase.CreateAsset(mesh, path);
+            var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
+            go.transform.SetParent(parent, false);
+            go.GetComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.GetComponent<MeshRenderer>();
+            r.sharedMaterial = mat;
+            r.shadowCastingMode = ShadowCastingMode.Off;
+            r.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
+            return go;
+        }
+
+        static void Mist(Transform root, Vector3 at)
+        {
+            var go = new GameObject("WaterfallMist", typeof(ParticleSystem));
+            go.transform.SetParent(root, false);
+            go.transform.position = at + Vector3.up * 0.5f;
+            var ps = go.GetComponent<ParticleSystem>();
+            var main = ps.main;
+            main.startLifetime = 2.5f; main.startSpeed = 1.2f; main.startSize = new ParticleSystem.MinMaxCurve(1.5f, 3.5f);
+            main.startColor = new Color(1, 1, 1, 0.35f); main.maxParticles = 120; main.simulationSpace = ParticleSystemSimulationSpace.World;
+            var em = ps.emission; em.rateOverTime = 25;
+            var sh = ps.shape; sh.shapeType = ParticleSystemShapeType.Sphere; sh.radius = 3f;
+            var col = ps.colorOverLifetime; col.enabled = true;
+            var g = new Gradient();
+            g.SetKeys(new[] { new GradientColorKey(Color.white, 0), new GradientColorKey(Color.white, 1) },
+                      new[] { new GradientAlphaKey(0, 0), new GradientAlphaKey(0.5f, 0.3f), new GradientAlphaKey(0, 1) });
+            col.color = g;
+            go.GetComponent<ParticleSystemRenderer>().sharedMaterial = ParticleMat("M_Mist", new Color(1, 1, 1, 0.5f), true);
+        }
+
+        static Material ParticleMat(string name, Color c, bool soft)
+        {
+            string path = $"{AssetSetup.MatDir}/{name}.mat";
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m) return m;
+            m = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
+            m.SetFloat("_Surface", 1); m.SetFloat("_Blend", 0);
+            m.SetOverrideTag("RenderType", "Transparent");
+            m.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha); m.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha); m.SetInt("_ZWrite", 0);
+            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.renderQueue = (int)RenderQueue.Transparent;
+            m.SetColor("_BaseColor", c);
+            m.SetTexture("_BaseMap", SoftDot());
+            AssetDatabase.CreateAsset(m, path);
+            return m;
+        }
+
+        static Texture2D SoftDot()
+        {
+            string path = $"{TerrainDir}/T_SoftDot.png";
+            if (!File.Exists(path))
+            {
+                var t = new Texture2D(64, 64, TextureFormat.RGBA32, false);
+                for (int y = 0; y < 64; y++) for (int x = 0; x < 64; x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x, y), new Vector2(31.5f, 31.5f)) / 32f;
+                    t.SetPixel(x, y, new Color(1, 1, 1, Mathf.Clamp01(1 - d) * Mathf.Clamp01(1 - d)));
+                }
+                t.Apply();
+                File.WriteAllBytes(path, t.EncodeToPNG());
+                AssetDatabase.ImportAsset(path);
+            }
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
+
+        // =========================================================================================
+        // Landmarks
+        // =========================================================================================
+        static GameObject Place(string prefab, Transform parent, Vector2 xz, float yaw, float scale, float yOffset = 0)
+        {
+            var p = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.EnvPrefabs}/{prefab}.prefab");
+            if (!p) { Debug.LogWarning($"[World] missing prefab {prefab}"); return null; }
+            var go = (GameObject)PrefabUtility.InstantiatePrefab(p, parent);
+            go.transform.SetPositionAndRotation(new Vector3(xz.x, TerrainH(xz.x, xz.y) + yOffset, xz.y), Quaternion.Euler(0, yaw, 0));
+            go.transform.localScale = Vector3.one * scale;
+            GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.NavigationStatic);
+            return go;
+        }
+
+        /// <summary>Yaw that points a model's local -Z (its front, see AssetSetup) along dir.</summary>
+        static float FaceYaw(Vector2 dir) => Mathf.Atan2(-dir.x, -dir.y) * Mathf.Rad2Deg;
+
+        static Transform BuildCabin(Transform parent)
+        {
+            var root = new GameObject("CliffCabin").transform;
+            root.SetParent(parent, false);
+            var c = WorldLayout.Cabin;
+            Vector2 toRamp = (RampTop - c).normalized;
+            float yaw = FaceYaw(toRamp);
+            var cabin = Place("Cabin", root, c + new Vector2(8, 6), yaw, 1f, -0.2f);
+            // Tripo door + windows on the front (-Z) wall
+            var rot = Quaternion.Euler(0, yaw, 0);
+            Vector3 basePos = cabin.transform.position;
+            AttachProp("WoodDoor", root, basePos + rot * new Vector3(0, 0.5f, -2.98f), yaw + 180, 1.05f);
+            AttachProp("WoodWindow", root, basePos + rot * new Vector3(-2.2f, 1.6f, -2.98f), yaw + 180, 0.9f);
+            AttachProp("WoodWindow", root, basePos + rot * new Vector3(2.2f, 1.6f, -2.98f), yaw + 180, 0.9f);
+            AttachProp("WallLamp", root, basePos + rot * new Vector3(1.0f, 2.2f, -3.1f), yaw + 180, 0.8f);
+
+            var fire = Place("Campfire", root, WorldLayout.Campfire, 0, 1.2f);
+            for (int i = 0; i < 3; i++)
+            {
+                float a = i / 3f * Mathf.PI * 2 + 0.4f;
+                var p = WorldLayout.Campfire + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 3.4f;
+                Place("LogBench", root, p, -a * Mathf.Rad2Deg + 90, 1f);
+            }
+            var fireLight = new GameObject("FireLight", typeof(Light));
+            fireLight.transform.SetParent(fire.transform, false);
+            fireLight.transform.localPosition = new Vector3(0, 1.2f, 0);
+            var fl = fireLight.GetComponent<Light>();
+            fl.type = LightType.Point; fl.range = 14; fl.intensity = 4f; fl.color = new Color(1f, 0.6f, 0.3f); fl.shadows = LightShadows.None;
+            var nl = fireLight.AddComponent<NightLight>(); nl.alwaysOn = true; nl.flicker = true;
+            Flames(fire.transform);
+
+            Place("FlagPole", root, c + new Vector2(-14, 16), yaw, 1f);
+            Place("LampPost", root, RampTop + new Vector2(2, -5), yaw + 90, 1f);
+            Place("LampPost", root, RampTop + new Vector2(-3, 5), yaw - 90, 1f);
+            Place("Crate", root, c + new Vector2(14, -6), 20, 1f);
+            Place("Crate", root, c + new Vector2(15, -4.5f), 70, 0.8f);
+
+            // fence ring along the plateau edge, leaving a gap at the ramp
+            float rampAng = Mathf.Atan2(toRamp.y, toRamp.x);
+            float R = WorldLayout.CabinRadius - 4f;
+            int n = Mathf.RoundToInt(2 * Mathf.PI * R / 3f);
+            for (int i = 0; i < n; i++)
+            {
+                float a = i / (float)n * Mathf.PI * 2;
+                if (Mathf.Abs(Mathf.DeltaAngle(a * Mathf.Rad2Deg, rampAng * Mathf.Rad2Deg)) < 12f) continue;
+                var p = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * R;
+                var tangent = new Vector2(-Mathf.Sin(a), Mathf.Cos(a));
+                Place("Fence", root, p, Mathf.Atan2(-tangent.y, tangent.x) * Mathf.Rad2Deg, 1f, -0.1f);
+            }
+            // cliff rocks dressing the plateau sides
+            for (int i = 0; i < 26; i++)
+            {
+                float a = i / 26f * Mathf.PI * 2;
+                if (Mathf.Abs(Mathf.DeltaAngle(a * Mathf.Rad2Deg, rampAng * Mathf.Rad2Deg)) < 18f) continue;
+                var p = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (WorldLayout.CabinRadius + 6f);
+                Place(i % 2 == 0 ? "Cliff_A" : "Cliff_B", root, p, _rng.Next(360), 0.4f + (float)_rng.NextDouble() * 0.2f, -9f);
+            }
+            return fire.transform;
+        }
+
+        static void AttachProp(string prefab, Transform parent, Vector3 pos, float yaw, float scale)
+        {
+            var p = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.EnvPrefabs}/{prefab}.prefab");
+            if (!p) return;
+            var go = (GameObject)PrefabUtility.InstantiatePrefab(p, parent);
+            go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0, yaw, 0));
+            go.transform.localScale = Vector3.one * scale;
+        }
+
+        static void Flames(Transform fire)
+        {
+            var go = new GameObject("Flames", typeof(ParticleSystem));
+            go.transform.SetParent(fire, false);
+            go.transform.localPosition = new Vector3(0, 0.2f, 0);
+            go.transform.localRotation = Quaternion.Euler(-90, 0, 0);
+            var ps = go.GetComponent<ParticleSystem>();
+            var main = ps.main;
+            main.startLifetime = 0.8f; main.startSpeed = 1.6f; main.startSize = new ParticleSystem.MinMaxCurve(0.35f, 0.7f);
+            main.startColor = new Color(1f, 0.6f, 0.2f, 0.9f); main.maxParticles = 80;
+            var em = ps.emission; em.rateOverTime = 40;
+            var sh = ps.shape; sh.shapeType = ParticleSystemShapeType.Cone; sh.angle = 12; sh.radius = 0.3f;
+            var sz = ps.sizeOverLifetime; sz.enabled = true; sz.size = new ParticleSystem.MinMaxCurve(1, AnimationCurve.Linear(0, 1, 1, 0));
+            var col = ps.colorOverLifetime; col.enabled = true;
+            var g = new Gradient();
+            g.SetKeys(new[] { new GradientColorKey(new Color(1, 0.85f, 0.4f), 0), new GradientColorKey(new Color(1, 0.3f, 0.1f), 1) },
+                      new[] { new GradientAlphaKey(1, 0), new GradientAlphaKey(0, 1) });
+            col.color = g;
+            var mat = ParticleMat("M_Flame", Color.white, false);
+            go.GetComponent<ParticleSystemRenderer>().sharedMaterial = mat;
+        }
+
+        static void BuildStoneCircle(Transform parent)
+        {
+            var root = new GameObject("StoneCircle").transform;
+            root.SetParent(parent, false);
+            var c = WorldLayout.StoneCircle;
+            for (int i = 0; i < 10; i++)
+            {
+                float a = i / 10f * Mathf.PI * 2;
+                var p = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 14f;
+                Place(i % 3 == 0 ? "StandingStone_B" : "StandingStone_A", root, p, FaceYaw(c - p), 1f + (float)_rng.NextDouble() * 0.3f, -0.3f);
+            }
+            Place("Altar", root, c, 15, 1.2f, -0.2f);
+        }
+
+        static void BuildBridge(Transform parent)
+        {
+            var b = WorldLayout.Bridge;
+            var a0 = WorldLayout.RiverOut[0]; var a1 = WorldLayout.RiverOut[1];
+            var flow = new Vector2(a1.x - a0.x, a1.y - a0.y).normalized;
+            var across = new Vector2(-flow.y, flow.x);
+            float yaw = Mathf.Atan2(-across.y, across.x) * Mathf.Rad2Deg;
+            WorldLayout.RiverDistance(b.x, b.y, out float wl);
+            var p = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.EnvPrefabs}/Bridge.prefab");
+            var go = (GameObject)PrefabUtility.InstantiatePrefab(p, parent);
+            go.transform.SetPositionAndRotation(new Vector3(b.x, wl + 0.9f, b.y), Quaternion.Euler(0, yaw, 0));
+            go.transform.localScale = new Vector3(1.6f, 1, 1.1f);
+            GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.NavigationStatic);
+        }
+
+        static void BuildBackground(Transform parent)
+        {
+            var root = new GameObject("Background").transform;
+            root.SetParent(parent, false);
+            var mp = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.EnvPrefabs}/SnowMountains.prefab");
+            foreach (var (pos, yaw, s) in new[] { (new Vector3(420, 0, 1330), 0f, 1.4f), (new Vector3(1340, 0, 720), 90f, 1.3f), (new Vector3(1300, 0, 1300), 45f, 1.6f) })
+            {
+                var go = (GameObject)PrefabUtility.InstantiatePrefab(mp, root);
+                go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0, yaw, 0));
+                go.transform.localScale = Vector3.one * s;
+            }
+            // low clouds hugging the edge cliffs
+            var cp = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.EnvPrefabs}/Cloud_A.prefab");
+            for (int i = 0; i < 48; i++)
+            {
+                float a = i / 48f * Mathf.PI * 2;
+                var p = new Vector2(S / 2, S / 2) + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (S * 0.5f + 90 + (float)_rng.NextDouble() * 120);
+                var go = (GameObject)PrefabUtility.InstantiatePrefab(cp, root);
+                float y = 175 + (float)_rng.NextDouble() * 60;
+                go.transform.SetPositionAndRotation(new Vector3(p.x, y, p.y), Quaternion.Euler(0, a * Mathf.Rad2Deg + 90, 0));
+                go.transform.localScale = Vector3.one * (2.5f + (float)_rng.NextDouble() * 2f);
+            }
+        }
+
+        // =========================================================================================
+        // Vegetation
+        // =========================================================================================
+        static readonly Dictionary<WorldLayout.Region, (string, float)[]> TreeMix = new Dictionary<WorldLayout.Region, (string, float)[]>
+        {
+            { WorldLayout.Region.DeepForest, new[] { ("Tree_Pine_A", .35f), ("Tree_Pine_B", .25f), ("Tree_Broadleaf_B", .3f), ("Tree_Birch_A", .1f) } },
+            { WorldLayout.Region.AutumnForest, new[] { ("Tree_Autumn_A", .45f), ("Tree_Autumn_B", .25f), ("Tree_Pine_A", .15f), ("Tree_Birch_A", .15f) } },
+            { WorldLayout.Region.Highland, new[] { ("Tree_Pine_A", .3f), ("Tree_Pine_B", .2f), ("Tree_Autumn_B", .3f), ("Tree_Broadleaf_A", .2f) } },
+            { WorldLayout.Region.Edge, new[] { ("Tree_Pine_A", .5f), ("Tree_Pine_B", .5f) } },
+            { WorldLayout.Region.Lakeshore, new[] { ("Tree_Autumn_A", .5f), ("Tree_Autumn_B", .3f), ("Tree_Pine_A", .2f) } },
+            { WorldLayout.Region.Meadow, new[] { ("Tree_Broadleaf_A", .45f), ("Tree_Birch_A", .35f), ("Tree_Broadleaf_B", .2f) } },
+            { WorldLayout.Region.Riverbank, new[] { ("Tree_Broadleaf_A", .5f), ("Tree_Birch_A", .5f) } },
+            { WorldLayout.Region.Cabin, new[] { ("Tree_Pine_A", .6f), ("Tree_Birch_A", .4f) } },
+        };
+
+        static readonly Dictionary<WorldLayout.Region, float> TreeDensity = new Dictionary<WorldLayout.Region, float>
+        {
+            { WorldLayout.Region.DeepForest, .55f }, { WorldLayout.Region.AutumnForest, .5f }, { WorldLayout.Region.Highland, .4f },
+            { WorldLayout.Region.Edge, .7f }, { WorldLayout.Region.Lakeshore, .18f }, { WorldLayout.Region.Meadow, .025f },
+            { WorldLayout.Region.Riverbank, .05f }, { WorldLayout.Region.Cabin, .03f },
+        };
+
+        static readonly Dictionary<WorldLayout.Region, float> GrassDensity = new Dictionary<WorldLayout.Region, float>
+        {
+            { WorldLayout.Region.Meadow, .8f }, { WorldLayout.Region.Riverbank, .55f }, { WorldLayout.Region.Cabin, .6f },
+            { WorldLayout.Region.Lakeshore, .4f }, { WorldLayout.Region.Highland, .3f }, { WorldLayout.Region.AutumnForest, .15f },
+            { WorldLayout.Region.DeepForest, .12f }, { WorldLayout.Region.Edge, .05f },
+        };
+
+        static bool Blocked(float x, float z, float pathClear, float waterClear)
+        {
+            if (x < 15 || z < 15 || x > S - 15 || z > S - 15) return true;
+            if (UnderWater(x, z, 0.35f + waterClear * 0.3f)) return true;
+            if (WorldLayout.RiverDistance(x, z, out _) < WorldLayout.RiverHalfWidth + waterClear) return true;
+            if (WorldLayout.LakeDistance(x, z) < 1.0f + waterClear * 0.01f) return true;
+            if (WorldLayout.PathDistance(x, z) < pathClear) return true;
+            var p = new Vector2(x, z);
+            if (Vector2.Distance(p, WorldLayout.StoneCircle) < 19) return true;
+            if (Vector2.Distance(p, WorldLayout.Watchtower) < 7) return true;
+            if (Vector2.Distance(p, WorldLayout.Bridge) < 12) return true;
+            if (Vector2.Distance(p, WorldLayout.Campfire) < 9) return true;
+            if (Vector2.Distance(p, WorldLayout.Cabin + new Vector2(8, 6)) < 9) return true;
+            if (SegDist(p, RampTop, RampBottom, out _) < 6) return true;
+            return false;
+        }
+
+        static bool UnderWater(float x, float z, float margin)
+        {
+            float h = TerrainH(x, z);
+            if (WorldLayout.RiverDistance(x, z, out float wl) < WorldLayout.RiverHalfWidth + 18f && h < wl + 0.18f + margin) return true;
+            if (WorldLayout.LakeDistance(x, z) < 1.5f && h < WorldLayout.LakeLevel + 0.15f + margin) return true;
+            if (Vector2.Distance(new Vector2(x, z), WorldLayout.Pond) < WorldLayout.PondRadius + 12 && h < 25.35f + margin) return true;
+            return false;
+        }
+
+        static string Pick((string, float)[] mix)
+        {
+            double r = _rng.NextDouble(), acc = 0;
+            foreach (var (n, w) in mix) { acc += w; if (r <= acc) return n; }
+            return mix[mix.Length - 1].Item1;
+        }
+
+        static VegetationSpawner BuildVegetation()
+        {
+            var go = new GameObject("Vegetation");
+            var sp = go.AddComponent<VegetationSpawner>();
+            var batches = new Dictionary<string, VegetationSpawner.Batch>();
+            void Add(string prefab, float x, float z, float yaw, float scale, float sink = 0.15f)
+            {
+                if (!batches.TryGetValue(prefab, out var b))
+                {
+                    b = new VegetationSpawner.Batch { prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.EnvPrefabs}/{prefab}.prefab") };
+                    batches[prefab] = b;
+                }
+                b.items.Add(new Vector4(x, TerrainH(x, z) - sink, z, VegetationSpawner.Pack(yaw, scale)));
+            }
+            float J(float cell) => ((float)_rng.NextDouble() - 0.5f) * cell * 0.9f;
+
+            // trees
+            const float tc = 7f;
+            for (float z = tc / 2; z < S; z += tc)
+                for (float x = tc / 2; x < S; x += tc)
+                {
+                    float px = x + J(tc), pz = z + J(tc);
+                    var region = WorldLayout.RegionAt(px, pz);
+                    if (_rng.NextDouble() > TreeDensity[region]) continue;
+                    if (Blocked(px, pz, 4.5f, 3f)) continue;
+                    if (_td.GetSteepness(px / S, pz / S) > 38f) continue;
+                    if (region == WorldLayout.Region.Cabin && Vector2.Distance(new Vector2(px, pz), WorldLayout.Cabin) < WorldLayout.CabinRadius - 8) continue;
+                    Add(Pick(TreeMix[region]), px, pz, (float)_rng.NextDouble() * 360f, 0.8f + (float)_rng.NextDouble() * 0.45f, 0.3f);
+                }
+            // bushes
+            const float bc = 9f;
+            for (float z = bc / 2; z < S; z += bc)
+                for (float x = bc / 2; x < S; x += bc)
+                {
+                    float px = x + J(bc), pz = z + J(bc);
+                    var region = WorldLayout.RegionAt(px, pz);
+                    float d = region == WorldLayout.Region.Meadow ? .07f : region == WorldLayout.Region.Riverbank ? .25f : region == WorldLayout.Region.Cabin ? .1f : .22f;
+                    if (_rng.NextDouble() > d || Blocked(px, pz, 2.5f, 1.5f) || _td.GetSteepness(px / S, pz / S) > 35f) continue;
+                    Add(_rng.NextDouble() < 0.6 ? "Bush_A" : "Bush_B", px, pz, (float)_rng.NextDouble() * 360f, 0.7f + (float)_rng.NextDouble() * 0.6f);
+                }
+            // rocks
+            const float rc = 20f;
+            for (float z = rc / 2; z < S; z += rc)
+                for (float x = rc / 2; x < S; x += rc)
+                {
+                    float px = x + J(rc), pz = z + J(rc);
+                    var region = WorldLayout.RegionAt(px, pz);
+                    float d = region == WorldLayout.Region.Riverbank || region == WorldLayout.Region.Highland ? .55f : .18f;
+                    if (_rng.NextDouble() > d || Blocked(px, pz, 2.5f, 0.5f)) continue;
+                    Add(_rng.NextDouble() < 0.55 ? "Rock_A" : "Rock_B", px, pz, (float)_rng.NextDouble() * 360f, 0.5f + (float)_rng.NextDouble() * 1.0f, 0.4f);
+                }
+            // edge cliffs
+            for (float t = 0; t < S * 4; t += 26f)
+            {
+                float side = Mathf.Floor(t / S), u = t % S;
+                float inset = 38f + (float)_rng.NextDouble() * 20f;
+                Vector2 p = side == 0 ? new Vector2(u, inset) : side == 1 ? new Vector2(S - inset, u) : side == 2 ? new Vector2(S - u, S - inset) : new Vector2(inset, S - u);
+                Add(_rng.NextDouble() < 0.5 ? "Cliff_A" : "Cliff_B", p.x, p.y, (float)_rng.NextDouble() * 360f, 0.6f + (float)_rng.NextDouble() * 0.4f, 5f);
+            }
+            // grass
+            const float gc = 3.5f;
+            for (float z = gc / 2; z < S; z += gc)
+                for (float x = gc / 2; x < S; x += gc)
+                {
+                    float px = x + J(gc), pz = z + J(gc);
+                    var region = WorldLayout.RegionAt(px, pz);
+                    if (_rng.NextDouble() > GrassDensity[region]) continue;
+                    if (Blocked(px, pz, 1.8f, 0.3f) || _td.GetSteepness(px / S, pz / S) > 30f) continue;
+                    Add(_rng.NextDouble() < 0.72 ? "Grass_A" : "Grass_B", px, pz, (float)_rng.NextDouble() * 360f, 2.0f + (float)_rng.NextDouble() * 1.2f, 0.05f);
+                }
+            // flowers in patches
+            const float fc = 6f;
+            for (float z = fc / 2; z < S; z += fc)
+                for (float x = fc / 2; x < S; x += fc)
+                {
+                    float px = x + J(fc), pz = z + J(fc);
+                    var region = WorldLayout.RegionAt(px, pz);
+                    if (region != WorldLayout.Region.Meadow && region != WorldLayout.Region.Cabin && region != WorldLayout.Region.Riverbank) continue;
+                    float patch = Mathf.PerlinNoise(px * 0.02f + 40, pz * 0.02f + 40);
+                    if (patch < 0.55f || _rng.NextDouble() > 0.7f || Blocked(px, pz, 1.6f, 0.5f)) continue;
+                    double r = _rng.NextDouble();
+                    Add(r < 0.5 ? "Flowers_White" : r < 0.8 ? "Flowers_Orange" : "Flowers_Purple", px, pz, (float)_rng.NextDouble() * 360f, 1.6f + (float)_rng.NextDouble() * 0.8f, 0.05f);
+                }
+            // mushrooms in the forests
+            const float mc = 14f;
+            for (float z = mc / 2; z < S; z += mc)
+                for (float x = mc / 2; x < S; x += mc)
+                {
+                    float px = x + J(mc), pz = z + J(mc);
+                    var region = WorldLayout.RegionAt(px, pz);
+                    if (region != WorldLayout.Region.DeepForest && region != WorldLayout.Region.AutumnForest) continue;
+                    if (_rng.NextDouble() > 0.2f || Blocked(px, pz, 1.5f, 0.5f)) continue;
+                    Add("Mushrooms", px, pz, (float)_rng.NextDouble() * 360f, 1.5f + (float)_rng.NextDouble() * 1.5f, 0.02f);
+                }
+
+            sp.batches = new List<VegetationSpawner.Batch>(batches.Values);
+            sp.batches.Sort((a, b) => string.CompareOrdinal(a.prefab.name, b.prefab.name));
+            return sp;
+        }
+
+        // =========================================================================================
+        // Post, rain, cameras, navmesh
+        // =========================================================================================
+        static Volume BuildVolume()
+        {
+            string path = "Assets/_Game/Settings/WorldVolume.asset";
+            var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(path);
+            if (profile) AssetDatabase.DeleteAsset(path);
+            profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            AssetDatabase.CreateAsset(profile, path);
+            var tm = profile.Add<Tonemapping>(true); tm.mode.Override(TonemappingMode.Neutral);
+            var bloom = profile.Add<Bloom>(true); bloom.threshold.Override(1.0f); bloom.intensity.Override(0.55f); bloom.scatter.Override(0.65f); bloom.tint.Override(new Color(1f, 0.92f, 0.82f));
+            var ca = profile.Add<ColorAdjustments>(true); ca.postExposure.Override(0.15f); ca.contrast.Override(8f); ca.saturation.Override(-4f);
+            var smh = profile.Add<ShadowsMidtonesHighlights>(true);
+            smh.shadows.Override(new Vector4(0.92f, 0.95f, 1.12f, 0f)); smh.highlights.Override(new Vector4(1.05f, 1.0f, 0.92f, 0f));
+            var vig = profile.Add<Vignette>(true); vig.intensity.Override(0.18f); vig.smoothness.Override(0.5f);
+            foreach (var c in profile.components) AssetDatabase.AddObjectToAsset(c, profile);
+            AssetDatabase.SaveAssets();
+
+            var go = new GameObject("PostProcess", typeof(Volume));
+            var v = go.GetComponent<Volume>();
+            v.isGlobal = true; v.sharedProfile = profile; v.priority = 1;
+            return v;
+        }
+
+        static ParticleSystem BuildRain(Transform parent)
+        {
+            var go = new GameObject("Rain", typeof(ParticleSystem));
+            go.transform.SetParent(parent, false);
+            var ps = go.GetComponent<ParticleSystem>();
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            var main = ps.main;
+            main.playOnAwake = false;
+            main.loop = true;
+            main.startLifetime = 1.1f;
+            main.startSpeed = 0;
+            main.startSize3D = true;
+            main.startSizeX = 0.025f; main.startSizeY = 0.7f; main.startSizeZ = 1;
+            main.startColor = new Color(0.78f, 0.85f, 1f, 0.55f);
+            main.maxParticles = 9000;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            var vel = ps.velocityOverLifetime; vel.enabled = true; vel.space = ParticleSystemSimulationSpace.World;
+            vel.x = new ParticleSystem.MinMaxCurve(1.5f); vel.y = new ParticleSystem.MinMaxCurve(-22f); vel.z = new ParticleSystem.MinMaxCurve(0.8f);
+            var em = ps.emission; em.rateOverTime = 0;
+            var sh = ps.shape; sh.shapeType = ParticleSystemShapeType.Box; sh.scale = new Vector3(60, 1, 60);
+            var r = go.GetComponent<ParticleSystemRenderer>();
+            r.renderMode = ParticleSystemRenderMode.Stretch;
+            r.velocityScale = 0.03f; r.lengthScale = 1f;
+            r.sharedMaterial = ParticleMat("M_Rain", new Color(0.8f, 0.88f, 1f, 0.6f), false);
+            r.shadowCastingMode = ShadowCastingMode.Off;
+            return ps;
+        }
+
+        struct Cams { public CinemachineCamera player, menu; public Transform menuPivot; }
+
+        static Cams BuildCameras(Transform player)
+        {
+            var camGo = new GameObject("Main Camera", typeof(Camera), typeof(AudioListener));
+            camGo.tag = "MainCamera";
+            var cam = camGo.GetComponent<Camera>();
+            cam.nearClipPlane = 0.2f; cam.farClipPlane = 2500f; cam.fieldOfView = 55;
+            var data = camGo.AddComponent<UniversalAdditionalCameraData>();
+            data.renderPostProcessing = true;
+            data.antialiasing = AntialiasingMode.None;
+            camGo.AddComponent<CinemachineBrain>();
+
+            var target = player.Find("CameraTarget");
+            var vGo = new GameObject("PlayerCam");
+            var vcam = vGo.AddComponent<CinemachineCamera>();
+            vcam.Follow = target; vcam.LookAt = target;
+            vcam.Lens = new LensSettings { FieldOfView = 55, NearClipPlane = 0.2f, FarClipPlane = 2500f };
+            vcam.Priority = 10;
+            var orbit = vGo.AddComponent<CinemachineOrbitalFollow>();
+            orbit.OrbitStyle = CinemachineOrbitalFollow.OrbitStyles.Sphere;
+            orbit.Radius = 6.5f;
+            orbit.HorizontalAxis.Value = WorldLayout.PlayerStartYaw;
+            orbit.VerticalAxis.Range = new Vector2(-10, 70);
+            orbit.VerticalAxis.Value = 14f;
+            orbit.RadialAxis.Range = new Vector2(0.6f, 1.8f);
+            orbit.RadialAxis.Value = 1f;
+            orbit.TrackerSettings.PositionDamping = new Vector3(0.3f, 0.3f, 0.3f);
+            var comp = vGo.AddComponent<CinemachineRotationComposer>();
+            comp.Damping = new Vector2(0.2f, 0.2f);
+            var deocc = vGo.AddComponent<CinemachineDeoccluder>();
+            deocc.CollideAgainst = 1; // Default layer: terrain, rocks, buildings
+            deocc.MinimumDistanceFromTarget = 0.6f;
+
+            var pivot = new GameObject("MenuPivot").transform;
+            pivot.position = new Vector3(600, 40, 560);
+            var mGo = new GameObject("MenuCam");
+            mGo.transform.SetParent(pivot, false);
+            mGo.transform.localPosition = new Vector3(0, 150, -420);
+            var mcam = mGo.AddComponent<CinemachineCamera>();
+            mcam.Lens = new LensSettings { FieldOfView = 40, NearClipPlane = 0.5f, FarClipPlane = 3000f };
+            var lookAt = new GameObject("MenuLookAt").transform;
+            lookAt.SetParent(pivot, false);
+            lookAt.localPosition = new Vector3(0, -10, 40);
+            mcam.LookAt = lookAt;
+            mGo.AddComponent<CinemachineHardLookAt>();
+            mcam.Priority = 20;
+            return new Cams { player = vcam, menu = mcam, menuPivot = pivot };
+        }
+
+        static void BakeNavMesh(VegetationSpawner veg)
+        {
+            veg.Spawn();
+            var go = new GameObject("Navigation");
+            var surface = go.AddComponent<NavMeshSurface>();
+            surface.collectObjects = CollectObjects.All;
+            surface.useGeometry = NavMeshCollectGeometry.PhysicsColliders;
+            surface.overrideVoxelSize = true;
+            surface.voxelSize = 0.3f;
+            surface.overrideTileSize = true;
+            surface.tileSize = 128;
+            surface.layerMask = ~0;
+            surface.BuildNavMesh();
+            string path = "Assets/_Game/Settings/Terrain/WorldNavMesh.asset";
+            if (File.Exists(path)) AssetDatabase.DeleteAsset(path);
+            AssetDatabase.CreateAsset(surface.navMeshData, path);
+            veg.Clear();
+            Debug.Log("[World] navmesh baked");
+        }
+    }
+}

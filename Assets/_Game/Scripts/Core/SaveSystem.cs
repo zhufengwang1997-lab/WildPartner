@@ -1,0 +1,106 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using UnityEngine;
+
+namespace WildPartner.Core
+{
+    [Serializable]
+    public class CaughtEntry
+    {
+        public string id;
+        public float playTime;     // seconds of play when caught
+        public float gameHour;     // in-game time of day when caught
+    }
+
+    [Serializable]
+    public class SaveData
+    {
+        public int version = 1;
+        public List<CaughtEntry> caught = new List<CaughtEntry>();
+        public Vector3 playerPosition;
+        public float playerYaw;
+        public float timeOfDay = 9f;     // hours 0..24
+        public float playTime;
+        public bool introShown;
+        public bool finished;
+        public bool HasCaught(string id) => caught.Exists(c => c.id == id);
+    }
+
+    [Serializable]
+    public class SettingsData
+    {
+        public int version = 1;
+        public string tier = "";             // "" = auto (QualityTiers decides)
+        public string upscaler = "";         // stage 2: "" = auto
+        public string upscalerQuality = "";  // stage 2
+        public bool grd = true;              // stage 4
+        public bool debugOverlay;
+        public float mouseSensitivity = 1f;
+        public float masterVolume = 0.8f;
+        public bool invertY;
+    }
+
+    /// <summary>
+    /// JSON files in persistentDataPath: save.json (progress, autosaved) and settings.json. Writes go to a
+    /// temp file first and are then moved over the old one so a crash never leaves a half-written save.
+    /// </summary>
+    public static class SaveSystem
+    {
+        public static string Dir => Application.persistentDataPath;
+        static string SavePath => Path.Combine(Dir, "save.json");
+        static string SettingsPath => Path.Combine(Dir, "settings.json");
+
+        static SettingsData _settings;
+        public static SettingsData Settings => _settings ??= LoadSettings();
+
+        public static bool HasSave => File.Exists(SavePath);
+
+        public static SaveData LoadGame()
+        {
+            try
+            {
+                if (!File.Exists(SavePath)) return null;
+                var d = JsonUtility.FromJson<SaveData>(File.ReadAllText(SavePath));
+                return d;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Save] cannot read save: {e.Message}");
+                return null;
+            }
+        }
+
+        public static void SaveGame(SaveData d) => WriteAtomic(SavePath, JsonUtility.ToJson(d, true));
+
+        public static void DeleteGame()
+        {
+            if (File.Exists(SavePath)) File.Delete(SavePath);
+        }
+
+        static SettingsData LoadSettings()
+        {
+            try
+            {
+                if (File.Exists(SettingsPath)) return JsonUtility.FromJson<SettingsData>(File.ReadAllText(SettingsPath)) ?? new SettingsData();
+            }
+            catch (Exception e) { Debug.LogWarning($"[Save] cannot read settings: {e.Message}"); }
+            return new SettingsData();
+        }
+
+        public static void SaveSettings() => WriteAtomic(SettingsPath, JsonUtility.ToJson(Settings, true));
+
+        static void WriteAtomic(string path, string json)
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                string tmp = path + ".tmp";
+                File.WriteAllText(tmp, json);
+                if (File.Exists(path)) File.Delete(path);
+                File.Move(tmp, path);
+            }
+            catch (Exception e) { Debug.LogError($"[Save] write failed {path}: {e.Message}"); }
+        }
+    }
+}
