@@ -15,7 +15,7 @@ namespace WildPartner.Core
     [DefaultExecutionOrder(-40)]
     public class GameFlow : MonoBehaviour
     {
-        public enum FlowState { MainMenu, Playing, Paused, Journal, Ending }
+        public enum FlowState { MainMenu, Playing, Paused, Journal, Ending, Map }
         public static GameFlow Instance { get; private set; }
 
         public PlayerController player;
@@ -65,7 +65,7 @@ namespace WildPartner.Core
         {
             State = s;
             bool playing = s == FlowState.Playing;
-            Time.timeScale = s == FlowState.Paused || s == FlowState.Journal ? 0f : 1f;
+            Time.timeScale = s == FlowState.Paused || s == FlowState.Journal || s == FlowState.Map ? 0f : 1f;
             GameInput.Blocked = !playing;
             Cursor.lockState = playing ? CursorLockMode.Locked : CursorLockMode.None;
             Cursor.visible = !playing;
@@ -97,6 +97,7 @@ namespace WildPartner.Core
                 "WASD 移动，鼠标转动视角，Shift 奔跑，空格跳跃",
                 "按住 Ctrl 潜行：动物不容易发现你",
                 "靠近动物后按住 E 捕捉；Tab 打开图鉴查看线索",
+                "左上角是小地图；按 M 打开大地图",
                 $"猫已经在你身边了。再找到另外 {Total - CaughtCount} 种伙伴，然后回到木屋前的篝火",
             });
             SaveNow();
@@ -124,7 +125,8 @@ namespace WildPartner.Core
         }
 
         public void Pause() { if (State == FlowState.Playing) { SaveNow(); SetState(FlowState.Paused); } }
-        public void Resume() { if (State == FlowState.Paused || State == FlowState.Journal) SetState(FlowState.Playing); }
+        public void Resume() { if (State == FlowState.Paused || State == FlowState.Journal || State == FlowState.Map) SetState(FlowState.Playing); }
+        public void OpenMap() { if (State == FlowState.Playing) SetState(FlowState.Map); }
         public void OpenJournal() { if (State == FlowState.Playing) SetState(FlowState.Journal); }
         public void BackToMenu() { if (State != FlowState.Ending) SaveNow(); SetState(FlowState.MainMenu); }
         public void Quit()
@@ -139,7 +141,7 @@ namespace WildPartner.Core
         // ---------------------------------------------------------------- loop
         void Update()
         {
-            if (State == FlowState.Playing || State == FlowState.Journal || State == FlowState.Paused)
+            if (State == FlowState.Playing || State == FlowState.Journal || State == FlowState.Paused || State == FlowState.Map)
             {
                 if (GameInput.PausePressed)
                 {
@@ -148,6 +150,10 @@ namespace WildPartner.Core
                 else if (GameInput.JournalPressed)
                 {
                     if (State == FlowState.Playing) OpenJournal(); else if (State == FlowState.Journal) Resume();
+                }
+                else if (GameInput.MapPressed)
+                {
+                    if (State == FlowState.Playing) OpenMap(); else if (State == FlowState.Map) Resume();
                 }
             }
 

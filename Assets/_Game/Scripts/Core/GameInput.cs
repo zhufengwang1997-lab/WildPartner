@@ -53,6 +53,7 @@ namespace WildPartner.Core
         public static bool CaptureHeld => !Blocked && (SimCapture || (K != null && K.eKey.isPressed) || (G != null && G.buttonWest.isPressed));
         public static bool JumpPressed => !Blocked && (SimJump || (K != null && K.spaceKey.wasPressedThisFrame) || (G != null && G.buttonSouth.wasPressedThisFrame));
         public static bool JournalPressed => (K != null && K.tabKey.wasPressedThisFrame) || (G != null && G.selectButton.wasPressedThisFrame);
+        public static bool MapPressed => (K != null && K.mKey.wasPressedThisFrame) || (G != null && G.dpad.up.wasPressedThisFrame);
         public static bool PausePressed => (K != null && K.escapeKey.wasPressedThisFrame) || (G != null && G.startButton.wasPressedThisFrame);
         public static bool DebugPressed => K != null && K.f3Key.wasPressedThisFrame;
         public static bool AnyKeyDown => (K != null && K.anyKey.wasPressedThisFrame) || (G != null && G.buttonSouth.wasPressedThisFrame);

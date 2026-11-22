@@ -177,6 +177,14 @@ namespace WildPartner.Core
             yield return Shot($"{shot++:00}_journal");
             flow.Resume();
 
+            // big map (试玩反馈 3): pre-baked texture, opens with M, pauses the game
+            Step(WildPartner.UI.MapUI.Exists, "地图底图已烘焙（Resources/Map/WorldMap）");
+            flow.OpenMap();
+            yield return new WaitForSecondsRealtime(0.5f);
+            Step(flow.State == GameFlow.FlowState.Map && Time.timeScale == 0f, "M 打开大地图并暂停");
+            yield return Shot($"{shot++:00}_map");
+            flow.Resume();
+
             // back to the cabin: the ending triggers within 5 m of the campfire
             var fire = flow.campfire.position;
             player.Teleport(fire + new Vector3(3.5f, 0.3f, -2f), 300);

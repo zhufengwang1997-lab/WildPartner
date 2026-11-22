@@ -118,6 +118,7 @@ namespace WildPartner.EditorTools
             AssetDatabase.SaveAssets();
             int count = 0; foreach (var b in vegetation.batches) count += b.items.Count;
             Debug.Log($"[World] built {ScenePath}: vegetation={count} in {(DateTime.Now - t0).TotalSeconds:0}s");
+            MapBaker.Bake();   // the minimap texture must follow every layout change (试玩反馈 3)
         }
 
         // =========================================================================================

@@ -108,6 +108,7 @@ namespace WildPartner.UI
             _objective = UIKit.Label(obj, "", 26, TextAnchor.MiddleLeft, new Color(1f, 0.97f, 0.92f));
             _objective.rectTransform.offsetMin = new Vector2(54, 0);
             UIKit.Shade(_objective);
+            gameObject.AddComponent<MapUI>().Build(_flow, _canvas, _hud, obj);   // minimap + M big map; moves the objective below the minimap
 
             var clock = UIKit.Rect(_hud, "Clock", new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-36, -30), new Vector2(300, 60));
             UIKit.Box(clock, UIKit.Plum, UIKit.PlumFrame);
