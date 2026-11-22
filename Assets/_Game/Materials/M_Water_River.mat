@@ -22,14 +22,28 @@ Material:
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
-    m_TexEnvs: []
+    m_TexEnvs:
+    - _NormalA:
+        m_Texture: {fileID: 2800000, guid: 6f1e0921a6e224496852d2b015194294, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _NormalB:
+        m_Texture: {fileID: 2800000, guid: 05141edeabd9742449d5da218cd785aa, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _DepthRange: 2
     - _FlowSpeed: 0.9
     - _FoamWidth: 0.5
-    - _GlintAmount: 0.6
-    - _Reflect: 0.45
+    - _GlintAmount: 1.5
+    - _NormalStrength: 1
+    - _NormalTileA: 6
+    - _NormalTileB: 1.8
+    - _ProbeMix: 0.45
+    - _Reflect: 0.7
+    - _Refraction: 0.035
+    - _River: 1
     - _StreakAmount: 0.35
     - _StreakDensity: 1
     - _WaveScale: 0.08

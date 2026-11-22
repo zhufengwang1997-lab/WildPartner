@@ -85,7 +85,8 @@ namespace WildPartner.EditorTools
                 so.FindProperty("m_ShadowDistance").floatValue = s.shadowDistance;
                 so.FindProperty("m_ShadowCascadeCount").intValue = s.cascades;
                 so.FindProperty("m_RequireDepthTexture").boolValue = true;
-                so.FindProperty("m_RequireOpaqueTexture").boolValue = false;
+                so.FindProperty("m_RequireOpaqueTexture").boolValue = true;   // 1123c-C2: water refraction (_CameraOpaqueTexture)
+                so.FindProperty("m_OpaqueDownsampling").intValue = s.tier == Tier.Low ? 2 : 1;   // Low: 4x box
                 so.FindProperty("m_SoftShadowQuality").intValue = s.tier == Tier.Low ? 1 : s.tier == Tier.Medium ? 2 : 3;
                 so.ApplyModifiedPropertiesWithoutUndo();
                 EditorUtility.SetDirty(asset);

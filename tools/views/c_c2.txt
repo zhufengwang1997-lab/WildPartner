@@ -1,0 +1,13 @@
+# name x z dy lookX lookZ lookDy hour   (1123c-C2 water: 4 viewpoints x day / dusk / night)
+c2_bridge_day 248 222 3.5 268 236 -1 11
+c2_lake_day 280 247 3 292 300 -2 11
+c2_upper_day 128 282 4 160 258 -1 11
+c2_pond_day 246 127 3 230 141 -1 11
+c2_bridge_dusk 248 222 3.5 268 236 -1 18.3
+c2_lake_dusk 280 247 3 292 300 -2 18.3
+c2_upper_dusk 128 282 4 160 258 -1 18.3
+c2_pond_dusk 246 127 3 230 141 -1 18.3
+c2_bridge_night 248 222 3.5 268 236 -1 22
+c2_lake_night 280 247 3 292 300 -2 22
+c2_upper_night 128 282 4 160 258 -1 22
+c2_pond_night 246 127 3 230 141 -1 22

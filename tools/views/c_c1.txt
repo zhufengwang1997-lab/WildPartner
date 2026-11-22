@@ -1,0 +1,4 @@
+c1_forest_near   70 150 1.7   82 168 5   11
+c1_canopy_close  205 120 2.0  215 112 5  11
+c1_meadow_edge   150 128 2.5  110 160 6  15
+c1_valley_wide   200 110 14   150 220 4  10
