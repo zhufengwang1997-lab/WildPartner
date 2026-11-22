@@ -203,8 +203,9 @@ namespace WildPartner.EditorTools
                     float di = Vector2.Distance(p, new Vector2(isl.x, isl.y)) / isl.z;
                     bed = Mathf.Max(bed, Mathf.Lerp(WorldLayout.LakeLevel + 2.5f + Fbm(x * 0.1f, z * 0.1f) * 1.2f, bed, Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.4f, 1.1f, di))));
                 }
-                float shoreT = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.85f, 1.25f, L));
-                h = Mathf.Lerp(bed, Mathf.Max(h, WorldLayout.LakeLevel + 1.0f), shoreT);
+                // steeper shore: a narrow beach instead of wide flats that read as sand bars at grazing angles
+                float shoreT = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.88f, 1.16f, L));
+                h = Mathf.Lerp(bed, Mathf.Max(h, WorldLayout.LakeLevel + 1.3f), shoreT);
             }
 
             // river channel: cut down into the valley, bed below the water, banks always above it
@@ -215,7 +216,11 @@ namespace WildPartner.EditorTools
                 float bankH = Mathf.Max(Mathf.Min(h, wl + 2.2f + Mathf.Max(d - half, 0) * 0.35f), wl + 0.7f + Mathf.Max(d - half, 0) * 0.1f);
                 float bed = wl - 2.0f + Mathf.Clamp01(d / half) * 1.3f;
                 float cut = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(half - 0.6f, half + 5f, d));
-                h = Mathf.Lerp(bed, Mathf.Lerp(bankH, h, Mathf.SmoothStep(0, 1, Mathf.InverseLerp(half + 4f, half + 14f, d))), cut);
+                float hRiver = Mathf.Lerp(bed, Mathf.Lerp(bankH, h, Mathf.SmoothStep(0, 1, Mathf.InverseLerp(half + 4f, half + 14f, d))), cut);
+                // where the river runs into the lake, its raised banks would leave sand flats just above the
+                // lake surface (the "pink patches", 画面整改 7): fade the channel out inside the basin
+                float inLake = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(1.1f, 1.4f, L));
+                h = Mathf.Lerp(hRiver, Mathf.Min(h, hRiver), inLake);
             }
             return h;
         }
@@ -340,14 +345,17 @@ namespace WildPartner.EditorTools
 
             // lake: one plane at lake level (terrain hides it everywhere outside the basin)
             var c = WorldLayout.LakeCentre;
-            MeshObject("Lake", root, Grid(new Vector3(c.x, WorldLayout.LakeLevel + 0.15f, c.y), WorldLayout.LakeRadii.x * 1.45f, WorldLayout.LakeRadii.y * 1.6f, 24), lakeMat);
+            // only over the basin: the old full rectangle also flooded low valley ground outside it, leaving
+            // sand bars poking through the surface (画面整改 7)
+            MeshObject("Lake", root, Grid(new Vector3(c.x, WorldLayout.LakeLevel + 0.15f, c.y), WorldLayout.LakeRadii.x * 1.45f, WorldLayout.LakeRadii.y * 1.6f, 48,
+                (x, z) => WorldLayout.LakeDistance(x, z) < 1.22f || TerrainH(x, z) < WorldLayout.LakeLevel - 0.3f && WorldLayout.LakeDistance(x, z) < 1.6f), lakeMat);
             MeshObject("Pond", root, Grid(new Vector3(WorldLayout.Pond.x, 25.35f, WorldLayout.Pond.y), WorldLayout.PondRadius + 4, WorldLayout.PondRadius + 4, 8), lakeMat);
 
             Ribbon(root, WorldLayout.RiverIn, riverMat, fallMat, "RiverIn");
             Ribbon(root, WorldLayout.RiverOut, riverMat, fallMat, "RiverOut");
         }
 
-        static Mesh Grid(Vector3 centre, float rx, float rz, int n)
+        static Mesh Grid(Vector3 centre, float rx, float rz, int n, Func<float, float, bool> keep = null)
         {
             var m = new Mesh { name = "WaterGrid" };
             var v = new List<Vector3>(); var uv = new List<Vector2>(); var t = new List<int>();
@@ -361,6 +369,11 @@ namespace WildPartner.EditorTools
                 for (int i = 0; i < n; i++)
                 {
                     int a = j * (n + 1) + i, b = a + 1, cc = a + n + 1, d = cc + 1;
+                    if (keep != null)
+                    {
+                        var mid = (v[a] + v[d]) * 0.5f;
+                        if (!keep(centre.x + mid.x, centre.z + mid.z)) continue;
+                    }
                     t.AddRange(new[] { a, cc, b, b, cc, d });
                 }
             m.SetVertices(v); m.SetUVs(0, uv); m.SetTriangles(t, 0); m.RecalculateNormals(); m.RecalculateBounds();
@@ -398,11 +411,20 @@ namespace WildPartner.EditorTools
             // split into calm and falling pieces
             var calm = new List<int>(); var falls = new List<int>();
             var verts = new List<Vector3>(); var uvs = new List<Vector2>();
-            float dist = 0; float w = WorldLayout.RiverHalfWidth + 6f;
+            float dist = 0;
+            var nearFall = new float[samples.Count];
+            for (int i = 1; i < samples.Count; i++)
+                if (Mathf.Abs(samples[i].y - samples[i - 1].y) > 0.6f)
+                    for (int k = -5; k <= 5; k++)
+                    {
+                        int j = Mathf.Clamp(i + k, 0, samples.Count - 1);
+                        nearFall[j] = Mathf.Max(nearFall[j], 1 - Mathf.Abs(k) / 6f);
+                    }
             for (int i = 0; i < samples.Count; i++)
             {
                 Vector3 a = samples[Mathf.Max(i - 1, 0)], b = samples[Mathf.Min(i + 1, samples.Count - 1)];
                 var dir = new Vector2(b.x - a.x, b.z - a.z).normalized;
+                float w = Mathf.Lerp(WorldLayout.RiverHalfWidth + 6f, WorldLayout.RiverHalfWidth + 0.8f, nearFall[i]);
                 var side = new Vector3(-dir.y, 0, dir.x) * w;
                 var p = samples[i] + Vector3.up * 0.18f;
                 if (i > 0) dist += Vector3.Distance(samples[i], samples[i - 1]);
@@ -464,6 +486,25 @@ namespace WildPartner.EditorTools
                       new[] { new GradientAlphaKey(0, 0), new GradientAlphaKey(0.5f, 0.3f), new GradientAlphaKey(0, 1) });
             col.color = g;
             go.GetComponent<ParticleSystemRenderer>().sharedMaterial = ParticleMat("M_Mist", new Color(1, 1, 1, 0.5f), true);
+            em.rateOverTime = 40; main.startSize = new ParticleSystem.MinMaxCurve(2f, 5f); main.maxParticles = 200;
+
+            // white droplets thrown up where the water lands (画面整改 7)
+            var sgo = new GameObject("WaterfallSplash", typeof(ParticleSystem));
+            sgo.transform.SetParent(root, false);
+            sgo.transform.SetPositionAndRotation(at + Vector3.up * 0.2f, Quaternion.Euler(-90, 0, 0));
+            var sp = sgo.GetComponent<ParticleSystem>();
+            var sm = sp.main;
+            sm.startLifetime = new ParticleSystem.MinMaxCurve(0.6f, 1.1f); sm.startSpeed = new ParticleSystem.MinMaxCurve(2.5f, 5f);
+            sm.startSize = new ParticleSystem.MinMaxCurve(0.15f, 0.45f); sm.gravityModifier = 1.1f;
+            sm.startColor = new Color(1, 1, 1, 0.85f); sm.maxParticles = 300; sm.simulationSpace = ParticleSystemSimulationSpace.World;
+            var se = sp.emission; se.rateOverTime = 120;
+            var ss = sp.shape; ss.shapeType = ParticleSystemShapeType.Cone; ss.angle = 28; ss.radius = 2.2f;
+            var sc = sp.colorOverLifetime; sc.enabled = true;
+            var sg = new Gradient();
+            sg.SetKeys(new[] { new GradientColorKey(Color.white, 0), new GradientColorKey(Color.white, 1) },
+                       new[] { new GradientAlphaKey(0.9f, 0), new GradientAlphaKey(0.6f, 0.6f), new GradientAlphaKey(0, 1) });
+            sc.color = sg;
+            sgo.GetComponent<ParticleSystemRenderer>().sharedMaterial = ParticleMat("M_Splash", new Color(1, 1, 1, 0.9f), true);
         }
 
         static Material ParticleMat(string name, Color c, bool soft)

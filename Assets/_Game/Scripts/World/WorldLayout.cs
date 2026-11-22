@@ -121,7 +121,14 @@ namespace WildPartner.World
                 var ab = b - a;
                 float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
                 float d = Vector2.Distance(p, a + ab * t);
-                if (d < best) { best = d; level = Mathf.Lerp(pts[i].z, pts[i + 1].z, t); }
+                if (d < best)
+                {
+                    best = d;
+                    // same profile as the water ribbon: waterfalls stay level, then drop over the end of the segment
+                    float drop = pts[i].z - pts[i + 1].z;
+                    float lt = drop > 3f ? Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.55f, 0.95f, t)) : t;
+                    level = Mathf.Lerp(pts[i].z, pts[i + 1].z, lt);
+                }
             }
         }
 

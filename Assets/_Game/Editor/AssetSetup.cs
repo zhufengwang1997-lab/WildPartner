@@ -168,6 +168,13 @@ namespace WildPartner.EditorTools
             m.SetFloat("_FlowSpeed", flow);
             m.SetFloat("_StreakAmount", streak);
             m.SetFloat("_WaveScale", wave);
+            // 画面整改 7: turquoise shallows over the bed, deep blue in the middle, sky reflection, foam line
+            bool lake = name.Contains("Lake"), fall = name.Contains("fall");
+            m.SetColor("_ShallowColor", new Color(0.40f, 0.80f, 0.74f, 0.5f));
+            m.SetColor("_DeepColor", lake ? new Color(0.09f, 0.29f, 0.56f, 0.94f) : new Color(0.12f, 0.38f, 0.60f, 0.9f));
+            m.SetColor("_FoamColor", new Color(1f, 1f, 0.97f, 1f));
+            m.SetFloat("_FoamWidth", lake ? 0.9f : 0.5f);
+            m.SetFloat("_Reflect", lake ? 0.55f : fall ? 0.15f : 0.45f);
             EditorUtility.SetDirty(m);
             return m;
         }

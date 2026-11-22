@@ -27,14 +27,15 @@ Material:
     m_Floats:
     - _DepthRange: 4
     - _FlowSpeed: 0.05
-    - _FoamWidth: 0.6
+    - _FoamWidth: 0.9
     - _GlintAmount: 0.6
+    - _Reflect: 0.55
     - _StreakAmount: 0.1
     - _StreakDensity: 1
     - _WaveScale: 0.15
     m_Colors:
-    - _DeepColor: {r: 0.07999996, g: 0.35999998, b: 0.72, a: 0.92}
-    - _FoamColor: {r: 1, g: 1, b: 1, a: 1}
-    - _ShallowColor: {r: 0.34999996, g: 0.85, b: 0.85, a: 0.55}
+    - _DeepColor: {r: 0.09, g: 0.29, b: 0.56, a: 0.94}
+    - _FoamColor: {r: 1, g: 1, b: 0.97, a: 1}
+    - _ShallowColor: {r: 0.4, g: 0.8, b: 0.74, a: 0.5}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
