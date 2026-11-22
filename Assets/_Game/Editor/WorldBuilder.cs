@@ -57,6 +57,7 @@ namespace WildPartner.EditorTools
             Place("MoonFlower", landmarks, new Vector2(isl.x, isl.y), 200, 1.1f, -0.05f);   // the moon butterfly's perch
             BuildBackground(landmarks);
             var vegetation = BuildVegetation();
+            BuildGrass(vegetation);
 
             // ---- lights, sky, post -----------------------------------------------------------------
             var sunGo = new GameObject("Sun", typeof(Light));
@@ -135,17 +136,27 @@ namespace WildPartner.EditorTools
             return Vector2.Distance(p, a + ab * t);
         }
 
-        static readonly Vector2 RampTop = new Vector2(826, 316);
-        static readonly Vector2 RampBottom = new Vector2(768, 352);
+        static readonly Vector2 RampTop = WorldLayout.RampTop;
+        static readonly Vector2 RampBottom = WorldLayout.RampBottom;
+        const float K = WorldLayout.K;
 
         static float BaseHeight(float x, float z)
         {
-            float h = 31f + (Fbm(x * 0.005f, z * 0.005f) - 0.5f) * 9f + (Fbm(x * 0.03f, z * 0.03f, 2) - 0.5f) * 1.6f;
-            h += Mathf.SmoothStep(0, 1, Mathf.InverseLerp(650, 950, z)) * 7f * Fbm(x * 0.01f + 5, z * 0.01f);
+            // valley floor: broad swells (~120 m) + small hillocks (~30 m), never a flat plane (画面整改 2)
+            float h = 31f + (Fbm(x * 0.008f, z * 0.008f) - 0.5f) * 10f + (Fbm(x * 0.034f + 40, z * 0.034f + 10, 3) - 0.5f) * 4.5f;
+            h += Mathf.SmoothStep(0, 1, Mathf.InverseLerp(380, 560, z)) * 6f * Fbm(x * 0.017f + 5, z * 0.017f);
             // NW highland (waterfall source)
-            float dh = Vector2.Distance(new Vector2(x, z), new Vector2(165, 955)) / 220f;
+            float dh = Vector2.Distance(new Vector2(x, z), new Vector2(165, 955) * K) / (220f * K);
             h += (1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.55f, 1.0f, dh))) * 36f;
             return h;
+        }
+
+        /// <summary>World-edge hills: wooded slopes rising to the rim, rock only where it gets steep.</summary>
+        static float EdgeRise(float x, float z)
+        {
+            float e = Mathf.Min(Mathf.Min(x, S - x), Mathf.Min(z, S - z));
+            float t = 1 - Mathf.Clamp01((e - 4f) / 70f);
+            return t * t * (26f + Fbm(x * 0.025f, z * 0.025f) * 26f) + t * 6f;
         }
 
         public static float Height(float x, float z)
@@ -155,45 +166,55 @@ namespace WildPartner.EditorTools
 
             // stone circle: gentle flat clearing
             float ds = Vector2.Distance(p, WorldLayout.StoneCircle);
-            h = Mathf.Lerp(BaseHeight(WorldLayout.StoneCircle.x, WorldLayout.StoneCircle.y), h, Mathf.SmoothStep(0, 1, Mathf.InverseLerp(18, 40, ds)));
+            h = Mathf.Lerp(BaseHeight(WorldLayout.StoneCircle.x, WorldLayout.StoneCircle.y), h, Mathf.SmoothStep(0, 1, Mathf.InverseLerp(12, 28, ds)));
 
-            // cabin plateau with steep cliffs + a ramp down to the meadow
+            h += EdgeRise(x, z);
+
+            // cabin: a rocky cliff-top plateau (SE). Steep faces towards the valley; behind it the ground climbs
+            // into the edge hills so the plateau reads as a spur of the mountain, not a table.
             float dc = Vector2.Distance(p, WorldLayout.Cabin);
-            float rock = (Fbm(x * 0.08f, z * 0.08f, 2) - 0.5f) * 6f;
-            float plateau = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(WorldLayout.CabinRadius - 2 + rock, WorldLayout.CabinRadius + 7 + rock, dc));
-            h = Mathf.Lerp(h, WorldLayout.CabinPlateau + (Fbm(x * 0.05f, z * 0.05f, 2) - 0.5f) * 1.2f, plateau);
+            float ang = Mathf.Atan2(z - WorldLayout.Cabin.y, x - WorldLayout.Cabin.x);
+            float rim = WorldLayout.CabinRadius + Mathf.Sin(ang * 3 + 0.7f) * 2.2f + Mathf.Sin(ang * 7 + 2f) * 1.2f;
+            float plateau = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(rim - 1.5f, rim + 5f, dc));
+            float top = WorldLayout.CabinPlateau + (Fbm(x * 0.06f, z * 0.06f, 2) - 0.5f) * 0.8f;
+            // shoulder behind the plateau (away from the valley) so it joins the hills
+            var back = -WorldLayout.CabinFacing;
+            var rel = p - WorldLayout.Cabin;
+            float along = Vector2.Dot(rel, back), side = Mathf.Abs(Vector2.Dot(rel, new Vector2(-back.y, back.x)));
+            float shoulder = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0, 18, along)) * (1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(14, 30, side)));
+            float hill = Mathf.Max(h, top + Mathf.Max(along - 18, 0) * 0.35f);
+            h = Mathf.Lerp(h, hill, shoulder * (1 - plateau));
+            h = Mathf.Lerp(h, top, plateau);
+            // ramp down the cliff side to the meadow
             float dr = SegDist(p, RampTop, RampBottom, out float rt);
             float rampH = Mathf.Lerp(WorldLayout.CabinPlateau, BaseHeight(RampBottom.x, RampBottom.y), Mathf.SmoothStep(0, 1, rt));
-            float rampMask = (1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(4.5f, 10f, dr))) * (rt > 0.001f && rt < 0.999f ? 1 : 0.0f);
-            h = Mathf.Lerp(h, rampH, rampMask);
-
-            // world edge: rising cliffs
-            float e = Mathf.Min(Mathf.Min(x, S - x), Mathf.Min(z, S - z));
-            float edgeT = 1 - Mathf.Clamp01((e - 12f) / 80f);
-            h += edgeT * edgeT * (70f + Fbm(x * 0.02f, z * 0.02f) * 40f);
+            float rampMask = (1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(3f, 7f, dr))) * Mathf.SmoothStep(0, 1, Mathf.InverseLerp(-0.05f, 0.05f, rt)) *
+                             (1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.95f, 1.1f, rt)));
+            if (dr < 7f && rt > 0.001f) h = Mathf.Lerp(h, rampH, rampMask);
 
             // lake basin + islands
             float L = WorldLayout.LakeDistance(x, z);
             if (L < 1.4f)
             {
-                float bed = WorldLayout.LakeLevel - 8f + Fbm(x * 0.02f, z * 0.02f) * 3f;
+                float bed = WorldLayout.LakeLevel - 7f + Fbm(x * 0.03f, z * 0.03f) * 3f;
                 foreach (var isl in WorldLayout.Islands)
                 {
                     float di = Vector2.Distance(p, new Vector2(isl.x, isl.y)) / isl.z;
-                    bed = Mathf.Max(bed, Mathf.Lerp(WorldLayout.LakeLevel + 3f, bed, Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.4f, 1.1f, di))));
+                    bed = Mathf.Max(bed, Mathf.Lerp(WorldLayout.LakeLevel + 2.5f + Fbm(x * 0.1f, z * 0.1f) * 1.2f, bed, Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.4f, 1.1f, di))));
                 }
                 float shoreT = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.85f, 1.25f, L));
-                h = Mathf.Lerp(bed, Mathf.Max(h, WorldLayout.LakeLevel + 1.2f), shoreT);
+                h = Mathf.Lerp(bed, Mathf.Max(h, WorldLayout.LakeLevel + 1.0f), shoreT);
             }
 
-            // river channel: bed below the local water level, banks always above it
+            // river channel: cut down into the valley, bed below the water, banks always above it
             float d = WorldLayout.RiverDistance(x, z, out float wl);
             float half = WorldLayout.RiverHalfWidth;
-            if (d < half + 16f)
+            if (d < half + 14f)
             {
-                float bankH = Mathf.Max(h, wl + 0.9f + Mathf.Max(d - half, 0) * 0.12f);
-                float bed = wl - 2.2f + Mathf.Clamp01(d / half) * 1.4f;
-                h = Mathf.Lerp(bed, bankH, Mathf.SmoothStep(0, 1, Mathf.InverseLerp(half - 1f, half + 14f, d)));
+                float bankH = Mathf.Max(Mathf.Min(h, wl + 2.2f + Mathf.Max(d - half, 0) * 0.35f), wl + 0.7f + Mathf.Max(d - half, 0) * 0.1f);
+                float bed = wl - 2.0f + Mathf.Clamp01(d / half) * 1.3f;
+                float cut = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(half - 0.6f, half + 5f, d));
+                h = Mathf.Lerp(bed, Mathf.Lerp(bankH, h, Mathf.SmoothStep(0, 1, Mathf.InverseLerp(half + 4f, half + 14f, d))), cut);
             }
             return h;
         }
@@ -238,14 +259,16 @@ namespace WildPartner.EditorTools
                     float n = Fbm(x * 0.03f, z * 0.03f, 2);
                     float w0 = 1 - forest, w1 = forest * (0.7f + 0.3f * n), w2 = 0, w3 = 0;
                     float path = WorldLayout.PathDistance(x, z);
-                    float pathW = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(1.6f + n, 3.4f + n, path));
+                    float edgeN = (Fbm(x * 0.3f + 11, z * 0.3f + 5, 2) - 0.5f) * 1.6f;   // ragged edge, matches the grass map
+                    float pathW = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.9f + edgeN, 2.3f + edgeN, path));
                     float river = WorldLayout.RiverDistance(x, z, out _);
                     float bank = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(WorldLayout.RiverHalfWidth + 0.5f, WorldLayout.RiverHalfWidth + 3f, river));
                     float lake = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(1.0f, 1.08f, WorldLayout.LakeDistance(x, z)));
                     float yard = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(6f, 11f, Vector2.Distance(new Vector2(x, z), WorldLayout.Campfire)));
-                    float circle = Mathf.Abs(Vector2.Distance(new Vector2(x, z), WorldLayout.StoneCircle) - 14f) < 2.5f ? 0.7f : 0;
+                    float circle = (1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(6.5f + n * 2, 9.5f + n * 2, Vector2.Distance(new Vector2(x, z), WorldLayout.StoneCircle)))) * 0.75f;
                     w2 = Mathf.Max(Mathf.Max(pathW, bank * 0.9f), Mathf.Max(lake * 0.9f, Mathf.Max(yard, circle)));
-                    w3 = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(30f, 40f, slope + n * 4f));
+                    w3 = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(40f, 52f, slope + n * 6f));
+                    if (river < WorldLayout.RiverHalfWidth + 16f) w3 *= 0.2f;   // river cut banks stay green, not grey
                     float rest = (1 - w3) * (1 - w2);
                     w0 *= rest; w1 *= rest; w2 *= (1 - w3);
                     float sum = w0 + w1 + w2 + w3 + 1e-5f;
@@ -286,7 +309,7 @@ namespace WildPartner.EditorTools
                     var c = Color.Lerp(b, a, Mathf.SmoothStep(0.3f, 0.7f, n));
                     if (name == "Grass" && rnd.NextDouble() < 0.02) c *= 1.12f;
                     if (name == "Dirt" && rnd.NextDouble() < 0.015) c = Color.Lerp(c, new Color(0.9f, 0.85f, 0.75f), 0.5f);
-                    if (name == "Rock") c *= 0.9f + 0.2f * Mathf.Repeat(y / 23f + n * 0.5f, 1f);
+                    if (name == "Rock") c *= 0.92f + 0.16f * Mathf.PerlinNoise(Mathf.Cos(u) * 3 + seed, Mathf.Sin(v) * 3 + Mathf.Sin(u) * 2);
                     tex.SetPixel(x, y, c);
                 }
             tex.Apply();
@@ -499,9 +522,10 @@ namespace WildPartner.EditorTools
             var root = new GameObject("CliffCabin").transform;
             root.SetParent(parent, false);
             var c = WorldLayout.Cabin;
-            Vector2 toRamp = (RampTop - c).normalized;
+            Vector2 toRamp = WorldLayout.CabinFacing;
+            var rampDir = (RampTop - c).normalized;
             float yaw = FaceYaw(toRamp);
-            var cc = c + new Vector2(8, 6);
+            var cc = WorldLayout.House;
             Place("Cabin", root, cc, yaw, 1f, -0.15f);   // Tripo cabin: door, windows, chimney are part of the model
             // yard dressing in the cabin's frame: x = to the cabin's right (seen from outside), y = out of the door
             Vector2 side = new Vector2(-toRamp.y, toRamp.x);
@@ -512,7 +536,8 @@ namespace WildPartner.EditorTools
             Place("Chest", root, L(4.6f, 1.6f), yaw - 75, 1f);
             Place("Woodpile", root, L(-5.0f, 0.5f), yaw + 90, 1f);
             Place("Stump", root, L(-2.4f, 9.5f), 40, 1f);
-            Place("Signpost", root, RampTop + new Vector2(-1, -6), yaw + 20, 1f);
+            var perp = new Vector2(-rampDir.y, rampDir.x);
+            Place("Signpost", root, RampTop - rampDir * 2.5f + perp * 3.2f, yaw + 20, 1f);
 
             var fire = Place("Campfire", root, WorldLayout.Campfire, 0, 1.2f);
             for (int i = 0; i < 3; i++)
@@ -529,12 +554,12 @@ namespace WildPartner.EditorTools
             var nl = fireLight.AddComponent<NightLight>(); nl.alwaysOn = true; nl.flicker = true;
             Flames(fire.transform);
 
-            Place("FlagPole", root, c + new Vector2(-14, 16), yaw, 1f);
-            Place("LampPost", root, RampTop + new Vector2(2, -5), yaw + 90, 1f);
-            Place("LampPost", root, RampTop + new Vector2(-3, 5), yaw - 90, 1f);
+            Place("FlagPole", root, L(-6.5f, 9.5f), yaw, 1f);
+            Place("LampPost", root, RampTop - rampDir * 1.5f - perp * 3.4f, yaw + 90, 1f);
+            Place("LampPost", root, L(3.2f, 4.8f), yaw - 90, 1f);
 
             // fence ring along the plateau edge, leaving a gap at the ramp
-            float rampAng = Mathf.Atan2(toRamp.y, toRamp.x);
+            float rampAng = Mathf.Atan2(rampDir.y, rampDir.x);
             float R = WorldLayout.CabinRadius - 4f;
             int n = Mathf.RoundToInt(2 * Mathf.PI * R / 3f);
             for (int i = 0; i < n; i++)
@@ -545,13 +570,24 @@ namespace WildPartner.EditorTools
                 var tangent = new Vector2(-Mathf.Sin(a), Mathf.Cos(a));
                 Place("Fence", root, p, Mathf.Atan2(-tangent.y, tangent.x) * Mathf.Rad2Deg, 1f, -0.1f);
             }
-            // cliff rocks dressing the plateau sides
-            for (int i = 0; i < 26; i++)
+            // rock faces: two rings of big boulders sunk into the cliff so the plateau sides read as grey crags
+            // (女巫木屋参考.png). The back (towards the hills) and the ramp stay open.
+            for (int ring = 0; ring < 2; ring++)
             {
-                float a = i / 26f * Mathf.PI * 2;
-                if (Mathf.Abs(Mathf.DeltaAngle(a * Mathf.Rad2Deg, rampAng * Mathf.Rad2Deg)) < 18f) continue;
-                var p = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (WorldLayout.CabinRadius + 6f);
-                Place("Rock_A", root, p, _rng.Next(360), 3.2f + (float)_rng.NextDouble() * 1.4f, -6f);
+                int count = ring == 0 ? 30 : 24;
+                for (int i = 0; i < count; i++)
+                {
+                    float a = (i + (ring == 0 ? 0 : 0.5f)) / count * Mathf.PI * 2;
+                    var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                    if (Vector2.Dot(dir, WorldLayout.CabinFacing) < -0.55f) continue;                       // back shoulder
+                    if (Mathf.Abs(Mathf.DeltaAngle(a * Mathf.Rad2Deg, rampAng * Mathf.Rad2Deg)) < 20f) continue;
+                    float rr = WorldLayout.CabinRadius + (ring == 0 ? 2.5f : 8.5f) + (float)_rng.NextDouble() * 1.5f;
+                    var p = c + dir * rr;
+                    float sc = ring == 0 ? 2.3f + (float)_rng.NextDouble() * 0.9f : 2.8f + (float)_rng.NextDouble() * 1.0f;
+                    float topY = WorldLayout.CabinPlateau - (ring == 0 ? 0.8f : 7f);
+                    var rock = Place("Rock_A", root, p, _rng.Next(360), sc);
+                    if (rock) { var pos = rock.transform.position; pos.y = topY - 2.6f * sc; rock.transform.position = pos; }
+                }
             }
             return fire.transform;
         }
@@ -619,23 +655,13 @@ namespace WildPartner.EditorTools
             var root = new GameObject("Background").transform;
             root.SetParent(parent, false);
             var mp = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.EnvPrefabs}/SnowMountains.prefab");
-            foreach (var (pos, yaw, s) in new[] { (new Vector3(420, 0, 1330), 0f, 1.4f), (new Vector3(1340, 0, 720), 90f, 1.3f), (new Vector3(1300, 0, 1300), 45f, 1.6f) })
+            foreach (var (pos, yaw, s) in new[] { (new Vector3(260, 0, 900), 0f, 1.1f), (new Vector3(900, 0, 430), 90f, 1.0f), (new Vector3(860, 0, 860), 45f, 1.25f) })
             {
                 var go = (GameObject)PrefabUtility.InstantiatePrefab(mp, root);
                 go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0, yaw, 0));
                 go.transform.localScale = Vector3.one * s;
             }
-            // low clouds hugging the edge cliffs
-            var cp = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.EnvPrefabs}/Cloud_A.prefab");
-            for (int i = 0; i < 48; i++)
-            {
-                float a = i / 48f * Mathf.PI * 2;
-                var p = new Vector2(S / 2, S / 2) + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (S * 0.5f + 90 + (float)_rng.NextDouble() * 120);
-                var go = (GameObject)PrefabUtility.InstantiatePrefab(cp, root);
-                float y = 175 + (float)_rng.NextDouble() * 60;
-                go.transform.SetPositionAndRotation(new Vector3(p.x, y, p.y), Quaternion.Euler(0, a * Mathf.Rad2Deg + 90, 0));
-                go.transform.localScale = Vector3.one * (2.5f + (float)_rng.NextDouble() * 2f);
-            }
+            // (the old low "clouds" read as floating rocks in front of the hills: removed, 画面整改 2/5)
         }
 
         // =========================================================================================
@@ -679,7 +705,8 @@ namespace WildPartner.EditorTools
             if (Vector2.Distance(p, WorldLayout.Watchtower) < 7) return true;
             if (Vector2.Distance(p, WorldLayout.Bridge) < 12) return true;
             if (Vector2.Distance(p, WorldLayout.Campfire) < 9) return true;
-            if (Vector2.Distance(p, WorldLayout.Cabin + new Vector2(8, 6)) < 9) return true;
+            if (Vector2.Distance(p, WorldLayout.House) < 9) return true;
+            if (Vector2.Distance(p, WorldLayout.Cabin) < WorldLayout.CabinRadius + 1f) return true;   // the yard is dressed by hand
             if (SegDist(p, RampTop, RampBottom, out _) < 6) return true;
             return false;
         }
@@ -725,7 +752,7 @@ namespace WildPartner.EditorTools
                     var region = WorldLayout.RegionAt(px, pz);
                     if (_rng.NextDouble() > TreeDensity[region]) continue;
                     if (Blocked(px, pz, 4.5f, 3f)) continue;
-                    if (_td.GetSteepness(px / S, pz / S) > 38f) continue;
+                    if (_td.GetSteepness(px / S, pz / S) > (region == WorldLayout.Region.Edge ? 46f : 40f)) continue;
                     if (region == WorldLayout.Region.Cabin && Vector2.Distance(new Vector2(px, pz), WorldLayout.Cabin) < WorldLayout.CabinRadius - 8) continue;
                     Add(Pick(TreeMix[region]), px, pz, (float)_rng.NextDouble() * 360f, 0.8f + (float)_rng.NextDouble() * 0.45f, 0.3f);
                 }
@@ -751,53 +778,173 @@ namespace WildPartner.EditorTools
                     if (_rng.NextDouble() > d || Blocked(px, pz, 2.5f, 0.5f)) continue;
                     Add(_rng.NextDouble() < 0.55 ? "Rock_A" : "Rock_B", px, pz, (float)_rng.NextDouble() * 360f, 0.5f + (float)_rng.NextDouble() * 1.0f, 0.4f);
                 }
-            // edge cliffs
-            for (float t = 0; t < S * 4; t += 26f)
+            // rock outcrops on the edge hills (Tripo boulders, scaled up)
+            for (float t = 0; t < S * 4; t += 22f)
             {
                 float side = Mathf.Floor(t / S), u = t % S;
-                float inset = 38f + (float)_rng.NextDouble() * 20f;
+                float inset = 8f + (float)_rng.NextDouble() * 26f;
                 Vector2 p = side == 0 ? new Vector2(u, inset) : side == 1 ? new Vector2(S - inset, u) : side == 2 ? new Vector2(S - u, S - inset) : new Vector2(inset, S - u);
-                Add(_rng.NextDouble() < 0.5 ? "Cliff_A" : "Cliff_B", p.x, p.y, (float)_rng.NextDouble() * 360f, 0.6f + (float)_rng.NextDouble() * 0.4f, 5f);
+                if (_rng.NextDouble() < 0.35) continue;
+                Add("Rock_A", p.x, p.y, (float)_rng.NextDouble() * 360f, 2.2f + (float)_rng.NextDouble() * 2.6f, 1.8f);
             }
-            // grass
-            const float gc = 3.5f;
-            for (float z = gc / 2; z < S; z += gc)
-                for (float x = gc / 2; x < S; x += gc)
+            // (the lawn itself is GrassRenderer; no grass prefabs any more)
+            // flower clusters: dense along path edges, scattered patches in the meadow
+            string Flower() { double r = _rng.NextDouble(); return r < 0.5 ? "Flowers_White" : r < 0.78 ? "Flowers_Orange" : "Flowers_Purple"; }
+            void Cluster(float cx, float cz, int n, float radius, Func<string> pick, float smin, float smax, float sink = 0.04f)
+            {
+                for (int k = 0; k < n; k++)
                 {
-                    float px = x + J(gc), pz = z + J(gc);
-                    var region = WorldLayout.RegionAt(px, pz);
-                    if (_rng.NextDouble() > GrassDensity[region]) continue;
-                    if (Blocked(px, pz, 1.8f, 0.3f) || _td.GetSteepness(px / S, pz / S) > 30f) continue;
-                    Add(_rng.NextDouble() < 0.72 ? "Grass_A" : "Grass_B", px, pz, (float)_rng.NextDouble() * 360f, 2.0f + (float)_rng.NextDouble() * 1.2f, 0.05f);
+                    float a = (float)_rng.NextDouble() * Mathf.PI * 2, rr = Mathf.Sqrt((float)_rng.NextDouble()) * radius;
+                    float px = cx + Mathf.Cos(a) * rr, pz = cz + Mathf.Sin(a) * rr;
+                    if (Blocked(px, pz, 1.3f, 0.4f)) continue;
+                    Add(pick(), px, pz, (float)_rng.NextDouble() * 360f, smin + (float)_rng.NextDouble() * (smax - smin), sink);
                 }
-            // flowers in patches
-            const float fc = 6f;
+            }
+            const float fc = 5f;
             for (float z = fc / 2; z < S; z += fc)
                 for (float x = fc / 2; x < S; x += fc)
                 {
                     float px = x + J(fc), pz = z + J(fc);
                     var region = WorldLayout.RegionAt(px, pz);
-                    if (region != WorldLayout.Region.Meadow && region != WorldLayout.Region.Cabin && region != WorldLayout.Region.Riverbank) continue;
-                    float patch = Mathf.PerlinNoise(px * 0.02f + 40, pz * 0.02f + 40);
-                    if (patch < 0.55f || _rng.NextDouble() > 0.7f || Blocked(px, pz, 1.6f, 0.5f)) continue;
-                    double r = _rng.NextDouble();
-                    Add(r < 0.5 ? "Flowers_White" : r < 0.8 ? "Flowers_Orange" : "Flowers_Purple", px, pz, (float)_rng.NextDouble() * 360f, 1.6f + (float)_rng.NextDouble() * 0.8f, 0.05f);
+                    if (region == WorldLayout.Region.Edge) continue;
+                    float pd = WorldLayout.PathDistance(px, pz);
+                    float patch = Mathf.PerlinNoise(px * 0.025f + 40, pz * 0.025f + 40);
+                    bool open = region == WorldLayout.Region.Meadow || region == WorldLayout.Region.Cabin || region == WorldLayout.Region.Riverbank;
+                    float chance = pd > 1.8f && pd < 6f ? 0.6f : open && patch > 0.52f ? 0.35f : open ? 0.06f : 0.04f;
+                    if (_rng.NextDouble() > chance || Blocked(px, pz, 1.6f, 0.5f)) continue;
+                    var kind = Flower();
+                    Cluster(px, pz, 3 + _rng.Next(5), 1.1f, () => _rng.NextDouble() < 0.8 ? kind : Flower(), 0.75f, 1.2f);
                 }
-            // mushrooms in the forests
-            const float mc = 14f;
-            for (float z = mc / 2; z < S; z += mc)
-                for (float x = mc / 2; x < S; x += mc)
+            // small stones along the paths
+            const float sc = 7f;
+            for (float z = sc / 2; z < S; z += sc)
+                for (float x = sc / 2; x < S; x += sc)
                 {
-                    float px = x + J(mc), pz = z + J(mc);
-                    var region = WorldLayout.RegionAt(px, pz);
-                    if (region != WorldLayout.Region.DeepForest && region != WorldLayout.Region.AutumnForest) continue;
-                    if (_rng.NextDouble() > 0.2f || Blocked(px, pz, 1.5f, 0.5f)) continue;
-                    Add("Mushrooms", px, pz, (float)_rng.NextDouble() * 360f, 0.9f + (float)_rng.NextDouble() * 1.1f, 0.02f);
+                    float px = x + J(sc), pz = z + J(sc);
+                    float pd = WorldLayout.PathDistance(px, pz);
+                    if (pd < 1.6f || pd > 4f || _rng.NextDouble() > 0.35f || Blocked(px, pz, 1.4f, 0.5f)) continue;
+                    Cluster(px, pz, 1 + _rng.Next(3), 0.8f, () => "Rock_B", 0.18f, 0.45f, 0.08f);
                 }
-
+            // mushrooms and bushes at the foot of trees (understory)
+            var trees = new List<Vector4>();
+            foreach (var kv in batches) if (kv.Key.StartsWith("Tree")) trees.AddRange(kv.Value.items);
+            foreach (var t in trees)
+            {
+                double r = _rng.NextDouble();
+                float a = (float)_rng.NextDouble() * Mathf.PI * 2;
+                var at = new Vector2(t.x + Mathf.Cos(a) * 1.4f, t.z + Mathf.Sin(a) * 1.4f);
+                if (r < 0.22) Cluster(at.x, at.y, 1 + _rng.Next(2), 0.6f, () => "Mushrooms", 0.8f, 1.5f, 0.02f);
+                else if (r < 0.32) Cluster(at.x, at.y, 2 + _rng.Next(3), 0.7f, Flower, 0.7f, 1.0f);
+            }
             sp.batches = new List<VegetationSpawner.Batch>(batches.Values);
             sp.batches.Sort((a, b) => string.CompareOrdinal(a.prefab.name, b.prefab.name));
             return sp;
+        }
+
+        // =========================================================================================
+        // Ground maps + grass (画面整改 1)
+        // =========================================================================================
+        const int MapRes = 1024;
+
+        /// <summary>
+        /// Bakes the two 1 m/texel maps shared by the terrain and the grass: a ground tint (hand-painted look:
+        /// big sunlit and shaded patches, cooler darker forest floor and tree shade, lush river banks) and the
+        /// grass map (R density, G height, B dryness). Then adds the GrassRenderer.
+        /// </summary>
+        static void BuildGrass(VegetationSpawner veg)
+        {
+            var shade = new float[MapRes * MapRes];
+            foreach (var b in veg.batches)
+            {
+                if (!b.prefab || !b.prefab.name.StartsWith("Tree")) continue;
+                foreach (var it in b.items)
+                {
+                    float sc = Mathf.Floor(it.w / 1000f) / 100f;
+                    float rad = (b.prefab.name.StartsWith("Tree_Pine") ? 2.6f : 3.6f) * sc;
+                    int x0 = Mathf.FloorToInt(it.x - rad), x1 = Mathf.CeilToInt(it.x + rad), z0 = Mathf.FloorToInt(it.z - rad), z1 = Mathf.CeilToInt(it.z + rad);
+                    for (int z = Mathf.Max(z0, 0); z <= Mathf.Min(z1, MapRes - 1); z++)
+                        for (int x = Mathf.Max(x0, 0); x <= Mathf.Min(x1, MapRes - 1); x++)
+                        {
+                            float d = Vector2.Distance(new Vector2(x + 0.5f, z + 0.5f), new Vector2(it.x, it.z)) / rad;
+                            if (d < 1) shade[z * MapRes + x] = Mathf.Max(shade[z * MapRes + x], 1 - d * d);
+                        }
+                }
+            }
+            var tint = new Color32[MapRes * MapRes];
+            var map = new Color32[MapRes * MapRes];
+            var cabin = WorldLayout.House;
+            for (int zi = 0; zi < MapRes; zi++)
+                for (int xi = 0; xi < MapRes; xi++)
+                {
+                    float x = (xi + 0.5f) * S / MapRes, z = (zi + 0.5f) * S / MapRes;
+                    var p = new Vector2(x, z);
+                    var region = WorldLayout.RegionAt(x, z);
+                    bool forest = region == WorldLayout.Region.DeepForest || region == WorldLayout.Region.AutumnForest || region == WorldLayout.Region.Edge;
+                    float sh = shade[zi * MapRes + xi];
+
+                    // ---- tint
+                    float sun = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.36f, 0.64f, Fbm(x * 0.016f + 3, z * 0.016f + 9, 3)));
+                    var c = Color.Lerp(new Color(0.41f, 0.45f, 0.56f), new Color(0.58f, 0.56f, 0.43f), sun);
+                    float dryN = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.55f, 0.72f, Fbm(x * 0.035f + 7, z * 0.035f + 2, 2)));
+                    if (!forest) c = Color.Lerp(c, new Color(0.62f, 0.56f, 0.38f), dryN * 0.35f);
+                    if (forest) c *= new Color(0.82f, 0.88f, 0.98f);
+                    float river = WorldLayout.RiverDistance(x, z, out _);
+                    float lush = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(WorldLayout.RiverHalfWidth + 2, WorldLayout.RiverHalfWidth + 14, river));
+                    lush = Mathf.Max(lush, 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(1.05f, 1.3f, WorldLayout.LakeDistance(x, z))));
+                    c = Color.Lerp(c, new Color(0.40f, 0.52f, 0.44f), lush * 0.5f);
+                    c = Color.Lerp(c, new Color(0.34f, 0.40f, 0.56f), sh * 0.55f);
+                    c.r += (Fbm(x * 0.21f, z * 0.21f, 2) - 0.5f) * 0.05f;
+                    tint[zi * MapRes + xi] = new Color(Mathf.Clamp01(c.r), Mathf.Clamp01(c.g), Mathf.Clamp01(c.b), 1);
+
+                    // ---- grass map
+                    float dens = region == WorldLayout.Region.Meadow ? 1f : region == WorldLayout.Region.Cabin ? 0.95f : region == WorldLayout.Region.Riverbank ? 0.95f :
+                                 region == WorldLayout.Region.Lakeshore ? 0.85f : region == WorldLayout.Region.Highland ? 0.8f : region == WorldLayout.Region.Edge ? 0.45f : 0.62f;
+                    float edgeN = (Fbm(x * 0.3f + 11, z * 0.3f + 5, 2) - 0.5f) * 1.6f;
+                    float pd = WorldLayout.PathDistance(x, z);
+                    dens *= Mathf.SmoothStep(0, 1, Mathf.InverseLerp(1.1f + edgeN, 2.9f + edgeN, pd));
+                    if (UnderWater(x, z, 0.05f)) dens = 0;
+                    if (_td.GetSteepness(x / S, z / S) > (river < WorldLayout.RiverHalfWidth + 16f ? 60f : 42f)) dens = 0;
+                    if (Vector2.Distance(p, cabin) < 5.5f) dens = 0;
+                    if (Vector2.Distance(p, WorldLayout.Campfire) < 3.2f) dens *= 0.1f;
+                    if (Vector2.Distance(p, WorldLayout.StoneCircle) < 7f) dens *= 0.55f;
+                    dens *= 1 - sh * 0.3f;
+                    float height = Mathf.Lerp(0.3f, 0.85f, Fbm(x * 0.05f + 21, z * 0.05f + 13, 2));
+                    height = Mathf.Lerp(height, 0.9f, lush * 0.7f);
+                    height *= Mathf.Lerp(0.45f, 1f, Mathf.InverseLerp(1.5f, 5f, pd));
+                    if (Vector2.Distance(p, WorldLayout.Cabin) < WorldLayout.CabinRadius) height *= 0.6f;   // mown yard
+                    float dry = forest ? 0.05f : dryN * 0.8f + (region == WorldLayout.Region.Highland ? 0.3f : 0);
+                    map[zi * MapRes + xi] = new Color(dens, Mathf.Clamp01(height), Mathf.Clamp01(dry), 1);
+                }
+            var tintTex = SaveMap("T_GroundTint", tint);
+            var mapTex = SaveMap("T_GrassMap", map);
+
+            var go = new GameObject("Grass");
+            var gr = go.AddComponent<GrassRenderer>();
+            var mat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_GrassBlades.mat");
+            if (!mat) { mat = new Material(Shader.Find("WildPartner/Grass")); AssetDatabase.CreateAsset(mat, $"{AssetSetup.MatDir}/M_GrassBlades.mat"); }
+            // colours live here (not only as shader defaults) so re-running the builder applies tweaks
+            mat.SetColor("_BaseColor", new Color(0.27f, 0.46f, 0.14f)); mat.SetColor("_TipColor", new Color(0.55f, 0.76f, 0.24f));
+            mat.SetColor("_DryColor", new Color(0.82f, 0.76f, 0.36f)); mat.SetColor("_ShadowColor", new Color(0.42f, 0.45f, 0.75f));
+            mat.SetVector("_HeightRange", new Vector4(0.15f, 0.35f)); mat.SetVector("_Fade", new Vector4(48, 66));
+            EditorUtility.SetDirty(mat);
+            gr.material = mat; gr.grassMap = mapTex; gr.groundTint = tintTex;
+            var tm = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Terrain.mat");
+            if (tm) { tm.SetTexture("_GroundTint", tintTex); tm.SetFloat("_WorldSize", S); EditorUtility.SetDirty(tm); }
+        }
+
+        static Texture2D SaveMap(string name, Color32[] px)
+        {
+            string path = $"{TerrainDir}/{name}.png";
+            var tex = new Texture2D(MapRes, MapRes, TextureFormat.RGBA32, false, true);
+            tex.SetPixels32(px); tex.Apply();
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(path);
+            var imp = (TextureImporter)AssetImporter.GetAtPath(path);
+            imp.sRGBTexture = false; imp.mipmapEnabled = false; imp.textureCompression = TextureImporterCompression.Uncompressed;
+            imp.wrapMode = TextureWrapMode.Clamp; imp.filterMode = FilterMode.Bilinear; imp.isReadable = false;
+            imp.SaveAndReimport();
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 
         // =========================================================================================

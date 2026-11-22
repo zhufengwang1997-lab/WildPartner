@@ -27,6 +27,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _GroundTint:
+        m_Texture: {fileID: 2800000, guid: 3522ac3b61e764aa88536ea28bb2fdde, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _Splat0:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -49,6 +53,7 @@ Material:
     - _RampSteps: 3
     - _ShadowStrength: 0.8
     - _Variation: 0.25
+    - _WorldSize: 600
     m_Colors:
     - _ShadowColor: {r: 0.41999996, g: 0.45, b: 0.72, a: 1}
   m_BuildTextureStacks: []

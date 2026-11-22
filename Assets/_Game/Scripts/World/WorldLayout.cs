@@ -11,54 +11,63 @@ namespace WildPartner.World
     /// </summary>
     public static class WorldLayout
     {
-        public const float Size = 1024f;
+        public const float Size = 600f;
+        /// <summary>Design coordinates are pixels of the 1024 px reference map; K maps them onto the 600 m world (PRD-补充 §2).</summary>
+        public const float K = Size / 1024f;
+        static Vector2 M(float x, float y) => new Vector2(x * K, y * K);
+        static Vector3 R(float x, float y, float level) => new Vector3(x * K, y * K, level);
         public const float HeightScale = 160f;
         public const float LakeLevel = 27f;
-        public const float PlayableInset = 70f;
+        public const float PlayableInset = 42f;
         public const int Seed = 20261122;
 
         // Landmarks
-        public static readonly Vector2 Cabin = new Vector2(862, 322);
+        public static readonly Vector2 Cabin = M(862, 322);              // centre of the cliff-top plateau (SE)
         public const float CabinPlateau = 50f;
-        public const float CabinRadius = 44f;
-        public static readonly Vector2 Campfire = new Vector2(846, 296);
-        public static readonly Vector2 StoneCircle = new Vector2(320, 544);
-        public static readonly Vector2 Watchtower = new Vector2(150, 452);
-        public static readonly Vector2 PlayerStart = new Vector2(840, 305);
-        public const float PlayerStartYaw = 300f;
+        public const float CabinRadius = 22f;
+        /// <summary>From the house door out over the valley (WNW); the ramp leaves the plateau this way.</summary>
+        public static readonly Vector2 CabinFacing = new Vector2(-0.926f, 0.377f);
+        public static readonly Vector2 House = Cabin - CabinFacing * 6f;
+        public static readonly Vector2 RampTop = Cabin + CabinFacing * 19f + new Vector2(0.377f, 0.926f) * 4f;
+        public static readonly Vector2 RampBottom = RampTop + new Vector2(-40, 18);
+        public static readonly Vector2 Campfire = Cabin + new Vector2(-3, -11);
+        public static readonly Vector2 StoneCircle = M(320, 544);
+        public static readonly Vector2 Watchtower = M(150, 452);
+        public static readonly Vector2 PlayerStart = House + CabinFacing * 6.5f;
+        public static readonly float PlayerStartYaw = Mathf.Atan2(CabinFacing.x, CabinFacing.y) * Mathf.Rad2Deg;
 
         // Lake (ellipse) + islands
-        public static readonly Vector2 LakeCentre = new Vector2(812, 826);
-        public static readonly Vector2 LakeRadii = new Vector2(190, 105);
-        public static readonly Vector3[] Islands = { new Vector3(846, 830, 42), new Vector3(735, 800, 13) };
+        public static readonly Vector2 LakeCentre = M(812, 826);
+        public static readonly Vector2 LakeRadii = M(190, 105);
+        public static readonly Vector3[] Islands = { new Vector3(846 * K, 830 * K, 42 * K), new Vector3(735 * K, 800 * K, 13 * K) };
 
         // River: x, z, water level. Steep level drops are the waterfalls (NW highland).
         public static readonly Vector3[] RiverIn =
         {
-            new Vector3(215, 960, 64), new Vector3(245, 905, 63), new Vector3(258, 884, 52),
-            new Vector3(285, 842, 51), new Vector3(300, 822, 41), new Vector3(338, 794, 40),
-            new Vector3(366, 778, 32), new Vector3(450, 736, 30.6f), new Vector3(560, 698, 29.2f),
-            new Vector3(640, 684, 28f), new Vector3(700, 700, LakeLevel),
+            R(215, 960, 64), R(245, 905, 63), R(258, 884, 52),
+            R(285, 842, 51), R(300, 822, 41), R(338, 794, 40),
+            R(366, 778, 32), R(450, 736, 30.6f), R(560, 698, 29.2f),
+            R(640, 684, 28f), R(700, 700, LakeLevel),
         };
         public static readonly Vector3[] RiverOut =
         {
-            new Vector3(722, 742, LakeLevel), new Vector3(748, 664, 26.9f), new Vector3(744, 600, 26.6f),
-            new Vector3(745, 528, 26.2f), new Vector3(722, 468, 25.8f), new Vector3(684, 425, 25.4f),
-            new Vector3(660, 405, 25.2f),
+            R(722, 742, LakeLevel), R(748, 664, 26.9f), R(744, 600, 26.6f),
+            R(745, 528, 26.2f), R(722, 468, 25.8f), R(684, 425, 25.4f),
+            R(660, 405, 25.2f),
         };
-        public static readonly Vector2 Pond = new Vector2(655, 400);
-        public const float PondRadius = 26f;
-        public const float RiverHalfWidth = 6.5f;
-        public static readonly Vector2 Bridge = new Vector2(748, 664);
+        public static readonly Vector2 Pond = M(655, 400);
+        public const float PondRadius = 26f * K;
+        public const float RiverHalfWidth = 5f;
+        public static readonly Vector2 Bridge = M(748, 664);
 
         // Paths (dirt): polylines between landmarks.
         public static readonly Vector2[][] Paths =
         {
-            new[] { new Vector2(838, 300), new Vector2(800, 330), new Vector2(770, 360), new Vector2(700, 380), new Vector2(600, 420), new Vector2(480, 470), new Vector2(380, 520), new Vector2(330, 544) },
-            new[] { new Vector2(330, 544), new Vector2(260, 520), new Vector2(200, 480), new Vector2(160, 455) },
-            new[] { new Vector2(330, 544), new Vector2(380, 610), new Vector2(470, 650), new Vector2(560, 650), new Vector2(660, 640), new Vector2(748, 664), new Vector2(790, 700) },
-            new[] { new Vector2(480, 470), new Vector2(500, 380), new Vector2(470, 280), new Vector2(420, 200) },
-            new[] { new Vector2(560, 650), new Vector2(540, 760), new Vector2(500, 850) },
+            new[] { House + CabinFacing * 4f, RampTop, RampBottom, M(700, 380), M(600, 420), M(480, 470), M(380, 520), M(330, 544) },
+            new[] { M(330, 544), M(260, 520), M(200, 480), M(160, 455) },
+            new[] { M(330, 544), M(380, 610), M(470, 650), M(560, 650), M(660, 640), M(748, 664), M(790, 700) },
+            new[] { M(480, 470), M(500, 380), M(470, 280), M(420, 200) },
+            new[] { M(560, 650), M(540, 760), M(500, 850) },
         };
 
         public enum Region { Meadow, AutumnForest, DeepForest, Riverbank, Lakeshore, Highland, Cabin, Edge }
@@ -72,13 +81,13 @@ namespace WildPartner.World
             float lake = LakeDistance(x, z);
             if (lake < 1.25f) return Region.Lakeshore;
             if (RiverDistance(x, z, out _) < RiverHalfWidth + 14) return Region.Riverbank;
-            if (x < 330 && z > 800) return Region.Highland;
+            if (x < 330 * K && z > 800 * K) return Region.Highland;
             // Autumn forest: north band + lake shores
-            if (z > 700 && x > 330 && x < 1000 && lake < 1.9f) return Region.AutumnForest;
-            if (z > 760 && x > 330) return Region.AutumnForest;
+            if (z > 700 * K && x > 330 * K && x < 1000 * K && lake < 1.9f) return Region.AutumnForest;
+            if (z > 760 * K && x > 330 * K) return Region.AutumnForest;
             // Deep green forest: west and south
-            float n = Mathf.PerlinNoise(x * 0.004f + 3, z * 0.004f + 7) * 60;
-            if (x < 230 + n || z < 200 + n || (x > 900 && z < 640)) return Region.DeepForest;
+            float n = Mathf.PerlinNoise(x * 0.007f + 3, z * 0.007f + 7) * 35;
+            if (x < 230 * K + n || z < 200 * K + n || (x > 900 * K && z < 640 * K)) return Region.DeepForest;
             return Region.Meadow;
         }
 

@@ -15,6 +15,8 @@ Shader "WildPartner/ToonTerrain"
         _RampSmooth ("Ramp Softness", Range(0.001, 0.5)) = 0.08
         _ShadowStrength ("Shadow Strength", Range(0, 1)) = 0.8
         _Variation ("Macro Variation", Range(0, 1)) = 0.25
+        [NoScaleOffset] _GroundTint ("Ground Tint (0.5 = neutral, linear)", 2D) = "gray" {}
+        _WorldSize ("World Size (m)", Float) = 1024
     }
     SubShader
     {
@@ -25,11 +27,13 @@ Shader "WildPartner/ToonTerrain"
         TEXTURE2D(_Control); SAMPLER(sampler_Control);
         TEXTURE2D(_Splat0); SAMPLER(sampler_Splat0);
         TEXTURE2D(_Splat1); TEXTURE2D(_Splat2); TEXTURE2D(_Splat3);
+        TEXTURE2D(_GroundTint); SAMPLER(sampler_GroundTint);
         CBUFFER_START(UnityPerMaterial)
             float4 _Control_ST, _Control_TexelSize;
             float4 _Splat0_ST, _Splat1_ST, _Splat2_ST, _Splat3_ST;
             half4 _ShadowColor;
             half _RampSteps, _RampSmooth, _ShadowStrength, _Variation;
+            float _WorldSize;
         CBUFFER_END
         ENDHLSL
 
@@ -83,14 +87,19 @@ Shader "WildPartner/ToonTerrain"
                 half3 c2 = SAMPLE_TEXTURE2D(_Splat2, sampler_Splat0, i.uv * _Splat2_ST.xy + _Splat2_ST.zw).rgb;
                 half3 c3 = SAMPLE_TEXTURE2D(_Splat3, sampler_Splat0, i.uv * _Splat3_ST.xy + _Splat3_ST.zw).rgb;
                 half3 albedo = (c0 * ctrl.r + c1 * ctrl.g + c2 * ctrl.b + c3 * ctrl.a) / max(dot(ctrl, 1), 1e-3);
-                float macro = vn(wuv * 0.012) * 0.6 + vn(wuv * 0.05) * 0.4;
-                albedo *= lerp(1 - _Variation * 0.5, 1 + _Variation * 0.5, macro);
+                // hand-painted macro colour shared with the grass (sun / shade patches, forest floor, tree shade)
+                half3 tint = SAMPLE_TEXTURE2D(_GroundTint, sampler_GroundTint, wuv / _WorldSize).rgb * 2.0;
+                albedo *= lerp(half3(1, 1, 1), tint, 0.85);
+                float macro = vn(wuv * 0.05) * 0.6 + vn(wuv * 0.2) * 0.4;
+                albedo *= lerp(1 - _Variation * 0.3, 1 + _Variation * 0.3, macro);
 
                 half3 n = normalize(i.normalWS);
                 Light main = GetMainLight(TransformWorldToShadowCoord(i.positionWS));
                 half ndl = dot(n, main.direction) * 0.5 + 0.5;
                 half shadow = lerp(1, main.shadowAttenuation, _ShadowStrength);
-                half lit = Ramp(saturate(ndl * 1.25 - 0.15)) * shadow;
+                // mostly smooth: a hard toon ramp on rolling terrain draws contour-line "terraces"
+                half soft = saturate(ndl * 1.25 - 0.15);
+                half lit = lerp(soft, Ramp(soft), 0.2) * shadow;
                 half3 ambient = SampleSH(n);
                 half3 col = albedo * lerp(_ShadowColor.rgb * (ambient + 0.15), main.color * main.distanceAttenuation + ambient * 0.35, lit);
 

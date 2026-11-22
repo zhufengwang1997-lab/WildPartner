@@ -51,7 +51,7 @@ namespace WildPartner.Creatures
                 movement = Movement.Ground, appear = Appear.Day,
                 alertRadius = 12f, alertRate = 0.45f, wanderSpeed = 1.8f, fleeSpeed = 9f, captureSeconds = 2.0f,
                 anim = Player.ProceduralAnimator.Style.Hopper, animScale = 0.8f,
-                anchors = new[] { WorldLayout.StoneCircle + new Vector2(18, -10), new Vector2(430, 500), new Vector2(270, 610) },
+                anchors = new[] { WorldLayout.StoneCircle + new Vector2(18, -10), new Vector2(430, 500) * WorldLayout.K, new Vector2(270, 610) * WorldLayout.K },
                 journalColor = new Color(0.92f, 0.88f, 1f),
             },
             new CreatureDef
@@ -63,7 +63,7 @@ namespace WildPartner.Creatures
                 alertRadius = 20f, alertRate = 0.4f, wanderSpeed = 1.4f, fleeSpeed = 10f, captureSeconds = 2.6f,
                 captureRange = 4.2f,
                 anim = Player.ProceduralAnimator.Style.Quadruped, animScale = 2f,
-                anchors = new[] { new Vector2(560, 800), new Vector2(470, 830), new Vector2(650, 790) },
+                anchors = new[] { new Vector2(560, 800) * WorldLayout.K, new Vector2(470, 830) * WorldLayout.K, new Vector2(650, 790) * WorldLayout.K },
                 journalColor = new Color(0.98f, 0.96f, 0.9f),
             },
             new CreatureDef
@@ -74,7 +74,7 @@ namespace WildPartner.Creatures
                 movement = Movement.Flying, appear = Appear.Night,
                 alertRadius = 6f, alertRate = 0.5f, wanderSpeed = 1.5f, fleeSpeed = 4.5f, captureSeconds = 1.8f,
                 anim = Player.ProceduralAnimator.Style.Flyer, animScale = 0.6f, hover = 1.6f, wanderRadius = 16f,
-                anchors = new[] { new Vector2(812, 708), new Vector2(690, 790), new Vector2(905, 730) },
+                anchors = new[] { new Vector2(812, 708) * WorldLayout.K, new Vector2(690, 790) * WorldLayout.K, new Vector2(905, 730) * WorldLayout.K },
                 journalColor = new Color(0.7f, 0.75f, 1f),
             },
             new CreatureDef
@@ -86,7 +86,7 @@ namespace WildPartner.Creatures
                 alertRadius = 8f, alertRate = 0.35f, wanderSpeed = 1.2f, fleeSpeed = 4f, captureSeconds = 2.2f,
                 captureRange = 7f, wanderRadius = 14f,
                 anim = Player.ProceduralAnimator.Style.Swimmer, animScale = 0.8f,
-                anchors = new[] { new Vector2(746, 640), new Vector2(745, 560), new Vector2(712, 712) },
+                anchors = new[] { new Vector2(746, 640) * WorldLayout.K, new Vector2(745, 560) * WorldLayout.K, new Vector2(712, 712) * WorldLayout.K },
                 journalColor = new Color(1f, 0.6f, 0.6f),
             },
             new CreatureDef
