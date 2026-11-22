@@ -53,6 +53,8 @@ namespace WildPartner.EditorTools
             BuildStoneCircle(landmarks);
             Place("Watchtower", landmarks, WorldLayout.Watchtower, 30, 1f);
             BuildBridge(landmarks);
+            var isl = WorldLayout.Islands[0];
+            Place("MoonFlower", landmarks, new Vector2(isl.x, isl.y), 200, 1.1f, -0.05f);   // the moon butterfly's perch
             BuildBackground(landmarks);
             var vegetation = BuildVegetation();
 
@@ -499,21 +501,25 @@ namespace WildPartner.EditorTools
             var c = WorldLayout.Cabin;
             Vector2 toRamp = (RampTop - c).normalized;
             float yaw = FaceYaw(toRamp);
-            var cabin = Place("Cabin", root, c + new Vector2(8, 6), yaw, 1f, -0.2f);
-            // Tripo door + windows on the front (-Z) wall
-            var rot = Quaternion.Euler(0, yaw, 0);
-            Vector3 basePos = cabin.transform.position;
-            AttachProp("WoodDoor", root, basePos + rot * new Vector3(0, 0.5f, -2.98f), yaw + 180, 1.05f);
-            AttachProp("WoodWindow", root, basePos + rot * new Vector3(-2.2f, 1.6f, -2.98f), yaw + 180, 0.9f);
-            AttachProp("WoodWindow", root, basePos + rot * new Vector3(2.2f, 1.6f, -2.98f), yaw + 180, 0.9f);
-            AttachProp("WallLamp", root, basePos + rot * new Vector3(1.0f, 2.2f, -3.1f), yaw + 180, 0.8f);
+            var cc = c + new Vector2(8, 6);
+            Place("Cabin", root, cc, yaw, 1f, -0.15f);   // Tripo cabin: door, windows, chimney are part of the model
+            // yard dressing in the cabin's frame: x = to the cabin's right (seen from outside), y = out of the door
+            Vector2 side = new Vector2(-toRamp.y, toRamp.x);
+            Vector2 L(float x, float y) => cc + side * x + toRamp * y;
+            Place("Cauldron", root, L(-4.5f, 6.5f), yaw + 25, 1f);
+            Place("Planter", root, L(5.2f, 5.5f), yaw, 1f);
+            Place("Planter", root, L(5.2f, 7.6f), yaw, 1f);
+            Place("Chest", root, L(4.6f, 1.6f), yaw - 75, 1f);
+            Place("Woodpile", root, L(-5.0f, 0.5f), yaw + 90, 1f);
+            Place("Stump", root, L(-2.4f, 9.5f), 40, 1f);
+            Place("Signpost", root, RampTop + new Vector2(-1, -6), yaw + 20, 1f);
 
             var fire = Place("Campfire", root, WorldLayout.Campfire, 0, 1.2f);
             for (int i = 0; i < 3; i++)
             {
                 float a = i / 3f * Mathf.PI * 2 + 0.4f;
                 var p = WorldLayout.Campfire + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 3.4f;
-                Place("LogBench", root, p, -a * Mathf.Rad2Deg + 90, 1f);
+                Place("Stump", root, p, i * 97f, 0.75f);   // Tripo stumps as seats
             }
             var fireLight = new GameObject("FireLight", typeof(Light));
             fireLight.transform.SetParent(fire.transform, false);
@@ -526,8 +532,6 @@ namespace WildPartner.EditorTools
             Place("FlagPole", root, c + new Vector2(-14, 16), yaw, 1f);
             Place("LampPost", root, RampTop + new Vector2(2, -5), yaw + 90, 1f);
             Place("LampPost", root, RampTop + new Vector2(-3, 5), yaw - 90, 1f);
-            Place("Crate", root, c + new Vector2(14, -6), 20, 1f);
-            Place("Crate", root, c + new Vector2(15, -4.5f), 70, 0.8f);
 
             // fence ring along the plateau edge, leaving a gap at the ramp
             float rampAng = Mathf.Atan2(toRamp.y, toRamp.x);
@@ -547,7 +551,7 @@ namespace WildPartner.EditorTools
                 float a = i / 26f * Mathf.PI * 2;
                 if (Mathf.Abs(Mathf.DeltaAngle(a * Mathf.Rad2Deg, rampAng * Mathf.Rad2Deg)) < 18f) continue;
                 var p = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (WorldLayout.CabinRadius + 6f);
-                Place(i % 2 == 0 ? "Cliff_A" : "Cliff_B", root, p, _rng.Next(360), 0.4f + (float)_rng.NextDouble() * 0.2f, -9f);
+                Place("Rock_A", root, p, _rng.Next(360), 3.2f + (float)_rng.NextDouble() * 1.4f, -6f);
             }
             return fire.transform;
         }
@@ -588,13 +592,7 @@ namespace WildPartner.EditorTools
             var root = new GameObject("StoneCircle").transform;
             root.SetParent(parent, false);
             var c = WorldLayout.StoneCircle;
-            for (int i = 0; i < 10; i++)
-            {
-                float a = i / 10f * Mathf.PI * 2;
-                var p = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * 14f;
-                Place(i % 3 == 0 ? "StandingStone_B" : "StandingStone_A", root, p, FaceYaw(c - p), 1f + (float)_rng.NextDouble() * 0.3f, -0.3f);
-            }
-            Place("Altar", root, c, 15, 1.2f, -0.2f);
+            Place("StandingStone", root, c, 15, 1.6f, -0.35f);   // Tripo: the whole ring (9.7 m) in one model
         }
 
         static void BuildBridge(Transform parent)
@@ -603,12 +601,16 @@ namespace WildPartner.EditorTools
             var a0 = WorldLayout.RiverOut[0]; var a1 = WorldLayout.RiverOut[1];
             var flow = new Vector2(a1.x - a0.x, a1.y - a0.y).normalized;
             var across = new Vector2(-flow.y, flow.x);
-            float yaw = Mathf.Atan2(-across.y, across.x) * Mathf.Rad2Deg;
+            float yaw = FaceYaw(across);   // Tripo bridge: deck runs along local Z
             WorldLayout.RiverDistance(b.x, b.y, out float wl);
             var p = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.EnvPrefabs}/Bridge.prefab");
             var go = (GameObject)PrefabUtility.InstantiatePrefab(p, parent);
-            go.transform.SetPositionAndRotation(new Vector3(b.x, wl + 0.9f, b.y), Quaternion.Euler(0, yaw, 0));
-            go.transform.localScale = new Vector3(1.6f, 1, 1.1f);
+            // deck (3.2 m above the pillar feet in the model) level with the banks at both ends
+            const float scale = 1.2f, deck = 3.2f * scale;
+            var e0 = b + across * 7.5f * scale; var e1 = b - across * 7.5f * scale;
+            float bank = Mathf.Max((TerrainH(e0.x, e0.y) + TerrainH(e1.x, e1.y)) * 0.5f, wl + 1.2f);
+            go.transform.SetPositionAndRotation(new Vector3(b.x, bank - deck + 0.1f, b.y), Quaternion.Euler(0, yaw, 0));
+            go.transform.localScale = new Vector3(1.2f, 1, 1.2f);
             GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.NavigationStatic);
         }
 
@@ -790,7 +792,7 @@ namespace WildPartner.EditorTools
                     var region = WorldLayout.RegionAt(px, pz);
                     if (region != WorldLayout.Region.DeepForest && region != WorldLayout.Region.AutumnForest) continue;
                     if (_rng.NextDouble() > 0.2f || Blocked(px, pz, 1.5f, 0.5f)) continue;
-                    Add("Mushrooms", px, pz, (float)_rng.NextDouble() * 360f, 1.5f + (float)_rng.NextDouble() * 1.5f, 0.02f);
+                    Add("Mushrooms", px, pz, (float)_rng.NextDouble() * 360f, 0.9f + (float)_rng.NextDouble() * 1.1f, 0.02f);
                 }
 
             sp.batches = new List<VegetationSpawner.Batch>(batches.Values);

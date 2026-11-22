@@ -587,17 +587,6 @@ def cloud(name, seed):
 
 
 JOBS = {
-    "Tree_Broadleaf_A": lambda: broadleaf("Tree_Broadleaf_A", 1, "leaf_green", height=10),
-    "Tree_Broadleaf_B": lambda: broadleaf("Tree_Broadleaf_B", 2, "leaf_green_dark", height=12),
-    "Tree_Autumn_A": lambda: broadleaf("Tree_Autumn_A", 3, "leaf_autumn", height=9),
-    "Tree_Autumn_B": lambda: broadleaf("Tree_Autumn_B", 4, "leaf_yellow", height=8),
-    "Tree_Birch_A": lambda: broadleaf("Tree_Birch_A", 5, "leaf_birch", "trunk_birch", height=10, birch=True),
-    "Tree_Pine_A": lambda: pine("Tree_Pine_A", 6, 12),
-    "Tree_Pine_B": lambda: pine("Tree_Pine_B", 7, 15),
-    "Bush_A": lambda: bush("Bush_A", 8, "bush", 1.6),
-    "Bush_B": lambda: bush("Bush_B", 9, "leaf_green", 2.2),
-    "Rock_A": lambda: rock("Rock_A", 10, 1.4),
-    "Rock_B": lambda: rock("Rock_B", 11, 2.4),
     "Cliff_A": lambda: rock("Cliff_A", 12, 9, moss=False, big=True),
     "Cliff_B": lambda: rock("Cliff_B", 13, 13, moss=False, big=True),
     "Grass_A": lambda: grass("Grass_A", 14),
@@ -605,25 +594,13 @@ JOBS = {
     "Flowers_White": lambda: flowers("Flowers_White", 16, "flower_white"),
     "Flowers_Orange": lambda: flowers("Flowers_Orange", 17, "flower_orange", 5),
     "Flowers_Purple": lambda: flowers("Flowers_Purple", 18, "flower_purple", 6),
-    "Mushrooms": lambda: mushrooms("Mushrooms", 19),
-    "StandingStone_A": lambda: standing_stone("StandingStone_A", 20),
-    "StandingStone_B": lambda: standing_stone("StandingStone_B", 21, 2.4),
-    "Altar": lambda: altar("Altar"),
-    "Watchtower": lambda: watchtower("Watchtower"),
-    "Bridge": lambda: bridge("Bridge"),
-    "Cabin": lambda: cabin("Cabin"),
-    "Fence": lambda: fence("Fence"),
-    "LampPost": lambda: lamp_post("LampPost"),
-    "FlagPole": lambda: flag_pole("FlagPole"),
     "Campfire": lambda: campfire("Campfire"),
-    "Crate": lambda: crate("Crate"),
-    "LogBench": lambda: log_bench("LogBench"),
-    "Owl": lambda: owl("Owl"),
-    "Koi": lambda: koi("Koi"),
     "SnowMountains": lambda: snow_mountains("SnowMountains"),
     "Cloud_A": lambda: cloud("Cloud_A", 22),
 }
 
+# 2026-11-22: trees, bushes, rocks, buildings, props and creatures now come from the user's Tripo models
+# (tools/tripo/process_all.sh); this script only makes grass, flowers, edge cliffs, mountains, clouds, campfire.
 bpy.ops.wm.read_factory_settings(use_empty=True)
 for k, job in JOBS.items():
     if ONLY and k not in ONLY:

@@ -46,6 +46,9 @@ namespace WildPartner.EditorTools
                 new View { name = "07_overview", pos = new Vector3(512, 360, -120), look = new Vector3(512, 30, 520), hour = 12f },
                 new View { name = "08_night", pos = G(842, 300, 2.2f), look = G(866, 324, 3f), hour = 22f },
                 new View { name = "09_waterfall", pos = G(345, 768, 7), look = G(258, 884, 3), hour = 12f },
+                new View { name = "10_moonflower", pos = G(841, 825, 1.6f), look = G(846, 830, 1.0f), hour = 19.5f },
+                new View { name = "11_stones", pos = G(298, 524, 2.5f), look = G(320, 544, 1.5f), hour = 15f },
+                new View { name = "12_yard", pos = G(852, 312, 2.2f), look = G(868, 328, 1.6f), hour = 15.5f },
             };
             var rt = new RenderTexture(1600, 900, 24, RenderTextureFormat.ARGB32) { antiAliasing = 1 };
             var tex = new Texture2D(1600, 900, TextureFormat.RGB24, false);

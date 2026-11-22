@@ -21,6 +21,19 @@ namespace WildPartner.EditorTools
         public const string Gen = "Assets/_Game/Models/Generated";
         public const string Chars = "Assets/_Game/Models/Characters";
         public const string Props = "Assets/_Game/Models/Props";
+        public const string Tripo = "Assets/_Game/Models/Tripo";
+        /// <summary>Tripo model -> prefab names it is saved as (the names the world builder places).</summary>
+        static readonly Dictionary<string, string[]> TripoTargets = new Dictionary<string, string[]>
+        {
+            { "Tree_Broadleaf", new[] { "Tree_Broadleaf_A", "Tree_Broadleaf_B" } },
+            { "Tree_Autumn", new[] { "Tree_Autumn_A", "Tree_Autumn_B" } },
+            { "Tree_Birch", new[] { "Tree_Birch_A" } },
+            { "Tree_Pine", new[] { "Tree_Pine_A", "Tree_Pine_B" } },
+            { "Bush", new[] { "Bush_A", "Bush_B" } },
+            { "Rock_Large", new[] { "Rock_A" } },
+            { "Rock_Small", new[] { "Rock_B" } },
+            { "Mushroom", new[] { "Mushrooms" } },
+        };
         public const string MatDir = "Assets/_Game/Materials";
         public const string EnvPrefabs = "Assets/_Game/Prefabs/Env";
         public const string CreaturePrefabs = "Assets/_Game/Prefabs/Creatures";
@@ -73,6 +86,41 @@ namespace WildPartner.EditorTools
                 PrefabUtility.SaveAsPrefabAsset(go, $"{EnvPrefabs}/{name}.prefab");
                 Object.DestroyImmediate(go);
             }
+
+            // Tripo world models (PRD-补充 §4): own texture, LODs from <Name>_LOD#, saved under the prefab names the
+            // world builder already uses, so they replace the script-generated stand-ins one for one.
+            if (Directory.Exists(Tripo))
+                foreach (var path in Directory.GetFiles(Tripo, "*.fbx"))
+                {
+                    string name = Path.GetFileNameWithoutExtension(path);
+                    var tex = AssetDatabase.LoadAssetAtPath<Texture2D>($"{Tripo}/{name}_BaseColor.png");
+                    bool wind = name.StartsWith("Tree") || name == "Bush";
+                    var mat = ToonMat("M_T_" + name, tex, m =>
+                    {
+                        m.SetFloat("_RampSteps", 3);
+                        m.SetColor("_RimColor", new Color(1, 0.95f, 0.8f, wind ? 0.25f : 0.15f));
+                        if (wind) { m.EnableKeyword("_WIND"); m.SetFloat("_Wind", 1); m.SetFloat("_WindStrength", name == "Bush" ? 0.08f : 0.25f); m.SetFloat("_Translucency", 0.3f); }
+                        else { m.DisableKeyword("_WIND"); m.SetFloat("_Wind", 0); }
+                        if (name == "LampPost" || name == "MoonFlower") m.SetFloat("_Emission", name == "MoonFlower" ? 0.6f : 0.12f);
+                    });
+                    var model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                    foreach (var target in TripoTargets.TryGetValue(name, out var t) ? t : new[] { name })
+                    {
+                        var go = (GameObject)PrefabUtility.InstantiatePrefab(model);
+                        go.name = target;
+                        foreach (var r in go.GetComponentsInChildren<MeshRenderer>())
+                        {
+                            r.sharedMaterial = mat;
+                            if (name == "Mushroom" || name == "Book") r.shadowCastingMode = ShadowCastingMode.Off;
+                        }
+                        ConfigureLods(go, name);
+                        AddColliders(go, name);
+                        if (name == "LampPost") AddLamp(go, new Vector3(0, 2.55f, 0), 7f);
+                        if (name == "MoonFlower") AddLamp(go, new Vector3(0, 1.3f, 0), 5f).color = new Color(0.75f, 0.7f, 1f);
+                        PrefabUtility.SaveAsPrefabAsset(go, $"{EnvPrefabs}/{target}.prefab");
+                        Object.DestroyImmediate(go);
+                    }
+                }
 
             // Tripo props (door/window/furniture) with their own textures
             foreach (var path in Directory.GetFiles(Props, "*.fbx"))
@@ -187,9 +235,19 @@ namespace WildPartner.EditorTools
                 var c = go.AddComponent<CapsuleCollider>();
                 c.radius = 0.15f; c.height = 3f; c.center = new Vector3(0, 1.5f, 0);
             }
+            else if (name == "Cauldron" || name == "Chest" || name == "Woodpile" || name == "Planter" || name == "Stump" || name == "Signpost")
+            {
+                var lod0 = FindLod(go, name, 0);
+                if (lod0)
+                {
+                    var b = lod0.GetComponent<MeshFilter>().sharedMesh.bounds;
+                    var bc = lod0.gameObject.AddComponent<BoxCollider>();
+                    bc.center = b.center; bc.size = b.size * 0.92f;
+                }
+            }
         }
 
-        static void AddLamp(GameObject go, Vector3 pos, float range)
+        static Light AddLamp(GameObject go, Vector3 pos, float range)
         {
             var l = new GameObject("Light", typeof(Light)).GetComponent<Light>();
             l.transform.SetParent(go.transform, false);
@@ -198,6 +256,7 @@ namespace WildPartner.EditorTools
             l.color = new Color(1f, 0.75f, 0.45f);
             l.shadows = LightShadows.None;
             l.gameObject.AddComponent<World.NightLight>();
+            return l;
         }
 
         // ------------------------------------------------------------------------------------------
