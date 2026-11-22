@@ -8,7 +8,7 @@ namespace WildPartner.Core
     {
         public static bool Blocked;
         /// <summary>Automation hooks (smoke test): behave as if the capture / sneak keys were held.</summary>
-        public static bool SimCapture, SimSneak, SimJump, SimInteract;
+        public static bool SimCapture, SimSneak, SimJump, SimInteract, SimRun;
         public static Vector2 SimMove;
 
         static Keyboard K => Keyboard.current;
@@ -48,7 +48,7 @@ namespace WildPartner.Core
 
         public static float Zoom => Blocked || M == null ? 0 : M.scroll.ReadValue().y;
 
-        public static bool Run => !Blocked && ((K != null && K.leftShiftKey.isPressed) || (G != null && G.leftStickButton.isPressed));
+        public static bool Run => !Blocked && (SimRun || (K != null && K.leftShiftKey.isPressed) || (G != null && G.leftStickButton.isPressed));
         public static bool Sneak => !Blocked && (SimSneak || (K != null && (K.leftCtrlKey.isPressed || K.cKey.isPressed)) || (G != null && G.rightShoulder.isPressed));
         public static bool CaptureHeld => !Blocked && (SimCapture || (K != null && K.eKey.isPressed) || (G != null && G.buttonWest.isPressed));
         public static bool JumpPressed => !Blocked && (SimJump || (K != null && K.spaceKey.wasPressedThisFrame) || (G != null && G.buttonSouth.wasPressedThisFrame));

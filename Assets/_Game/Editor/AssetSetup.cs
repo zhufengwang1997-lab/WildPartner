@@ -643,6 +643,7 @@ namespace WildPartner.EditorTools
             var pc = root.AddComponent<PlayerController>();
             pc.visual = vis.transform;
             if (rigged) vis.GetComponentInChildren<Animator>().gameObject.AddComponent<FootstepRelay>();
+            if (rigged) root.AddComponent<SecondaryMotion>();   // dynamic hair + skirt (试玩反馈 1123b-4)
             if (rigged) { var sp = ClipSpeeds("Witch"); pc.animRunSpeed = sp.Run; pc.jumpWindup = sp.JumpLaunch; pc.animSneakSpeed = sp.Sneak; }
             if (!rigged)   // fallback when there is no Blender-rigged model yet
             {

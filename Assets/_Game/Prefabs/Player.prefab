@@ -1096,6 +1096,7 @@ GameObject:
   - component: {fileID: 8923601604760580709}
   - component: {fileID: 1718930093460284394}
   - component: {fileID: 5618871993920938638}
+  - component: {fileID: 2902803328288171470}
   - component: {fileID: 5259816210848128378}
   m_Layer: 0
   m_Name: Player
@@ -1170,6 +1171,32 @@ MonoBehaviour:
   animRunSpeed: 3.195
   animSneakSpeed: 0.523
   Frozen: 0
+--- !u!114 &2902803328288171470
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7378362402782845635}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a45a2c4ddb5b84914961d6f6ff804986, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: WildPartner.Runtime::WildPartner.Player.SecondaryMotion
+  hairStiffness: 34
+  hairDamping: 3.2
+  hairDrag: 1
+  hairDragVertical: 0.5
+  hairMaxAngle: 80
+  hairTipLength: 0.14
+  skirtStiffness: 60
+  skirtDamping: 3.6
+  skirtDrag: 1.9
+  skirtDragVertical: 0.6
+  skirtMaxAngle: 50
+  skirtLength: 0.28
+  swayForce: 0.6
+  verticalInertia: 0.25
 --- !u!114 &5259816210848128378
 MonoBehaviour:
   m_ObjectHideFlags: 0
