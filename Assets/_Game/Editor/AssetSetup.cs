@@ -303,6 +303,13 @@ namespace WildPartner.EditorTools
             return v;
         }
 
+        [System.Serializable] public class Speeds { public float Walk = 1f, Run = 3.2f; }
+        public static Speeds ClipSpeeds(string model)
+        {
+            string p = $"{Rigged}/{model}_speeds.json";
+            return File.Exists(p) ? JsonUtility.FromJson<Speeds>(File.ReadAllText(p)) : new Speeds();
+        }
+
         static UnityEditor.Animations.AnimatorController LocomotionController(string model, string fbx)
         {
             Directory.CreateDirectory(AnimDir);
@@ -323,8 +330,9 @@ namespace WildPartner.EditorTools
             tree.blendParameter = "Speed";
             tree.useAutomaticThresholds = false;
             tree.AddChild(Clip("Idle"), 0f);
-            tree.AddChild(Clip("Walk"), 1.64f);
-            tree.AddChild(Clip("Run"), 3.2f);
+            var sp = ClipSpeeds(model);
+            tree.AddChild(Clip("Walk"), sp.Walk);   // thresholds = the clips' own ground speeds -> no foot skating
+            tree.AddChild(Clip("Run"), sp.Run);
             sm.defaultState = state;
             EditorUtility.SetDirty(ctrl);
             return ctrl;
@@ -341,6 +349,7 @@ namespace WildPartner.EditorTools
             cc.height = 1.6f; cc.radius = 0.35f; cc.center = new Vector3(0, 0.82f, 0); cc.stepOffset = 0.45f; cc.slopeLimit = 50;
             var pc = root.AddComponent<PlayerController>();
             pc.visual = vis.transform;
+            if (rigged) pc.animRunSpeed = ClipSpeeds("Witch").Run;
             if (!rigged)   // fallback when there is no Blender-rigged model yet
             {
                 var anim = root.AddComponent<ProceduralAnimator>();

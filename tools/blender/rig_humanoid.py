@@ -6,7 +6,8 @@
 2. armature from a joint table measured on the mesh (normalised height 0..1, see JOINTS)
 3. skin weights: distance-to-bone with region rules (Tripo meshes are thousands of open islands, so
    Blender's heat weighting is not usable); skirt = hips/thigh blend; hat & hair top = head
-4. keyframed in-place loops: Idle, Walk, Run (stylised, eased, asymmetric timing)
+4. keyframed in-place loops: Idle, Walk, Run from smooth periodic gait curves (mocap-like shapes);
+   pelvis height is solved per frame so the stance foot stays on the ground
 5. export FBX (mesh + armature + all actions) and render 6-frame contact sheets per action
 """
 import bpy, sys, os, math, json
@@ -226,65 +227,147 @@ def key(frame):
         pb.keyframe_insert("rotation_quaternion", frame=frame)
         pb.keyframe_insert("location", frame=frame)
 
-def make_action(name, frames, fn):
+bpy.context.scene.render.fps = FPS
+FOOT_REST = {sfx: (arm_data.bones[f"Foot.{sfx}"].head_local.z, arm_data.bones[f"Foot.{sfx}"].tail_local.z) for sfx in ("L", "R")}
+
+def ground_offset():
+    """How far the lowest heel/toe is below (+) or above (-) its rest height, after the current pose."""
+    bpy.context.view_layer.update()
+    d = []
+    for sfx in ("L", "R"):
+        pb = PB[f"Foot.{sfx}"]; h0, t0 = FOOT_REST[sfx]
+        d += [pb.head.z - h0, pb.tail.z - t0]
+    return min(d)
+
+def make_action(name, frames, fn, plant=True, lift=None):
+    """fn(p) -> (rot, loc) for loop phase p in [0,1). With plant=True the pelvis height is solved per
+    frame so the lowest foot touches the ground (the up/down bob then comes from the legs, as in mocap),
+    circularly smoothed; lift(p) adds height on top (run flight phase)."""
     act = bpy.data.actions.new(name)
     rig.animation_data_create(); rig.animation_data.action = act
+    poses = [fn(f / frames) for f in range(frames)]
+    off = [0.0] * frames
+    if plant:
+        for f, (r, l) in enumerate(poses):
+            pose(r, l); off[f] = ground_offset()
+    h = [-off[f] + (lift(f / frames) if lift else 0.0) for f in range(frames)]
+    for _ in range(2 if plant else 0):   # circular low-pass: no kinks where the supporting foot changes
+        h = [(h[f - 2] + 2 * h[f - 1] + 3 * h[f] + 2 * h[(f + 1) % frames] + h[(f + 2) % frames]) / 9 for f in range(frames)]
     for f in range(frames + 1):
-        p = (f % frames) / frames
-        pose(*fn(p)); key(f)
+        r, l = poses[f % frames]
+        l = dict(l); hz = Vector(l.get("Hips", Vector()))
+        hz.z += h[f % frames]
+        l["Hips"] = hz
+        pose(r, l); key(f)
     act.use_fake_user = True
     act.frame_range = (0, frames)
     return act
 
-def ease(x):  # smooth 0..1..0 bump on [0,1]
-    return 0.5 - 0.5 * math.cos(2 * math.pi * x)
-
 TAU = 2 * math.pi
-def legs(p, swing, knee_swing, knee_load, foot_amp, arm_swing, elbow, arm_in, lean, bob, twist):
+
+def curve(pts, q):
+    """Periodic Catmull-Rom through (phase, value) keys on [0,1) -> smooth, loopable joint curves."""
+    q %= 1.0
+    n = len(pts)
+    for i in range(n):
+        x0, _ = pts[i]; x1, _ = pts[(i + 1) % n]
+        span = (x1 - x0) % 1.0 or 1.0
+        t = ((q - x0) % 1.0) / span
+        if t <= 1.0:
+            p0, p1, p2, p3 = (pts[(i + k) % n][1] for k in (-1, 0, 1, 2))
+            return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3)
+    return pts[0][1]
+
+# Gait curves (degrees) per leg, phase 0 = that foot's heel strike. Shapes follow captured human gait
+# (as in Mixamo's in-place walk/run): hip flex +, knee flex +, ankle dorsiflex +.
+WALK = dict(
+    hip=[(0.0, 28), (0.15, 21), (0.35, 3), (0.52, -15), (0.62, -12), (0.75, 12), (0.88, 30)],
+    knee=[(0.0, 4), (0.12, 17), (0.3, 8), (0.45, 6), (0.6, 36), (0.72, 58), (0.85, 28), (0.95, 6)],
+    ankle=[(0.0, 2), (0.08, -6), (0.3, 4), (0.48, 10), (0.6, -16), (0.7, -8), (0.82, 4), (0.94, 3)],
+)
+RUN = dict(
+    hip=[(0.0, 36), (0.12, 22), (0.3, -14), (0.4, -24), (0.55, 0), (0.72, 44), (0.88, 50)],
+    knee=[(0.0, 18), (0.12, 38), (0.28, 22), (0.42, 40), (0.55, 100), (0.68, 112), (0.82, 70), (0.94, 30)],
+    ankle=[(0.0, -2), (0.12, 12), (0.3, -10), (0.42, -26), (0.58, -12), (0.75, 6), (0.9, 6)],
+)
+
+def gait(p, G, arm_amp, arm_lag, elbow, elbow_amp, arm_in, lean, sway, pel_yaw, pel_roll, chest_counter, head_amp):
     rot, loc = {}, {}
     for sfx, side, ph in (("L", 1, 0.0), ("R", -1, 0.5)):
         q = (p + ph) % 1.0
-        s = swing * math.cos(TAU * q)                        # + = leg forward
-        # knee: big flex while the leg swings forward (q 0.5..1), small load flex just after contact
-        k = knee_swing * max(0.0, math.sin(TAU * (q - 0.5))) ** 1.3 + knee_load * max(0.0, math.sin(TAU * q * 2)) * (q < 0.5)
-        ft = foot_amp * (math.cos(TAU * q) * 0.6 - 0.8 * max(0, math.sin(TAU * (q - 0.25))) * (q < 0.6))
-        rot[f"Thigh.{sfx}"] = [("x", -s)]
-        rot[f"Shin.{sfx}"] = [("x", k)]
-        rot[f"Foot.{sfx}"] = [("x", -ft - k * 0.25 + s * 0.2)]
-        a = -s / swing * arm_swing if swing else 0
-        rot[f"UpperArm.{sfx}"] = [("y", -arm_in * side), ("x", a)]
-        rot[f"ForeArm.{sfx}"] = [("x", -(elbow + max(0, -a) * 0.4))]
-        rot[f"Hand.{sfx}"] = [("x", -6)]
-    hip_yaw = twist * math.cos(TAU * p)
-    rot["Hips"] = [("z", hip_yaw), ("y", 2.5 * math.sin(TAU * p)), ("x", lean * 0.4)]
-    rot["Spine"] = [("z", -hip_yaw * 0.5), ("x", lean * 0.3)]
-    rot["Chest"] = [("z", -hip_yaw * 0.7), ("x", lean * 0.3)]
-    rot["Neck"] = [("z", hip_yaw * 0.4), ("x", -lean * 0.4)]
-    rot["Head"] = [("x", -lean * 0.3 + 1.5 * math.cos(TAU * 2 * p))]
-    loc["Hips"] = Vector((0.006 * HEIGHT * math.sin(TAU * p), 0, -bob * HEIGHT * (0.5 + 0.5 * math.cos(TAU * 2 * p))))
+        rot[f"Thigh.{sfx}"] = [("x", -curve(G["hip"], q))]
+        rot[f"Shin.{sfx}"] = [("x", curve(G["knee"], q))]
+        rot[f"Foot.{sfx}"] = [("x", -curve(G["ankle"], q))]
+        # arms swing opposite to the same-side leg, lagging it slightly (follow-through);
+        # the forearm lags the upper arm again and bends more on the forward swing
+        qa = (q - arm_lag) % 1.0
+        a = -math.cos(TAU * qa)                                # +1 = arm forward
+        rot[f"UpperArm.{sfx}"] = [("y", arm_in * side), ("x", -arm_amp * a), ("z", -4 * side * a)]   # +y*side lowers the arm from the A-pose
+        qf = (qa - 0.06) % 1.0
+        f = 0.5 + 0.5 * -math.cos(TAU * qf)
+        rot[f"ForeArm.{sfx}"] = [("x", -(elbow + elbow_amp * f))]
+        rot[f"Hand.{sfx}"] = [("x", -8 - 6 * f), ("z", 6 * side)]
+    # pelvis: yaw brings the forward leg's hip forward, roll drops the swing side, sway over the stance foot
+    c2, s1 = math.cos(TAU * p), math.sin(TAU * p)
+    s2 = math.sin(TAU * 2 * p)
+    yaw = pel_yaw * c2
+    roll = pel_roll * s1
+    rot["Hips"] = [("x", lean * 0.35), ("z", yaw), ("y", roll)]
+    rot["Spine"] = [("x", lean * 0.3 + 1.2 * s2), ("z", -yaw * 0.45 * chest_counter), ("y", -roll * 0.6)]
+    rot["Chest"] = [("x", lean * 0.35 - 0.8 * s2), ("z", -yaw * 0.85 * chest_counter), ("y", -roll * 0.5)]
+    # head stays level and looks ahead (counter-rotates the torso), with a little bob-lag nod
+    rot["Neck"] = [("x", -lean * 0.45), ("z", yaw * 0.35), ("y", roll * 0.3)]
+    rot["Head"] = [("x", -lean * 0.4 + head_amp * math.sin(TAU * 2 * p - 1.0)), ("z", yaw * 0.25)]
+    loc["Hips"] = Vector((sway * HEIGHT * s1, 0, 0))
     return rot, loc
 
 def idle(p):
-    br = math.sin(TAU * p)                       # breathing
-    sw = math.sin(TAU * p + 0.6)                 # slow weight shift
+    """Relaxed contrapposto: weight on the right leg, left knee soft, slow breathing (2 per loop),
+    gentle weight drift and an occasional look around. All terms are loop harmonics -> seamless."""
+    br = math.sin(TAU * 2 * p)                    # breathing
+    dr = math.sin(TAU * p)                        # slow weight drift
+    look = math.sin(TAU * p + 0.8)
     rot = {
-        "Hips": [("y", 1.2 * sw)], "Spine": [("x", 1.0 * br), ("y", -0.6 * sw)], "Chest": [("x", 1.6 * br)],
-        "Neck": [("x", -1.0 * br)], "Head": [("y", 2.0 * math.sin(TAU * p + 1.4)), ("z", 3.0 * math.sin(TAU * p * 1 + 2.2))],
-        "Thigh.L": [("y", -1.2 * sw)], "Thigh.R": [("y", -1.2 * sw)], "Shin.L": [("x", 2 + 2 * max(0, sw))], "Shin.R": [("x", 2 + 2 * max(0, -sw))],
+        "Hips": [("y", -4.5 - 1.2 * dr), ("z", 3 + 1.0 * dr)],
+        "Spine": [("x", 0.8 * br), ("y", 2.4 + 0.6 * dr)],
+        "Chest": [("x", 1.4 * br), ("y", 1.6 + 0.5 * dr), ("z", -1.5 - 0.8 * dr)],
+        "Neck": [("x", -0.8 * br), ("y", 0.8)],
+        "Head": [("z", 7 * look), ("x", -1.5 + 2.0 * math.sin(TAU * p + 2.4)), ("y", -2 + 1.5 * look)],
+        "Thigh.R": [("y", 4.5 + 1.2 * dr), ("x", -1)],
+        "Shin.R": [("x", 1.5)],
+        "Foot.R": [("y", -4.5)],
+        "Thigh.L": [("y", 3.5 + 1.2 * dr), ("x", -7 - 1.5 * dr), ("z", 6)],
+        "Shin.L": [("x", 13 + 2.5 * dr)],
+        "Foot.L": [("x", -4), ("y", -3.5)],
     }
     for sfx, side in (("L", 1), ("R", -1)):
-        rot[f"UpperArm.{sfx}"] = [("y", -6 * side - 1.5 * side * br), ("x", 2 * br)]
-        rot[f"ForeArm.{sfx}"] = [("x", -12 - 2 * br)]
-        rot[f"Hand.{sfx}"] = [("x", -8), ("z", 4 * side)]
-    return rot, {"Hips": Vector((0.004 * HEIGHT * sw, 0, -0.002 * HEIGHT * (1 + br)))}
+        lag = 0.4 if side > 0 else 0.0
+        sway = math.sin(TAU * p + lag)
+        rot[f"UpperArm.{sfx}"] = [("y", (21 + 1.2 * br) * side), ("x", 3 + 2 * sway + 0.8 * br), ("z", 4 * side)]
+        rot[f"ForeArm.{sfx}"] = [("x", -16 - 3 * sway)]
+        rot[f"Hand.{sfx}"] = [("x", -10 - 2 * sway), ("z", 8 * side)]
+    return rot, {"Hips": Vector((-0.022 * HEIGHT - 0.004 * HEIGHT * dr, 0, 0.0012 * HEIGHT * br))}
 
 acts = {
-    "Idle": make_action("Idle", 72, idle),
-    "Walk": make_action("Walk", 24, lambda p: legs(p, swing=27, knee_swing=48, knee_load=10, foot_amp=12, arm_swing=18,
-                                                    elbow=14, arm_in=10, lean=4, bob=0.012, twist=6)),
-    "Run":  make_action("Run", 16, lambda p: legs(p, swing=36, knee_swing=80, knee_load=18, foot_amp=14, arm_swing=28,
-                                                   elbow=55, arm_in=16, lean=14, bob=0.03, twist=9)),
+    "Idle": make_action("Idle", 150, idle),
+    "Walk": make_action("Walk", 26, lambda p: gait(p, WALK, arm_amp=17, arm_lag=0.04, elbow=12, elbow_amp=14, arm_in=20,
+                                                    lean=3, sway=0.012, pel_yaw=6, pel_roll=4, chest_counter=1.0, head_amp=1.2)),
+    "Run":  make_action("Run", 20, lambda p: gait(p, RUN, arm_amp=30, arm_lag=0.03, elbow=62, elbow_amp=26, arm_in=15,
+                                                   lean=11, sway=0.008, pel_yaw=9, pel_roll=3, chest_counter=1.2, head_amp=2.0),
+                        lift=lambda p: 0.025 * HEIGHT * max(0.0, math.sin(TAU * 2 * (p - 0.27))) ** 1.5),
 }
+# ground speed of each clip at 1x = speed of the planted foot sliding back (in-place loop); Unity's
+# blend-tree thresholds use these so the feet do not skate (written next to the FBX as JSON)
+def clip_speed(act):
+    rig.animation_data.action = act; n = int(act.frame_range[1]); sc = bpy.context.scene
+    ys, zs = [], []
+    for f in range(n + 1):
+        sc.frame_set(f); bpy.context.view_layer.update()
+        hd = PB["Foot.L"].head; ys.append(hd.y); zs.append(hd.z - FOOT_REST["L"][0])
+    v = sorted((ys[f + 1] - ys[f]) * FPS for f in range(n) if zs[f] < 0.015 and zs[f + 1] < 0.015)
+    return round(v[len(v) // 2], 3) if v else 0.0
+SPEEDS = {k: clip_speed(a) for k, a in acts.items() if k != "Idle"}
+print("SPEEDS " + json.dumps(SPEEDS))
 rig.animation_data.action = acts["Idle"]
 bpy.ops.object.mode_set(mode="OBJECT")
 
@@ -292,6 +375,7 @@ bpy.ops.object.mode_set(mode="OBJECT")
 os.makedirs(OUT, exist_ok=True)
 for o in (rig, body): o.select_set(True)
 fbx = os.path.join(OUT, NAME + ".fbx")
+with open(os.path.join(OUT, NAME + "_speeds.json"), "w") as fh: json.dump(SPEEDS, fh)
 bpy.ops.export_scene.fbx(filepath=fbx, use_selection=True, object_types={"ARMATURE", "MESH"},
                          apply_unit_scale=True, apply_scale_options="FBX_SCALE_UNITS",
                          axis_forward="-Z", axis_up="Y", path_mode="STRIP", embed_textures=False,

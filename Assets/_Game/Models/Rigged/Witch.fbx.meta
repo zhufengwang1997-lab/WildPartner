@@ -36,7 +36,7 @@ ModelImporter:
       takeName: Witch_Rig|Idle
       internalID: -3679183672389985951
       firstFrame: 0
-      lastFrame: 72
+      lastFrame: 150
       wrapMode: 0
       orientationOffsetY: 0
       level: 0
@@ -65,7 +65,7 @@ ModelImporter:
       takeName: Witch_Rig|Run
       internalID: 2821430803122526495
       firstFrame: 0
-      lastFrame: 16
+      lastFrame: 20
       wrapMode: 0
       orientationOffsetY: 0
       level: 0
@@ -94,7 +94,7 @@ ModelImporter:
       takeName: Witch_Rig|Walk
       internalID: 8680369900993338023
       firstFrame: 0
-      lastFrame: 24
+      lastFrame: 26
       wrapMode: 0
       orientationOffsetY: 0
       level: 0
