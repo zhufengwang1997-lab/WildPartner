@@ -15,7 +15,7 @@ namespace WildPartner.Audio
     {
         const int Rate = 44100;
         AudioSource _wind, _rain, _music, _sfx;
-        AudioClip _step, _chime, _fail;
+        AudioClip _step, _chime, _fail, _meow;
         System.Random _rng = new System.Random(7);
 
         void Start()
@@ -31,6 +31,14 @@ namespace WildPartner.Audio
             if (PlayerController.Instance) PlayerController.Instance.Footstep += () => _sfx.PlayOneShot(_step, PlayerController.Instance.Running ? 0.5f : 0.3f);
             CaptureSystem.Captured += _ => _sfx.PlayOneShot(_chime, 0.7f);
             CaptureSystem.Interrupted += _ => _sfx.PlayOneShot(_fail, 0.5f);
+            _meow = MakeMeow();
+            Creature.Meowed += p =>
+            {
+                float d = PlayerController.Instance ? Vector3.Distance(p, PlayerController.Instance.transform.position) : 5f;
+                _sfx.pitch = 0.95f + (float)_rng.NextDouble() * 0.12f;
+                _sfx.PlayOneShot(_meow, Mathf.Lerp(0.55f, 0.15f, d / 25f));
+                _sfx.pitch = 1f;
+            };
         }
 
         AudioSource Loop(AudioClip c, float vol)
@@ -85,6 +93,31 @@ namespace WildPartner.Audio
                 d[i] = y * env * 0.8f;
             }
             var c = AudioClip.Create("step", n, 1, Rate, false); c.SetData(d, 0); return c;
+        }
+
+        /// <summary>"mi-aow": a voiced glide (pitch up then down) through a moving formant, ~0.5 s.</summary>
+        AudioClip MakeMeow()
+        {
+            int n = (int)(Rate * 0.5f);
+            var d = new float[n];
+            double ph = 0;
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)n;
+                float f0 = Mathf.Lerp(520f, 760f, Mathf.SmoothStep(0, 1, t / 0.35f)) - Mathf.SmoothStep(0, 1, (t - 0.35f) / 0.65f) * 300f;
+                ph += 2 * Mathf.PI * f0 / Rate;
+                float formant = Mathf.Lerp(1200f, 2400f, Mathf.Sin(Mathf.PI * Mathf.Clamp01(t * 1.3f)));   // "i" -> "a" -> "ow"
+                float s = 0;
+                for (int h = 1; h <= 8; h++)
+                {
+                    float fh = f0 * h, w = Mathf.Exp(-Mathf.Pow((fh - formant) / 700f, 2)) + 0.25f / h;
+                    s += w * Mathf.Sin((float)(ph * h));
+                }
+                float env = Mathf.SmoothStep(0, 1, t / 0.06f) * (1 - Mathf.SmoothStep(0, 1, (t - 0.7f) / 0.3f));
+                float breath = ((float)_rng.NextDouble() * 2 - 1) * 0.04f;
+                d[i] = (s * 0.22f + breath) * env;
+            }
+            var c = AudioClip.Create("meow", n, 1, Rate, false); c.SetData(d, 0); return c;
         }
 
         static float Midi(int note) => 440f * Mathf.Pow(2, (note - 69) / 12f);

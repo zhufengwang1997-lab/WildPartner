@@ -34,6 +34,7 @@ namespace WildPartner.Core
 
         public event Action<FlowState> StateChanged;
         public event Action<string> Toast;
+        public void ShowToast(string text) => Toast?.Invoke(text);
         public event Action<string[]> Hints;
 
         Creature[] _creatures;

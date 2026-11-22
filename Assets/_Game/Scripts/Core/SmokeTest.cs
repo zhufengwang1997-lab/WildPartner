@@ -89,6 +89,7 @@ namespace WildPartner.Core
             var weather = Weather.Instance;
             var creatures = FindObjectsByType<Creature>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             int shot = 3;
+            bool leadTested = false;
             foreach (var def in CreatureDefs.All)
             {
                 var c = creatures.First(x => x.defId == def.id);
@@ -111,6 +112,25 @@ namespace WildPartner.Core
                 float t = 0;
                 while (c.Current == Creature.State.Hidden && t < 5f) { t += Time.deltaTime; yield return null; }
                 Step(c.Current != Creature.State.Hidden, $"{def.name}：条件（{def.ConditionText}）满足后出现");
+
+                if (!leadTested && c.Current != Creature.State.Hidden)
+                {
+                    // the cat leads the way: 20 m from the first wild creature, walk a few steps
+                    leadTested = true;
+                    var cat = creatures.First(x => x.defId == "cat");
+                    var cp = c.transform.position; var away = player.transform.position - cp; away.y = 0; away.Normalize();
+                    var st = cp + away * 20f; st.y = Creature.GroundHeight(st.x, st.z) + 0.1f;
+                    player.Teleport(st, Quaternion.LookRotation(-away).eulerAngles.y);
+                    yield return new WaitForSeconds(0.6f);
+                    cat.LeadSoon();
+                    GameInput.SimMove = new Vector2(0, 1);
+                    yield return new WaitForSeconds(0.5f);
+                    GameInput.SimMove = Vector2.zero;
+                    float tl = 0;
+                    while (!cat.IsLeading && tl < 6f) { tl += Time.deltaTime; yield return null; }
+                    Step(cat.IsLeading, "小猫带路：跑到前面停下、抬爪朝未收集的宠物叫");
+                    if (cat.IsLeading) yield return Shot($"{shot++:00}_cat_lead");
+                }
 
                 bool caught = false;
                 for (int attempt = 0; attempt < 3 && !caught; attempt++)

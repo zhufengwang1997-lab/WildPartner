@@ -9,6 +9,7 @@ namespace WildPartner.Core
         public static bool Blocked;
         /// <summary>Automation hooks (smoke test): behave as if the capture / sneak keys were held.</summary>
         public static bool SimCapture, SimSneak, SimJump;
+        public static Vector2 SimMove;
 
         static Keyboard K => Keyboard.current;
         static Mouse M => Mouse.current;
@@ -19,7 +20,7 @@ namespace WildPartner.Core
             get
             {
                 if (Blocked) return Vector2.zero;
-                Vector2 v = Vector2.zero;
+                Vector2 v = SimMove;
                 if (K != null)
                 {
                     if (K.wKey.isPressed || K.upArrowKey.isPressed) v.y += 1;

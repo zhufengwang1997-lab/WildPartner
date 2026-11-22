@@ -450,6 +450,14 @@ namespace WildPartner.EditorTools
             foreach (var from in new[] { loco, sLick })
                 T(from, sRub, 0.25f).AddCondition(C, 3, "Mood");
             T(sRub, loco, 0.3f).AddCondition(NC, 3, "Mood");
+            var point = clip("Point");
+            if (point)
+            {
+                // Mood 4: leading the witch — stops, raises a paw, meows towards a wild creature
+                var sPoint = S("Point", point);
+                foreach (var from in new[] { loco, sLick, sRub }) T(from, sPoint, 0.25f).AddCondition(C, 4, "Mood");
+                T(sPoint, loco, 0.3f).AddCondition(NC, 4, "Mood");
+            }
         }
 
         /// <summary>Deer grazing (玩法设计 tier 2): Mood 1 -> GrazeDown (head goes down, with a glance up first) ->

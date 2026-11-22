@@ -35,7 +35,7 @@ namespace WildPartner.EditorTools
         {
             PoseShots(cam, env, rt, tex, "cat", W(WorldLayout.PlayerStart + WorldLayout.CabinFacing * 1.6f, 0f),   // on the dirt path, not in tall grass
                       new Vector3(-WorldLayout.CabinFacing.y, 0, WorldLayout.CabinFacing.x), 1f,
-                      new[] { ("Idle", 2.1f), ("Walk", 0.2f), ("Run", 0.13f), ("SitLick", 1.3f), ("BellyUp", 1.0f), ("Rub", 0.45f) });
+                      new[] { ("Idle", 2.1f), ("Walk", 0.2f), ("Run", 0.13f), ("SitLick", 1.3f), ("BellyUp", 1.0f), ("Rub", 0.45f), ("Point", 0.5f) });
             var deer = CreatureDefs.Get("white_deer");
             PoseShots(cam, env, rt, tex, "white_deer", W(deer.anchors[0], 0f), new Vector3(1, 0, 0.3f), 2.3f,
                       new[] { ("Idle", 1.5f), ("Walk", 0.3f), ("Run", 0.2f), ("GrazeDown", 0.6f), ("Graze", 0.4f), ("Graze", 1.1f) });

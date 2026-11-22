@@ -434,7 +434,26 @@ def rub(p):
     r.update({"Tail1": [("x", -10)], "Tail2": [("x", -14)], "Tail3": [("z", 6 * q)], "Tail4": [("z", 12 * q), ("x", 20)]})
     return r, {}
 
+# ---------------------------------------------------------------------------- pointing the way
+def point(p):
+    """Leading the witch to a wild creature: alert stance, one front paw raised, head up and ears pricked
+    towards it, tail straight up with a hooked tip; two meows (head lifts, ears tip back a little)."""
+    meow = curve([(0.0, 0), (0.1, 0), (0.15, 1), (0.26, 0.2), (0.32, 0), (0.55, 0), (0.6, 1), (0.72, 0.2), (0.78, 0)], p)
+    br = math.sin(TAU * 3 * p); paw = 0.85 + 0.15 * math.sin(TAU * p)
+    r = {"Hips": [("x", 3)], "Spine": [("x", -2 - 0.6 * br)], "Chest": [("x", -3 + 0.6 * br)],
+         "Neck": [("x", -10 - 6 * meow)], "Head": [("x", -6 - 10 * meow), ("y", 4 * math.sin(TAU * p))],
+         "Ear.L": [("x", -10 + 12 * meow), ("y", flick(p, 0.4) * 20)], "Ear.R": [("x", -10 + 12 * meow), ("y", -flick(p, 0.9) * 18)],
+         "FrontUpper.L": [("x", -32 * paw)], "FrontLower.L": [("x", 70 * paw)], "FrontPaw.L": [("x", 40 * paw)],
+         "FrontUpper.R": [("x", 4)],
+         "Tail1": [("x", -12)], "Tail2": [("x", -16)], "Tail3": [("x", 6), ("z", 4 * math.sin(TAU * 2 * p))],
+         "Tail4": [("x", 34), ("z", 10 * math.sin(TAU * 2 * p - 0.6))]}
+    return r, {}
+
+def flick(p, at, w=0.02):
+    return max(0.0, 1 - abs(((p - at + 0.5) % 1.0) - 0.5) / w)
+
 acts = {
+    "Point": make_action("Point", 90, point),
     "Idle": make_action("Idle", 150, idle),
     "Walk": make_action("Walk", 22, walk),
     "Run": make_action("Run", 12, run, lift=lambda p: 0.05 * S * max(0.0, math.sin(TAU * (p - 0.55))) ** 1.5),

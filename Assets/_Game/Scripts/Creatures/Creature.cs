@@ -29,6 +29,14 @@ namespace WildPartner.Creatures
         /// <summary>0 none, 1 sitting + licking, 2 lying belly-up, 3 rubbing against the witch (cat only).</summary>
         public int Mood { get; private set; }
 
+        /// <summary>The cat meowed (leading the witch to a creature) at this position.</summary>
+        public static event System.Action<Vector3> Meowed;
+        static readonly System.Collections.Generic.List<Creature> s_all = new System.Collections.Generic.List<Creature>();
+        float _leadCooldown = 25f, _leadTime, _nextMeow;
+        Vector3 _leadSpot;
+        Creature _leadTarget;
+        bool _leadArrived;
+
         Animator _animator;
         float _stillTime, _rubTime, _pauseUntil;
         bool _hasMood, _paused;
@@ -52,6 +60,7 @@ namespace WildPartner.Creatures
             _agent = GetComponent<NavMeshAgent>();
             _anim = GetComponent<ProceduralAnimator>();
             _visual = transform.Find("Visual");
+            s_all.Add(this);
             _animator = GetComponentInChildren<Animator>();
             if (_animator && _animator.runtimeAnimatorController)
                 foreach (var prm in _animator.parameters) if (prm.nameHash == MoodId) _hasMood = true;
@@ -316,11 +325,11 @@ namespace WildPartner.Creatures
             if (Def.id == "cat" && Current == State.Companion && player)
             {
                 Vector3 toCat = transform.position - player.transform.position; toCat.y = 0;
-                bool approaching = player.Speed > 0.4f && toCat.magnitude < 1.6f && Vector3.Dot(player.transform.forward, toCat.normalized) > 0.6f;
+                bool approaching = !_leadArrived && player.Speed > 0.4f && toCat.magnitude < 1.6f && Vector3.Dot(player.transform.forward, toCat.normalized) > 0.6f;
                 if (approaching && _rubTime <= 0f && Mood != 3) _rubTime = 2.6f;
                 _rubTime -= dt;
                 _stillTime = player.Speed < 0.1f && speed < 0.25f ? _stillTime + dt : 0f;
-                mood = _rubTime > 0f ? 3 : _stillTime > 20f ? 2 : _stillTime > 2.5f ? 1 : 0;
+                mood = _leadArrived ? 4 : _rubTime > 0f ? 3 : _stillTime > 20f ? 2 : _stillTime > 2.5f ? 1 : 0;
                 if (mood == 3)
                 {
                     // walk up to her legs and lean in
@@ -354,8 +363,66 @@ namespace WildPartner.Creatures
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), 1 - Mathf.Exp(-6f * Time.deltaTime));
         }
 
+        void OnDestroy() => s_all.Remove(this);
+        /// <summary>Cat is standing ahead of the witch, pointing at a wild creature (smoke test / UI).</summary>
+        public bool IsLeading => _leadArrived;
+        public void LeadSoon() => _leadCooldown = 0f;
+
+        /// <summary>Cat only (玩法设计 tier 2 "带路"): every so often while the witch is on the move, if a wild
+        /// creature is out within 50 m, the cat trots a few metres ahead towards it, stops, raises a paw and
+        /// meows at it (Mood 4). Returns true while leading (the formation follow is skipped).</summary>
+        bool UpdateLead(PlayerController player)
+        {
+            float dt = Time.deltaTime;
+            _leadCooldown -= dt;
+            if (_leadTime <= 0f && _leadCooldown <= 0f && player.Speed > 0.5f
+                && Vector3.Distance(transform.position, player.transform.position) < 12f)
+            {
+                _leadCooldown = 40f;
+                Creature best = null; float bd = 50f;
+                foreach (var c in s_all)
+                {
+                    if (c == this || (c.Current != State.Wander && c.Current != State.Alert)) continue;
+                    float d = Vector3.Distance(c.transform.position, player.transform.position);
+                    if (d < bd) { bd = d; best = c; }
+                }
+                if (best && bd > 8f)
+                {
+                    Vector3 dir = best.transform.position - player.transform.position; dir.y = 0; dir.Normalize();
+                    Vector3 spot = player.transform.position + dir * 4.5f;
+                    if (NavMesh.SamplePosition(spot, out var hit, 3f, NavMesh.AllAreas)) spot = hit.position;
+                    _leadTarget = best; _leadSpot = spot; _leadTime = 7f; _leadArrived = false;
+                    Debug.Log($"[Cat] leading towards {best.Def.id} ({bd:0} m)");
+                }
+            }
+            if (_leadTime <= 0f) { _leadArrived = false; return false; }
+            _leadTime -= dt;
+            if (!_leadTarget || (_leadTarget.Current != State.Wander && _leadTarget.Current != State.Alert)) { _leadTime = 0f; return false; }
+            Vector3 to = _leadSpot - transform.position; to.y = 0;
+            if (!_leadArrived && to.magnitude < 0.6f)
+            {
+                _leadArrived = true; _nextMeow = 0.3f;
+                Debug.Log("[Cat] pointing + meow");
+                if (GameFlow.Instance) GameFlow.Instance.ShowToast("喵——小猫好像发现了什么，朝它看的方向找找吧。");
+            }
+            if (_agent && _agent.enabled)
+            {
+                _agent.isStopped = _leadArrived;
+                if (!_leadArrived) { _agent.speed = player.runSpeed; _agent.SetDestination(_leadSpot); }
+            }
+            if (_leadArrived)
+            {
+                Vector3 look = _leadTarget.transform.position - transform.position; look.y = 0;
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(look), 300f * dt);
+                _nextMeow -= dt;
+                if (_nextMeow <= 0f) { Meowed?.Invoke(transform.position); _nextMeow = 1.5f; }   // two meows per Point loop (3 s)
+            }
+            return true;
+        }
+
         void UpdateCompanion(PlayerController player)
         {
+            if (Def.id == "cat" && Def.movement == Movement.Ground && UpdateLead(player)) return;
             // Formation slots behind the player so companions never stack on each other.
             float ang = 140f + CompanionSlot * 22f;
             float side = CompanionSlot % 2 == 0 ? 1 : -1;
