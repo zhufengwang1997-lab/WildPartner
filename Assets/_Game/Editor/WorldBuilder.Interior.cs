@@ -154,7 +154,7 @@ namespace WildPartner.EditorTools
             ci.bed = bed.transform.position;
             ci.bedLie = P(RoomW / 2 - 0.85f, 0.6f, RoomD / 2 - 1.15f - 0.97f + 0.3f);   // feet end of the mattress
             ci.bedYaw = 180;   // feet towards the door, head on the pillow by the back wall
-            // 1123c-A5: the WakeUp clip (tools/blender/add_wakeup.py) ends with her standing 0.35 m in front of the
+            // 1123c-A5: the WakeUp clip (tools/blender/add_clips.py) ends with her standing 0.35 m in front of the
             // bed's near edge, facing away from it; it starts with her lying on the mattress
             var bedB = new Bounds(bed.transform.position, Vector3.zero);
             foreach (var r in bed.GetComponentsInChildren<Renderer>()) bedB.Encapsulate(r.bounds);
@@ -162,7 +162,7 @@ namespace WildPartner.EditorTools
             Debug.Log($"[World] bed bounds {bedB.min - O} .. {bedB.max - O} (room space); stand {ci.bedStand - O}");
             foreach (var o in AssetDatabase.LoadAllAssetsAtPath($"{AssetSetup.Rigged}/Witch.fbx"))
                 if (o is AnimationClip c && c.name == "WakeUp") ci.wakeClip = c;
-            if (!ci.wakeClip) Debug.LogWarning("[World] Witch.fbx has no WakeUp clip (run tools/blender/add_wakeup.py)");
+            if (!ci.wakeClip) Debug.LogWarning("[World] Witch.fbx has no WakeUp clip (run tools/blender/add_clips.py)");
             ci.book = book.transform.position;
             ci.lights = lamps.ToArray();
             ci.fireLight = fireLight;

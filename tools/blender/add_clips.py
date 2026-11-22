@@ -1,6 +1,9 @@
-"""Add the one-shot "WakeUp" clip to the rigged witch (试玩反馈 1123c-A5) and re-export Witch.fbx.
+"""Add extra clips to the rigged witch and re-export Witch.fbx (all other clips untouched):
+  WakeUp (试玩反馈 1123c-A5), Swim (B3, breaststroke loop), Climb (B4, hand-over-hand loop), ClimbOver (B4, one-shot).
 
-    blender -b Art/Rigged/Witch_rig.blend -P tools/blender/add_wakeup.py -- <out_dir> [render_dir]
+    blender -b Art/Rigged/Witch_rig.blend -P tools/blender/add_clips.py -- <out_dir> [render_dir]
+
+WakeUp:
 
 Opens the saved rig (all other clips untouched), keys WakeUp in the same conventions as rig_humanoid.py
 (bone axes in the character's rest frame; Hips location in armature space; she faces -Y) and exports with the
@@ -88,16 +91,77 @@ def wake(t):
     rot["Hips"] = rot["Hips"]
     return rot, {"Hips": Vector((x, y, z - 0.775))}
 
-if "WakeUp" in bpy.data.actions: bpy.data.actions.remove(bpy.data.actions["WakeUp"])
-act = bpy.data.actions.new("WakeUp")
-rig.animation_data_create(); rig.animation_data.action = act
-for f in range(FRAMES + 1):
-    r, l = wake(f / FRAMES)
-    pose(r, l)
-    for pb in PB:
-        pb.keyframe_insert("rotation_quaternion", frame=f); pb.keyframe_insert("location", frame=f)
-act.use_fake_user = True
-act.frame_range = (0, FRAMES)
+TAU = 2 * math.pi
+
+def swim(p):
+    """Breaststroke, 1.2 s loop, body prone just under the surface (the game holds her feet ~1 m under the water
+    line). Phases: glide (arms forward, legs together) -> pull (arms sweep out and back) -> recover (hands under the
+    chest, knees drawn up) -> kick (legs whip round and together while the arms shoot forward)."""
+    pull = track([(0, 0), (0.15, 0), (0.45, 1), (0.6, 0.7), (0.75, 0), (1, 0)], p)       # arms out/back
+    tuck = track([(0, 0), (0.4, 0), (0.6, 1), (0.72, 0.6), (0.85, 0), (1, 0)], p)       # hands to chest
+    kick = track([(0, 0.1), (0.45, 0.2), (0.62, 1), (0.8, 0.15), (1, 0.1)], p)          # knees up and out
+    bob = math.sin(TAU * p - 1.0)
+    rot = {"Hips": [("x", 74 + 4 * bob)], "Spine": [("x", -6 - 4 * pull)], "Chest": [("x", -8 - 6 * pull)],
+           "Neck": [("x", -28 - 6 * pull)], "Head": [("x", -34 - 6 * pull)]}
+    for sfx, side in (("L", 1), ("R", -1)):
+        rot[f"UpperArm.{sfx}"] = [("y", (-150 + 70 * pull + 40 * tuck) * side), ("x", -20 + 30 * tuck), ("z", (10 * pull) * side)]
+        rot[f"ForeArm.{sfx}"] = [("x", -8 - 70 * tuck - 20 * pull)]
+        rot[f"Hand.{sfx}"] = [("x", -10 + 20 * pull), ("z", 10 * side)]
+        rot[f"Thigh.{sfx}"] = [("x", -(8 + 55 * kick)), ("z", 22 * kick * side)]
+        rot[f"Shin.{sfx}"] = [("x", 10 + 95 * kick)]
+        rot[f"Foot.{sfx}"] = [("x", 40 - 50 * kick), ("z", -20 * kick * side)]
+    return rot, {"Hips": Vector((0, 0.05, 0.12 + 0.03 * bob))}
+
+def climb(p):
+    """Hand-over-hand climbing, 1.4 s loop (two moves): facing the wall (-Y), one hand reaches high while the other
+    pulls down to the shoulder, the opposite knee steps up. The game moves her up the wall; the clip moves the limbs."""
+    poses = {}
+    rot = {"Hips": [("x", 8)], "Spine": [("x", 4)], "Chest": [("x", 2)], "Neck": [("x", -10)], "Head": [("x", -14 + 4 * math.sin(TAU * 2 * p))]}
+    for sfx, side, ph in (("L", 1, 0.0), ("R", -1, 0.5)):
+        reach = 0.5 + 0.5 * math.cos(TAU * (p - ph))        # 1 = hand high
+        step = 0.5 + 0.5 * math.cos(TAU * (p - ph - 0.5))   # opposite knee up
+        rot[f"UpperArm.{sfx}"] = [("y", (-125 - 45 * reach) * side), ("x", 24 + 8 * reach), ("z", 6 * side)]
+        rot[f"ForeArm.{sfx}"] = [("x", -10 - 95 * (1 - reach))]
+        rot[f"Hand.{sfx}"] = [("x", -25), ("z", 8 * side)]
+        rot[f"Thigh.{sfx}"] = [("x", -(22 + 48 * step)), ("z", 10 * side)]
+        rot[f"Shin.{sfx}"] = [("x", 30 + 62 * step)]
+        rot[f"Foot.{sfx}"] = [("x", -10 - 10 * step)]
+    hips_up = 0.04 * math.sin(TAU * 2 * p)
+    return rot, {"Hips": Vector((0, 0.16, hips_up - 0.08))}
+
+def climb_over(t):
+    """0.9 s: from hanging at the ledge (root already on the top, body 1 m lower and 0.45 m back) -> elbows lock,
+    chest over the edge, a knee up onto it -> standing."""
+    up = track([(0, 0), (0.35, 0.45), (0.65, 0.85), (1, 1)], t)
+    lean = track([(0, 10), (0.3, 30), (0.55, 45), (0.8, 15), (1, 0)], t)
+    knee = track([(0, 0.2), (0.45, 0.3), (0.65, 1), (0.85, 0.4), (1, 0)], t)
+    arm = track([(0, 1), (0.35, 0.6), (0.6, 0.15), (1, 0)], t)
+    rot = {"Hips": [("x", lean * 0.6)], "Spine": [("x", lean * 0.3)], "Chest": [("x", lean * 0.2)], "Neck": [("x", -8 * (1 - t))], "Head": [("x", -10 * (1 - t))]}
+    for sfx, side, lag in (("L", 1, 0.0), ("R", -1, 0.08)):
+        k = track([(0, 0.2), (0.45 + lag, 0.3), (0.65 + lag, 1), (0.88, 0.3), (1, 0)], t)
+        rot[f"UpperArm.{sfx}"] = [("y", (21 - 130 * arm) * side), ("x", -60 * arm), ("z", 4 * side)]
+        rot[f"ForeArm.{sfx}"] = [("x", -16 - 30 * arm)]
+        rot[f"Hand.{sfx}"] = [("x", -10 + 50 * arm), ("z", 8 * side)]
+        rot[f"Thigh.{sfx}"] = [("x", -(10 + 85 * k))]
+        rot[f"Shin.{sfx}"] = [("x", 10 + 100 * k)]
+        rot[f"Foot.{sfx}"] = [("x", -10 * k)]
+    return rot, {"Hips": Vector((0, 0.45 * (1 - up), -1.0 * (1 - up)))}
+
+def bake(name, frames, fn, loop):
+    if name in bpy.data.actions: bpy.data.actions.remove(bpy.data.actions[name])
+    act = bpy.data.actions.new(name)
+    rig.animation_data_create(); rig.animation_data.action = act
+    for f in range(frames + 1):
+        r, l = fn((f % frames) / frames if loop else f / frames)
+        pose(r, l)
+        for pb in PB:
+            pb.keyframe_insert("rotation_quaternion", frame=f); pb.keyframe_insert("location", frame=f)
+    act.use_fake_user = True
+    act.frame_range = (0, frames)
+    return act
+
+act = bake("WakeUp", FRAMES, wake, False)
+extra = {"Swim": bake("Swim", 36, swim, True), "Climb": bake("Climb", 42, climb, True), "ClimbOver": bake("ClimbOver", 27, climb_over, False)}
 rig.animation_data.action = bpy.data.actions["Idle"]
 bpy.ops.object.mode_set(mode="OBJECT")
 
@@ -137,4 +201,16 @@ if RENDER:
             sc.frame_set(round(t * FRAMES))
             sc.render.filepath = os.path.join(RENDER, f"wake_{view}_{i}.png")
             bpy.ops.render.render(write_still=True)
+    for an, a2 in extra.items():
+        rig.animation_data.action = a2
+        bed.hide_render = True
+        n = int(a2.frame_range[1])
+        for view, d in (("front", Vector((0.5, -1, 0.35))), ("side", Vector((1, 0.15, 0.25)))):
+            d.normalize()
+            cam.location = Vector((0, 0, 0.8)) + d * 6
+            cam.rotation_euler = (-d).to_track_quat("-Z", "Y").to_euler()
+            for i in range(6):
+                sc.frame_set(round(i * n / 6))
+                sc.render.filepath = os.path.join(RENDER, f"{an}_{view}_{i}.png")
+                bpy.ops.render.render(write_still=True)
     print("WAKEUP rendered")

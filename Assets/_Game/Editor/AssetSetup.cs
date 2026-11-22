@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.AI;
@@ -180,7 +181,7 @@ namespace WildPartner.EditorTools
             return m;
         }
 
-        static Material WaterMat(string name, float depth, float flow, float streak, float wave)
+        public static Material WaterMat(string name, float depth, float flow, float streak, float wave)
         {
             string path = $"{MatDir}/{name}.mat";
             var m = AssetDatabase.LoadAssetAtPath<Material>(path);
@@ -195,7 +196,17 @@ namespace WildPartner.EditorTools
             m.SetColor("_DeepColor", lake ? new Color(0.09f, 0.29f, 0.56f, 0.94f) : new Color(0.12f, 0.38f, 0.60f, 0.9f));
             m.SetColor("_FoamColor", new Color(1f, 1f, 0.97f, 1f));
             m.SetFloat("_FoamWidth", lake ? 0.9f : 0.5f);
-            m.SetFloat("_Reflect", lake ? 0.55f : fall ? 0.15f : 0.45f);
+            m.SetFloat("_Reflect", lake ? 0.85f : fall ? 0.15f : 0.7f);
+            // 1123c-C2: two scrolling normal maps, refraction, probe reflection, glints
+            m.SetTexture("_NormalA", AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/_Game/Textures/Water/WaterNormal_A.png"));
+            m.SetTexture("_NormalB", AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/_Game/Textures/Water/WaterNormal_B.png"));
+            m.SetFloat("_River", lake ? 0f : 1f);
+            m.SetFloat("_NormalTileA", lake ? 11f : 6f);
+            m.SetFloat("_NormalTileB", lake ? 2.8f : 1.8f);
+            m.SetFloat("_NormalStrength", lake ? 0.8f : 1.0f);
+            m.SetFloat("_GlintAmount", 1.5f);
+            m.SetFloat("_Refraction", 0.035f);
+            m.SetFloat("_ProbeMix", lake ? 0.6f : 0.45f);
             EditorUtility.SetDirty(m);
             return m;
         }
@@ -226,7 +237,7 @@ namespace WildPartner.EditorTools
             if (!r0) return;
             if (!lg) lg = go.AddComponent<LODGroup>();
             var list = new List<LOD>();
-            float[] heights = name.StartsWith("Tree") ? new[] { 0.22f, 0.07f, 0.012f }
+            float[] heights = name.StartsWith("Tree") ? new[] { 0.30f, 0.10f, 0.03f, 0.008f }   // 1123c-C1: 48k / 14k / 4k / 1k tris
                             : name.StartsWith("Bush") ? new[] { 0.12f, 0.025f }
                             : name.StartsWith("Cliff") || name == "Watchtower" || name == "Cabin" ? new[] { 0.08f, 0.004f }
                             : name.StartsWith("Rock") || name.StartsWith("StandingStone") ? new[] { 0.06f, 0.012f }
@@ -613,6 +624,53 @@ namespace WildPartner.EditorTools
             }
         }
 
+        /// <summary>1123c-B3/B4 (witch only): bool "Swim" -> Swim loop (sped up by the code with the swim speed);
+        /// bool "Climb" -> Climb loop; trigger "ClimbOver" -> one-shot mantle back to Locomotion. Any state can enter
+        /// them (she can fall into the water or grab a wall from a jump).</summary>
+        static void AddSwimClimb(UnityEditor.Animations.AnimatorController ctrl, UnityEditor.Animations.AnimatorStateMachine sm,
+                                 UnityEditor.Animations.AnimatorState loco, string fbx)
+        {
+            AnimationClip Find(string n) { foreach (var o in AssetDatabase.LoadAllAssetsAtPath(fbx)) if (o is AnimationClip c && c.name == n) return c; return null; }
+            AnimationClip swim = Find("Swim"), climb = Find("Climb"), over = Find("ClimbOver");
+            if (!swim || !climb || !over) return;
+            foreach (var st in sm.states.ToArray()) if (st.state.name is "Swim" or "Climb" or "ClimbOver") sm.RemoveState(st.state);
+            foreach (var pr in ctrl.parameters.ToArray()) if (pr.name is "Swim" or "Climb" or "ClimbOver") ctrl.RemoveParameter(pr);
+            ctrl.AddParameter("Swim", AnimatorControllerParameterType.Bool);
+            ctrl.AddParameter("Climb", AnimatorControllerParameterType.Bool);
+            ctrl.AddParameter("ClimbOver", AnimatorControllerParameterType.Trigger);
+            var sSwim = sm.AddState("Swim"); sSwim.motion = swim;
+            var sClimb = sm.AddState("Climb"); sClimb.motion = climb;
+            var sOver = sm.AddState("ClimbOver"); sOver.motion = over;
+            var If = UnityEditor.Animations.AnimatorConditionMode.If; var IfNot = UnityEditor.Animations.AnimatorConditionMode.IfNot;
+            var a = sm.AddAnyStateTransition(sSwim); a.duration = 0.3f; a.hasExitTime = false; a.canTransitionToSelf = false; a.AddCondition(If, 0, "Swim");
+            var b = sm.AddAnyStateTransition(sClimb); b.duration = 0.15f; b.hasExitTime = false; b.canTransitionToSelf = false; b.AddCondition(If, 0, "Climb");
+            var c2 = sm.AddAnyStateTransition(sOver); c2.duration = 0.08f; c2.hasExitTime = false; c2.canTransitionToSelf = false; c2.AddCondition(If, 0, "ClimbOver");
+            var t1 = sSwim.AddTransition(loco); t1.duration = 0.3f; t1.hasExitTime = false; t1.AddCondition(IfNot, 0, "Swim");
+            var t2 = sClimb.AddTransition(loco); t2.duration = 0.2f; t2.hasExitTime = false; t2.AddCondition(IfNot, 0, "Climb");
+            var t3 = sOver.AddTransition(loco); t3.duration = 0.15f; t3.hasExitTime = true; t3.exitTime = 0.95f;
+        }
+
+        /// <summary>Batch (1123c-C2): refresh just the water materials.</summary>
+        public static void WaterOnly()
+        {
+            AssetDatabase.Refresh();
+            WaterMat("M_Water_Lake", 4f, 0.05f, 0.1f, 0.15f);
+            WaterMat("M_Water_River", 2f, 0.9f, 0.35f, 0.08f);
+            AssetDatabase.SaveAssets();
+            Debug.Log("[Setup] water materials refreshed");
+        }
+
+        /// <summary>Batch: add the swim / climb states to the existing Witch controller without rebuilding everything.</summary>
+        public static void PatchWitchSwimClimb()
+        {
+            AssetDatabase.Refresh();
+            var ctrl = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>($"{AnimDir}/Witch.controller");
+            var sm = ctrl.layers[0].stateMachine;
+            AddSwimClimb(ctrl, sm, sm.defaultState, $"{Rigged}/Witch.fbx");
+            EditorUtility.SetDirty(ctrl); AssetDatabase.SaveAssets();
+            Debug.Log("[Setup] witch controller states: " + string.Join(", ", sm.states.Select(s => s.state.name)));
+        }
+
         static UnityEditor.Animations.AnimatorController LocomotionController(string model, string fbx)
         {
             Directory.CreateDirectory(AnimDir);
@@ -641,6 +699,7 @@ namespace WildPartner.EditorTools
             AddMoods(ctrl, sm, state, Clip);
             AddGraze(ctrl, sm, state, Clip);
             AddSneakCapture(ctrl, sm, state, Clip, sp.Sneak);
+            if (model == "Witch") AddSwimClimb(ctrl, sm, state, fbx);
             EditorUtility.SetDirty(ctrl);
             return ctrl;
         }

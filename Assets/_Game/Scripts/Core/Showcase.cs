@@ -91,7 +91,7 @@ namespace WildPartner.Core
             var fs = FishSchools.Instance;
             if (fs && fs.Schools.Count > 0)
             {
-                var sc = fs.Schools[0];   // the river below the bridge
+                var sc = fs.Schools.OrderBy(x => Vector2.Distance(new Vector2(x.centre.x, x.centre.z), WorldLayout.Bridge)).First();   // the river below the bridge
                 Vector3 c = sc.centre;
                 // nearest dry bank: walk out from the school along 24 rays until the ground is above the water
                 // ...on the sun side, so the camera looks away from the sun's glare on the water

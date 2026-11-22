@@ -238,12 +238,34 @@ namespace WildPartner.Core
                 if (def.startleFirst && c.Current != Creature.State.Hidden)
                     yield return StartleCheck(player, c, def, shot++);
 
+                if (def.viewAngle > 0f && c.Current != Creature.State.Hidden)
+                {
+                    // 1123c-B1: in front of the deer, even sneaking, the spell is seen and it runs
+                    var p0 = c.transform.position; var f0 = c.transform.forward; f0.y = 0; f0.Normalize();
+                    var st0 = p0 + f0 * def.captureRange * 0.8f; st0.y = Creature.GroundHeight(st0.x, st0.z) + 0.1f;
+                    GameInput.SimSneak = true;
+                    player.Teleport(st0, Quaternion.LookRotation(-f0).eulerAngles.y);
+                    yield return new WaitForSeconds(0.3f);
+                    GameInput.SimCapture = true;
+                    t = 0;
+                    while (!flow.Save.HasCaught(def.id) && c.Current != Creature.State.Flee && t < def.captureSeconds + 2f) { t += Time.deltaTime; yield return null; }
+                    GameInput.SimCapture = false; GameInput.SimSneak = false;
+                    bool frontFailed = !flow.Save.HasCaught(def.id);
+                    Step(frontFailed, $"{def.name}：正面潜行施法被看见（{(c.Current == Creature.State.Flee ? "逃走" : c.Current.ToString())}，{t:0.0} 秒）");
+                    t = 0;
+                    while (c.Current == Creature.State.Flee && t < 9f) { t += Time.deltaTime; yield return null; }
+                    yield return new WaitForSeconds(1f);
+                }
+
                 bool caught = false;
                 for (int attempt = 0; attempt < 3 && !caught; attempt++)
                 {
-                    // approach: stand inside capture range, sneaking, facing it
+                    // approach: stand inside capture range, sneaking, facing it (a deer: from behind, 1123c-B1)
+                    // a deer: wait until it has its head down grazing (it sees less then), like a player would
+                    if (def.viewAngle > 0f) { t = 0; while (!c.Grazing && t < 10f) { t += Time.deltaTime; yield return null; } }
                     var p = c.transform.position;
                     var dir = (player.transform.position - p); dir.y = 0; dir = dir.sqrMagnitude > 0.01f ? dir.normalized : Vector3.back;
+                    if (def.viewAngle > 0f) { dir = -c.transform.forward; dir.y = 0; dir.Normalize(); }
                     var stand = p + dir * def.captureRange * 0.55f;
                     stand.y = Creature.GroundHeight(stand.x, stand.z) + 0.1f;
                     GameInput.SimSneak = true;
@@ -271,6 +293,10 @@ namespace WildPartner.Core
             Step(flow.AllCaught, $"图鉴集齐 {flow.CaughtCount}/{flow.Total}");
             yield return FishCheck(player, shot++);
             yield return BoundsCheck(player);
+            yield return PetCheck(player, flow);
+            yield return SwimCheck(player, flow);
+            yield return ClimbCheck(player);
+            yield return AmbientCheck(player);
             weather.Set(false, true);
             env.timeOfDay = 19f;
 
@@ -289,6 +315,18 @@ namespace WildPartner.Core
                 QualitySettings.vSyncCount = vs; Application.targetFrameRate = tf;
                 int chunks = GrassRenderer.Instance ? GrassRenderer.Instance.LastChunkCount : 0;
                 Step(ms < 33.3f, $"草地帧时间 {ms:0.0} ms（{1000f / ms:0} fps，{Screen.width}x{Screen.height}，草地块 {chunks}）");
+                // 1123c-C1: the densest forest view (deep forest, looking along the trees), same method
+                var forest = new Vector2(70f, 150f);
+                player.Teleport(new Vector3(forest.x, Creature.GroundHeight(forest.x, forest.y) + 0.2f, forest.y), 20);
+                player.SetCameraOrbit(20f, 8f);
+                QualitySettings.vSyncCount = 0; Application.targetFrameRate = -1;
+                yield return new WaitForSeconds(1.5f);
+                frames = 0; t0 = Time.realtimeSinceStartup;
+                while (Time.realtimeSinceStartup - t0 < 3f) { frames++; yield return null; }
+                float fms = (Time.realtimeSinceStartup - t0) * 1000f / frames;
+                QualitySettings.vSyncCount = vs; Application.targetFrameRate = tf;
+                yield return Shot("46_forest_perf");
+                Step(fms < 33.3f, $"森林帧时间 {fms:0.0} ms（{1000f / fms:0} fps，{Screen.width}x{Screen.height}，深绿林里看向树林）");
                 yield return Shot($"{shot++:00}_meadow_grass");
             }
 
@@ -399,8 +437,263 @@ namespace WildPartner.Core
             Step(player.Recoveries == rec + 1 && q.y > Creature.GroundHeight(q.x, q.z) - 0.3f, $"掉出地形后自动回到安全地点（{q.x:0} , {q.z:0}）");
         }
 
+        /// <summary>1123c-B2: one pet out at a time, J cycles, each ability only with its pet.</summary>
+        IEnumerator PetCheck(PlayerController player, GameFlow flow)
+        {
+            var all = FindObjectsByType<Creature>(FindObjectsSortMode.None);
+            int Shown() => all.Count(c => c.Current == Creature.State.Companion && c.PetShown);
+            var meadow = new Vector2(WorldLayout.StoneCircle.x + 14f, WorldLayout.StoneCircle.y - 8f);
+            player.Teleport(new Vector3(meadow.x, Creature.GroundHeight(meadow.x, meadow.y) + 0.2f, meadow.y), 0);
+            flow.Pets.SetActive("cat");
+            yield return new WaitForSeconds(0.5f);
+            var seen = new List<string>(); bool oneAtATime = Shown() == 1;
+            for (int i = 0; i < PetSwitcher.Order.Length; i++)
+            {
+                GameInput.SimSwitchPet = true; yield return null; GameInput.SimSwitchPet = false;
+                yield return new WaitForSeconds(0.4f);
+                seen.Add(PetSwitcher.Active); oneAtATime &= Shown() == 1;
+                var cur = all.FirstOrDefault(c => c.defId == PetSwitcher.Active && c.Current == Creature.State.Companion);
+                oneAtATime &= cur && cur.PetShown && Vector3.Distance(cur.transform.position, player.transform.position) < 6f;
+            }
+            Step(oneAtATime && seen.Distinct().Count() == PetSwitcher.Order.Length, $"按 J 轮换宠物：{string.Join("→", seen.Select(id => CreatureDefs.Get(id).name))}，每次只有一只在身边");
+
+            // jump height: cat vs moon rabbit
+            float[] tops = new float[2];
+            string[] who = { "cat", "moon_rabbit" };
+            for (int k = 0; k < 2; k++)
+            {
+                flow.Pets.SetActive(who[k]);
+                yield return new WaitForSeconds(0.6f);
+                float y0 = player.transform.position.y, top = y0, tj = 0;
+                GameInput.SimJump = true; yield return null; GameInput.SimJump = false;
+                while (tj < 2f) { tj += Time.deltaTime; top = Mathf.Max(top, player.transform.position.y); yield return null; }
+                tops[k] = top - y0;
+            }
+            Step(tops[1] > tops[0] * 1.5f, $"月影兔在身边时跳得更高：{tops[1]:0.00} m（猫 {tops[0]:0.00} m）");
+
+            // koi: walk on the lake, then switching away puts her on the shore
+            flow.Pets.SetActive("ink_koi");
+            var lake = WorldLayout.LakeCentre + new Vector2(-WorldLayout.LakeRadii.x * 0.6f, 0);
+            player.Teleport(new Vector3(lake.x, WorldLayout.LakeLevel + 0.6f, lake.y), 90);
+            yield return new WaitForSeconds(0.6f);
+            GameInput.SimMove = new Vector2(0, 1);
+            yield return new WaitForSeconds(2f);
+            GameInput.SimMove = Vector2.zero;
+            var pw = player.transform.position;
+            bool onWater = player.WaterWalking && Mathf.Abs(pw.y - (WorldLayout.LakeLevel + 0.15f)) < 0.4f;
+            yield return Shot("41_koi_water_walk");
+            GameInput.SimSwitchPet = true; yield return null; GameInput.SimSwitchPet = false;
+            yield return new WaitForSeconds(0.6f);
+            var pa = player.transform.position;
+            bool ashore = !player.WaterWalking && !(WorldLayout.WaterSurface(pa.x, pa.z, out float wl) && wl > Creature.GroundHeight(pa.x, pa.z) + 0.05f);
+            Step(onWater && ashore, $"锦鲤在身边时踏水而行（脚下高度 {pw.y - WorldLayout.LakeLevel - 0.15f:+0.00;-0.00} m）；在水面按 J 先回到岸上（{(ashore ? "已上岸" : "仍在水里")}）");
+            flow.Pets.SetActive("cat");
+            yield return null;
+        }
+
+        /// <summary>1123c-B3: deep water -> swimming (floating, slower, no jumping); the island undertow pushes her
+        /// back; with the koi she walks over the water onto the island.</summary>
+        IEnumerator SwimCheck(PlayerController player, GameFlow flow)
+        {
+            flow.Pets.SetActive("cat");
+            EnvController.Instance.timeOfDay = 11f;
+            Weather.Instance.Set(false, true);
+            var isl = WorldLayout.Islands[0];
+            // deep open water at least 20 m from both islands' shores (no undertow)
+            var spot = WorldLayout.LakeCentre;
+            for (int i = 0; i < 32; i++)
+            {
+                float a = i * Mathf.PI / 16f;
+                var q = WorldLayout.LakeCentre + new Vector2(Mathf.Cos(a) * WorldLayout.LakeRadii.x, Mathf.Sin(a) * WorldLayout.LakeRadii.y) * 0.55f;
+                if (WorldLayout.Islands.All(s2 => Vector2.Distance(q, new Vector2(s2.x, s2.y)) > s2.z + 20f) && Creature.GroundHeight(q.x, q.y) < WorldLayout.LakeLevel - 2f) { spot = q; break; }
+            }
+            player.Teleport(new Vector3(spot.x, WorldLayout.LakeLevel - 0.6f, spot.y), 0);
+            yield return new WaitForSeconds(1.0f);
+            bool swimming = player.Swimming;
+            var p0 = player.transform.position;
+            GameInput.SimMove = new Vector2(0, 1);
+            yield return new WaitForSeconds(3f);
+            GameInput.SimMove = Vector2.zero;
+            var p1 = player.transform.position;
+            Debug.Log($"[Smoke] swim: Speed {player.Speed:0.00} running {player.Running} sneaking {player.Sneaking} swimming {player.Swimming} p0 {p0} p1 {p1}");
+            float sp = Vector2.Distance(new Vector2(p0.x, p0.z), new Vector2(p1.x, p1.z)) / 3f;
+            float lvl = WorldLayout.LakeLevel + 0.15f;
+            bool floating = Mathf.Abs(p1.y - (lvl - PlayerController.SwimSink)) < 0.25f;
+            float y0 = player.transform.position.y, top = y0;
+            GameInput.SimJump = true; yield return null; GameInput.SimJump = false;
+            for (float t = 0; t < 1f; t += Time.deltaTime) { top = Mathf.Max(top, player.transform.position.y); yield return null; }
+            GameInput.SimMove = new Vector2(0, 1); yield return new WaitForSeconds(0.6f);
+            yield return Shot("42_swim");
+            GameInput.SimMove = Vector2.zero;
+            Step(swimming && player.Swimming && floating && sp > 0.8f && sp < player.walkSpeed && top - y0 < 0.15f,
+                 $"深水里自动游泳：浮在水面（脚下比水面低 {lvl - p1.y:0.00} m），速度 {sp:0.00} m/s（走路 {player.walkSpeed:0.0}），按空格不跳（{top - y0:0.00} m）");
+
+            // undertow: swim (fast) straight at the island for 6 s
+            var from = new Vector2(isl.x - isl.z - 10f, isl.y);
+            player.Teleport(new Vector3(from.x, WorldLayout.LakeLevel - 0.6f, from.y), 90);
+            yield return new WaitForSeconds(0.5f);
+            bool hint = false; System.Action h = () => hint = true; PlayerController.UndertowHit += h;
+            float minD = 999f;
+            GameInput.SimRun = true;
+            for (float t = 0; t < 6f; t += Time.deltaTime)
+            {
+                var q = player.transform.position;
+                // keep heading at the island whatever the camera does
+                var to = new Vector3(isl.x - q.x, 0, isl.y - q.z);
+                player.transform.rotation = Quaternion.LookRotation(to);
+                GameInput.SimMove = CamRel(to);
+                minD = Mathf.Min(minD, to.magnitude - isl.z);
+                yield return null;
+            }
+            GameInput.SimRun = false; GameInput.SimMove = Vector2.zero;
+            PlayerController.UndertowHit -= h;
+            Step(minD > 2f && hint && player.Swimming, $"湖心岛暗流：游 6 秒离岛岸最近 {minD:0.0} m，被推回，出现提示「水流太急，也许需要水中的伙伴帮忙」");
+
+            // koi: up onto the water, walk to the island
+            flow.Pets.SetActive("ink_koi");
+            yield return new WaitForSeconds(0.5f);
+            bool lifted = !player.Swimming && player.WaterWalking;
+            bool climbedBank = false;
+            for (float t = 0; t < 20f; t += Time.deltaTime)
+            {
+                var q = player.transform.position;
+                var to = new Vector3(isl.x - q.x, 0, isl.y - q.z);
+                climbedBank |= player.Climbing;
+                // on the bank: W climbs up; otherwise walk at the island
+                GameInput.SimMove = player.Climbing || player.Mantling ? new Vector2(0, 1) : CamRel(to);
+                if (to.magnitude < isl.z - 6f && !player.Climbing && !player.Mantling) break;
+                yield return null;
+            }
+            GameInput.SimMove = Vector2.zero;
+            var pi = player.transform.position;
+            float di = Vector2.Distance(new Vector2(pi.x, pi.z), new Vector2(isl.x, isl.y));
+            bool onIsland = di < isl.z && !(WorldLayout.WaterSurface(pi.x, pi.z, out float wl2) && wl2 > Creature.GroundHeight(pi.x, pi.z) + 0.05f);
+            yield return Shot("43_koi_island");
+            Step(lifted && onIsland, $"游泳时换成锦鲤：浮上水面踏水走到湖心岛{(climbedBank ? "，爬上岸坡" : "")}（离岛中心 {di:0.0} m，岛半径 {isl.z:0.0} m）");
+            flow.Pets.SetActive("cat");
+            yield return null;
+        }
+
+        /// <summary>1123c-B4: climb the watchtower wall - grab, Ctrl lets go, climb to the top, climb over, reward.</summary>
+        IEnumerator ClimbCheck(PlayerController player)
+        {
+            EnvController.Instance.timeOfDay = 10f;
+            var tw = WorldLayout.Watchtower;
+            float gy = Creature.GroundHeight(tw.x, tw.y);
+            // a side of the tower with stone wall at waist and at 3 m (not the stairs)
+            Vector3 stand = Vector3.zero, face = Vector3.forward; bool found = false;
+            for (int i = 0; i < 16 && !found; i++)
+            {
+                float a = i * Mathf.PI / 8f;
+                var dir = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                var o = new Vector3(tw.x, 0, tw.y) + dir * 9f;
+                float g = Creature.GroundHeight(o.x, o.z);
+                // the wall must run on unbroken (no window sills sticking out) from 1 m up to 6 m
+                bool plain = true;
+                if (!Physics.Raycast(o + Vector3.up * (g + 1.2f - o.y), -dir, out var h1, 9f) || !IsTower(h1.collider.transform) || Mathf.Abs(h1.normal.y) > 0.4f) plain = false;
+                float prev = plain ? h1.distance : 0f;
+                for (float hh = 1.6f; plain && hh <= 6f; hh += 0.4f)
+                {
+                    // the tower tapers, so only sudden steps count (window sills, ledges)
+                    if (!Physics.Raycast(o + Vector3.up * (g + hh - o.y), -dir, out var h2, 9f) || !IsTower(h2.collider.transform) || Mathf.Abs(h2.distance - prev) > 0.15f) plain = false;
+                    else prev = h2.distance;
+                }
+                if (plain)
+                {
+                    var p = h1.point + h1.normal * 0.55f; p.y = Creature.GroundHeight(p.x, p.z) + 0.05f;
+                    stand = p; face = -new Vector3(h1.normal.x, 0, h1.normal.z).normalized; found = true;
+                    Debug.Log($"[Smoke] climb side {i}: wall {h1.collider.name} at {h1.point}");
+                }
+            }
+            if (!found) { Step(false, "攀爬：瞭望塔四周找不到能爬的墙面"); yield break; }
+            player.Teleport(stand, Quaternion.LookRotation(face).eulerAngles.y);
+            player.SetCameraOrbit(Quaternion.LookRotation(face).eulerAngles.y + 150f, 10f);
+            yield return new WaitForSeconds(0.6f);
+            GameInput.SimMove = CamRel(face);
+            float t = 0;
+            while (!player.Climbing && t < 2f) { t += Time.deltaTime; GameInput.SimMove = CamRel(face); yield return null; }
+            bool grabbed = player.Climbing;
+            GameInput.SimMove = new Vector2(0, 1);   // on the wall: W = up
+            yield return new WaitForSeconds(1.2f);
+            GameInput.SimMove = Vector2.zero;
+            float h0 = player.transform.position.y - gy;
+            GameInput.SimSneak = true; yield return null; yield return null; GameInput.SimSneak = false;
+            bool letGo = !player.Climbing;
+            yield return new WaitForSeconds(1.0f);
+            Step(grabbed && letGo && h0 > 0.5f, $"攀爬：走向瞭望塔石墙自动抓住，往上爬了 {h0:0.0} m，按 Ctrl 松手落下");
+
+            // all the way up
+            float maxH = 0f, minSt = 100f; bool over = false, shot = false, top = false;
+            System.Action onTop = () => top = true; PlayerController.TowerTopReached += onTop;
+            System.Action onOver = () => over = true; player.ClimbedOver += onOver;
+            t = 0;
+            while (t < 30f && !over)
+            {
+                t += Time.deltaTime;
+                if (!player.Climbing && !player.Mantling)
+                {
+                    var f = player.transform.forward; if (Vector3.Dot(f, face) < 0.5f) f = face;
+                    GameInput.SimMove = CamRel(face);
+                }
+                else GameInput.SimMove = new Vector2(0, 1);   // on the wall: W = up
+                maxH = Mathf.Max(maxH, player.transform.position.y - gy);
+                minSt = Mathf.Min(minSt, player.Stamina);
+                if (!shot && player.Climbing && player.transform.position.y - gy > 3f) { shot = true; yield return Shot("44_climb_tower"); }
+                yield return null;
+            }
+            GameInput.SimMove = Vector2.zero;
+            yield return new WaitForSeconds(1.2f);
+            float endH = player.transform.position.y - gy;
+            player.SetCameraOrbit(player.transform.eulerAngles.y + 180f, 25f);
+            yield return new WaitForSeconds(0.4f);
+            yield return Shot("45_tower_top");
+            PlayerController.TowerTopReached -= onTop; player.ClimbedOver -= onOver;
+            Step(over && endH > 4f && top && !player.Climbing, $"攀爬：爬上瞭望塔，翻上塔顶（离地 {endH:0.0} m，用时 {t:0.0} 秒，体力最低 {minSt:0}），出现塔顶奖励提示");
+            var pe = player.transform.position;
+            Step(Physics.Raycast(pe + Vector3.up * 0.5f, Vector3.down, 1.0f), "攀爬：翻上去后站在塔顶平台上（不穿模、不悬空）");
+        }
+
+        /// <summary>1123c-B5: scenery animals exist, and from anywhere on dry land some life is within ~40 m
+        /// (about 25 s of walking).</summary>
+        IEnumerator AmbientCheck(PlayerController player)
+        {
+            var amb = AmbientLife.Instance;
+            Step(amb && amb.ButterflyCount >= 20 && amb.DuckCount >= 6 && amb.BirdCount >= 9,
+                 $"环境小动物：蝴蝶 {(amb ? amb.ButterflyCount : 0)} 只、水鸟 {(amb ? amb.DuckCount : 0)} 只、飞鸟 {(amb ? amb.BirdCount : 0)} 只（不可捕捉）");
+            if (!amb) yield break;
+            var life = new List<Vector2>();
+            life.AddRange(amb.LifeSpots.Select(p => new Vector2(p.x, p.z)));
+            life.AddRange(CreatureDefs.All.Where(d => d.homes != null).SelectMany(d => d.homes));
+            if (FishSchools.Instance) life.AddRange(FishSchools.Instance.Schools.Select(sc => new Vector2(sc.centre.x, sc.centre.z)));
+            float worst = 0; Vector2 worstAt = default; int n = 0;
+            float lo = PlayerController.BoundaryInset + 2f, hi = WorldLayout.Size - PlayerController.BoundaryInset - 2f;
+            for (float x = lo; x <= hi; x += 10f)
+                for (float z = lo; z <= hi; z += 10f)
+                {
+                    if (WorldLayout.WaterSurface(x, z, out _)) continue;
+                    var p = new Vector2(x, z); n++;
+                    float d = life.Min(l => Vector2.Distance(l, p));
+                    if (d > worst) { worst = d; worstAt = p; }
+                }
+            Step(worst <= 42f, $"任何地方 25 秒步行（约 40 m）内都有动物：{n} 个采样点里最远的离动物 {worst:0} m（{worstAt.x:0}, {worstAt.y:0}），天上另有飞鸟");
+            yield return null;
+        }
+
+        static bool IsTower(Transform t) { for (; t; t = t.parent) if (t.name.StartsWith("Watchtower")) return true; return false; }
+
+        /// <summary>World direction -> the move input that walks that way with the current camera.</summary>
+        static Vector2 CamRel(Vector3 dir)
+        {
+            var cam = Camera.main; dir.y = 0; dir.Normalize();
+            if (!cam) return new Vector2(dir.x, dir.z);
+            var f = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up).normalized; var r = Vector3.Cross(Vector3.up, f);
+            return new Vector2(Vector3.Dot(dir, r), Vector3.Dot(dir, f));
+        }
+
         IEnumerator RideCheck(PlayerController player, Creature deer, int shotNo)
         {
+            GameFlow.Instance.Pets.SetActive("white_deer");   // 1123c-B2: only the current pet can be ridden
+            yield return null;
             yield return new WaitForSeconds(1.5f);
             var dp = deer.transform.position;
             var st = dp - deer.transform.right * 1.8f; st.y = Creature.GroundHeight(st.x, st.z) + 0.1f;
@@ -432,10 +725,10 @@ namespace WildPartner.Core
             var fs = FishSchools.Instance;
             int n = fs ? fs.Schools.Count : 0;
             bool sizes = fs && fs.Schools.All(x => x.fish.Count >= 6 && x.fish.Count <= 12);
-            Step(n >= 3 && n <= 5 && sizes, $"鱼群：{n} 群，每群 {(fs ? string.Join("/", fs.Schools.Select(x => x.fish.Count)) : "-")} 条");
+            Step(n >= 8 && n <= 10 && sizes, $"鱼群：{n} 群，每群 {(fs ? string.Join("/", fs.Schools.Select(x => x.fish.Count)) : "-")} 条");
             if (!fs || n == 0) yield break;
             var env = EnvController.Instance; env.timeOfDay = 11f;
-            var sc = fs.Schools[0];
+            var sc = fs.Schools.OrderBy(x => Vector2.Distance(new Vector2(x.centre.x, x.centre.z), WorldLayout.Bridge)).First();   // the river below the bridge
             // stand on the bank 9 m from the school, looking at it from above
             Vector3 c = sc.centre;
             Vector3 bank = c; float best = 0;

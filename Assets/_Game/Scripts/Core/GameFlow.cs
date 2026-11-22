@@ -59,8 +59,12 @@ namespace WildPartner.Core
             CaptureSystem.Captured += OnCaptured;
             CaptureSystem.Interrupted += c => Toast?.Invoke($"{c.Def.name}受惊逃走了！试试按住 Ctrl 潜行靠近。");
             CaptureSystem.Startled += c => Toast?.Invoke($"{c.Def.name}竖起了耳朵——站着别动，等它放松下来再试。");
+            Pets = gameObject.AddComponent<PetSwitcher>();
+            PetSwitcher.Switched += d => Toast?.Invoke($"现在陪着你的是{d.name}：{PetSwitcher.Ability(d.id)}");
             Player.PlayerController.EdgeReached += () => Toast?.Invoke("山太陡了，林子也太密——山谷外面去不了，回去吧。");
             Player.PlayerController.Recovered += () => Toast?.Invoke("好像迷路了……回到了刚才走过的地方。");
+            Player.PlayerController.TowerTopReached += () => Toast?.Invoke("登上瞭望塔顶！整个山谷尽收眼底——" + TowerView());
+            Player.PlayerController.UndertowHit += () => Toast?.Invoke("水流太急，也许需要水中的伙伴帮忙。");
             if (!Automation) SetState(FlowState.MainMenu);
         }
 
@@ -78,6 +82,9 @@ namespace WildPartner.Core
         }
 
         // ---------------------------------------------------------------- menu actions
+        /// <summary>Current-pet rotation (1123c-B2).</summary>
+        public PetSwitcher Pets { get; private set; }
+
         public void NewGame()
         {
             SaveSystem.DeleteGame();
@@ -99,6 +106,7 @@ namespace WildPartner.Core
             environment.timeOfDay = startHour;
             weather.Set(false, true);
             SetState(FlowState.Playing);
+            Pets.Restore("cat");
             if (cabin) cabin.WakeUp();
             Hints?.Invoke(new[]
             {
@@ -107,6 +115,7 @@ namespace WildPartner.Core
                 "按住 Ctrl 潜行：动物不容易发现你",
                 "靠近动物后按住 E 捕捉；Tab 打开图鉴查看线索",
                 "左上角是小地图；按 M 打开大地图",
+                "收集到的伙伴平时不出来：按 J 换一只陪在身边，只有身边那只的能力有效",
                 $"猫已经在你身边了。再找到另外 {Total - CaughtCount} 种伙伴，然后回到木屋前的篝火",
             });
             SaveNow();
@@ -130,6 +139,7 @@ namespace WildPartner.Core
                 if (c) c.RestoreAsCompanion(slot++, d.playerPosition);
             }
             SetState(FlowState.Playing);
+            Pets.Restore(d.currentPet);
             Toast?.Invoke($"欢迎回来！已收集 {CaughtCount}/{Total}");
             Debug.Log($"[Flow] continue: {CaughtCount} caught, t={d.timeOfDay:0.0}");
         }
@@ -191,9 +201,18 @@ namespace WildPartner.Core
             if (Save.HasCaught(c.defId)) return;
             Save.caught.Add(new CaughtEntry { id = c.defId, playTime = Save.playTime, gameHour = environment.timeOfDay, position = c.transform.position });
             c.BecomeCompanion(Save.caught.Count - 1);
+            Pets.Stow(c);   // 1123c-B2: it joins the collection; J brings it out
             Toast?.Invoke($"捕捉成功：{c.Def.name}！（{CaughtCount}/{Total}）" + (c.Def.Count > 1 ? $" 其余的{c.Def.name}会继续留在野外。" : ""));
+            Toast?.Invoke($"按 J 换{c.Def.name}陪在身边：{PetSwitcher.Ability(c.defId)}");
             if (AllCaught) Toast?.Invoke("伙伴们都到齐了！回到悬崖木屋前的篝火吧。");
             SaveNow();
+        }
+
+        /// <summary>1123c-B4 reward on top of the watchtower: where the pets still to find live.</summary>
+        string TowerView()
+        {
+            var left = CreatureDefs.All.Where(d => !Save.HasCaught(d.id)).Select(d => $"{d.name}：{d.hint.Split('。')[0]}").ToArray();
+            return left.Length == 0 ? "伙伴们都已经在你身边了。" : "远远望见 " + string.Join("；", left) + "。";
         }
 
         public string Objective =>
@@ -215,6 +234,7 @@ namespace WildPartner.Core
             _endingTriggered = true;
             Save.finished = true;
             SaveNow();
+            Pets.ShowAll();   // 1123c-B2: every collected pet comes out for the ending
             // companions gather around the fire
             int i = 0;
             var comps = _creatures.Where(c => c.Current == Creature.State.Companion).ToList();

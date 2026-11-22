@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -54,7 +55,7 @@ namespace WildPartner.EditorTools
             var campfire = BuildCabin(landmarks);
             BuildInterior(landmarks);   // 试玩反馈 1123b-3: the room behind the front door
             BuildStoneCircle(landmarks);
-            Place("Watchtower", landmarks, WorldLayout.Watchtower, 30, 1f);
+            TowerClimbProxy(Place("Watchtower", landmarks, WorldLayout.Watchtower, 30, 1f));
             BuildBridge(landmarks);
             var isl = WorldLayout.Islands[0];
             Place("MoonFlower", landmarks, new Vector2(isl.x, isl.y), 200, 1.1f, -0.05f);   // the moon butterfly's perch
@@ -108,8 +109,16 @@ namespace WildPartner.EditorTools
             // ordinary fish schools (试玩反馈 1123b-7): scenery, not creatures
             var fishGo = new GameObject("FishSchools");
             var fishC = fishGo.AddComponent<FishSchools>();
-            fishC.silver = FishMat("M_Fish_Silver", new Color(0.72f, 0.76f, 0.8f));
-            fishC.gold = FishMat("M_Fish_Gold", new Color(0.93f, 0.8f, 0.5f));
+            // 1123c-B5: darker backs and a stronger orange so they stand out against the pale water
+            fishC.silver = FishMat("M_Fish_Silver", new Color(0.26f, 0.31f, 0.38f));
+            fishC.gold = FishMat("M_Fish_Gold", new Color(0.98f, 0.55f, 0.18f));
+            // 1123c-B5: scenery animals that can't be caught (butterflies, ducks, birds)
+            var amb = new GameObject("AmbientLife").AddComponent<AmbientLife>();
+            amb.wing = FishMat("M_Amb_Wing", Color.white);
+            amb.duckBody = FishMat("M_Amb_Duck", new Color(0.52f, 0.4f, 0.3f));
+            amb.duckHead = FishMat("M_Amb_DuckHead", new Color(0.12f, 0.45f, 0.28f));
+            amb.beak = FishMat("M_Amb_Beak", new Color(1f, 0.62f, 0.15f));
+            amb.bird = FishMat("M_Amb_Bird", new Color(0.18f, 0.17f, 0.2f));
 
             var flow = systems.AddComponent<GameFlow>();
             flow.player = player.GetComponent<PlayerController>();
@@ -429,6 +438,7 @@ namespace WildPartner.EditorTools
         static void BuildWater()
         {
             var root = new GameObject("Water").transform;
+            root.gameObject.AddComponent<WaterProbe>();   // 1123c-C2: reflection for the water
             var lakeMat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Water_Lake.mat");
             var riverMat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Water_River.mat");
             var fallMat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Waterfall.mat");
@@ -659,7 +669,7 @@ namespace WildPartner.EditorTools
             var sh = ps.shape; sh.shapeType = ParticleSystemShapeType.Box; sh.scale = new Vector3(halfW * 2.2f, 1.5f, 3f);
             var vel = ps.velocityOverLifetime; vel.enabled = true; vel.space = ParticleSystemSimulationSpace.World;
             vel.y = new ParticleSystem.MinMaxCurve(0.3f, Mathf.Clamp(height * 0.08f, 0.5f, 1.2f));
-            vel.x = new ParticleSystem.MinMaxCurve(0f); vel.z = new ParticleSystem.MinMaxCurve(0f);
+            vel.x = new ParticleSystem.MinMaxCurve(0f, 0f); vel.z = new ParticleSystem.MinMaxCurve(0f, 0f);
             var sz = ps.sizeOverLifetime; sz.enabled = true; sz.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0, 0.6f, 1, 1.6f));
             var col = ps.colorOverLifetime; col.enabled = true;
             var g = new Gradient();
@@ -753,6 +763,43 @@ namespace WildPartner.EditorTools
             go.transform.localScale = Vector3.one * scale;
             GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.NavigationStatic);
             return go;
+        }
+
+        /// <summary>1123c-B4: an invisible convex shell round the watchtower's stone shaft (below the balcony), so the
+        /// climb is not stopped by window holes and sills. The balcony itself stays the real mesh: she climbs up
+        /// under it and pulls herself over the edge onto the floor.</summary>
+        static void TowerClimbProxy(GameObject tower)
+        {
+            if (!tower) return;
+            var mf = tower.GetComponentsInChildren<MeshFilter>().FirstOrDefault(f => f.name.EndsWith("_LOD0"));
+            if (!mf) return;
+            var tr = mf.transform;
+            var verts = mf.sharedMesh.vertices.Select(v => tr.TransformPoint(v)).ToArray();
+            float y0 = verts.Min(v => v.y), y1 = verts.Max(v => v.y);
+            Vector3 c = tower.transform.position;
+            // widest horizontal reach per 0.25 m band: the balcony is the first band (above 35 % of the height)
+            // that juts out a quarter wider than the band below it
+            int bands = Mathf.CeilToInt((y1 - y0) / 0.25f);
+            var reach = new float[bands];
+            foreach (var v in verts) { int b = Mathf.Clamp((int)((v.y - y0) / 0.25f), 0, bands - 1); reach[b] = Mathf.Max(reach[b], new Vector2(v.x - c.x, v.z - c.z).magnitude); }
+            float floorY = y0 + (y1 - y0) * 0.6f;
+            for (int b = Mathf.CeilToInt(bands * 0.35f); b < bands; b++)
+                if (reach[b] > reach[b - 1] * 1.25f && reach[b - 1] > 0.5f) { floorY = y0 + b * 0.25f; break; }
+            var low = verts.Where(v => v.y < floorY - 0.2f).Select(v => tower.transform.InverseTransformPoint(v)).ToArray();
+            if (low.Length < 8) return;
+            var m = new Mesh { name = "Watchtower_ClimbShell" };
+            m.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            m.vertices = low;
+            var idx = new int[(low.Length / 3) * 3];
+            for (int i = 0; i < idx.Length; i++) idx[i] = i;
+            m.triangles = idx;
+            Directory.CreateDirectory(TerrainDir);
+            AssetDatabase.CreateAsset(m, $"{TerrainDir}/Watchtower_ClimbShell.asset");
+            var go = new GameObject("Watchtower_ClimbShell");
+            go.transform.SetParent(tower.transform, false);
+            var mc = go.AddComponent<MeshCollider>();
+            mc.convex = true; mc.sharedMesh = m;
+            Debug.Log($"[World] watchtower climb shell: balcony floor at {floorY - y0:0.0} m of {y1 - y0:0.0} m, {low.Length} vertices");
         }
 
         /// <summary>Yaw that points a model's local -Z (its front, see AssetSetup) along dir.</summary>

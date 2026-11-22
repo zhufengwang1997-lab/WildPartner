@@ -84,12 +84,21 @@ namespace WildPartner.EditorTools
         [System.Serializable] public class StepTable { public System.Collections.Generic.List<StepEntry> clips = new System.Collections.Generic.List<StepEntry>(); }
 
         static readonly System.Collections.Generic.HashSet<string> LoopClips = new System.Collections.Generic.HashSet<string>
-        { "Idle", "Walk", "Run", "Sneak", "Ride", "Hop", "Swim", "Flap", "Fall", "Eat", "SitLoop", "LieLoop", "RubLoop", "SitLick", "BellyUp", "Rub", "Graze", "SneakIdle", "Capture", "Point" };
+        { "Idle", "Walk", "Run", "Sneak", "Ride", "Hop", "Swim", "Flap", "Fall", "Eat", "SitLoop", "LieLoop", "RubLoop", "SitLick", "BellyUp", "Rub", "Graze", "SneakIdle", "Capture", "Point", "Climb" };
 
         void OnPreprocessTexture()
         {
             if (!assetPath.StartsWith("Assets/_Game")) return;
             var t = (TextureImporter)assetImporter;
+            if (assetPath.Contains("/Textures/Water/WaterNormal"))
+            {
+                // 1123c-C2: tiling normal maps for WildPartner/Water
+                t.textureType = TextureImporterType.NormalMap;
+                t.wrapMode = TextureWrapMode.Repeat;
+                t.mipmapEnabled = true;
+                t.anisoLevel = 4;
+                return;
+            }
             if (assetPath.EndsWith("Generated/Palette.png"))
             {
                 // Swatch atlas: mips would bleed neighbouring swatches together in the distance.

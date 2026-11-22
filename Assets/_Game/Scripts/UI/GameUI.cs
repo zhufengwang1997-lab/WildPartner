@@ -99,6 +99,9 @@ namespace WildPartner.UI
         }
 
         // ------------------------------------------------------------------ HUD
+        Image _stamina;
+        RawImage _petIcon; Text _petText; string _petShown; int _petCount = -1;
+
         void BuildHud()
         {
             _hud = Screen("HUD", Color.clear);
@@ -115,6 +118,29 @@ namespace WildPartner.UI
             UIKit.Box(clock, UIKit.Plum, UIKit.PlumFrame);
             _clock = UIKit.Label(clock, "", 24, TextAnchor.MiddleCenter, new Color(1f, 0.97f, 0.92f));
             UIKit.Shade(_clock);
+
+            // 1123c-B2: the pet at her side, its picture and what it can do (J switches)
+            var pet = UIKit.Rect(_hud, "Pet", new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-36, -102), new Vector2(420, 96));
+            UIKit.Box(pet, UIKit.Plum, UIKit.PlumFrame);
+            var petIcon = new GameObject("Icon", typeof(RectTransform), typeof(RawImage));
+            petIcon.transform.SetParent(pet, false);
+            var pir = (RectTransform)petIcon.transform;
+            pir.anchorMin = pir.anchorMax = pir.pivot = new Vector2(0, 0.5f); pir.anchoredPosition = new Vector2(10, 0); pir.sizeDelta = new Vector2(78, 78);
+            _petIcon = petIcon.GetComponent<RawImage>();
+            _petText = UIKit.Label(pet, "", 20, TextAnchor.MiddleLeft, new Color(1f, 0.97f, 0.92f));
+            _petText.rectTransform.offsetMin = new Vector2(98, 6); _petText.rectTransform.offsetMax = new Vector2(-10, -6);
+            _petText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            UIKit.Shade(_petText);
+
+            // 1123c-B4: climbing stamina, shown while it is not full
+            var st = UIKit.Rect(_hud, "Stamina", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 150), new Vector2(260, 16));
+            UIKit.Panel(st, new Color(0.12f, 0.08f, 0.18f, 0.75f));
+            var stFill = UIKit.Rect(st, "Fill", Vector2.zero, new Vector2(1, 1), new Vector2(0, 0.5f), Vector2.zero, Vector2.zero);
+            stFill.offsetMin = new Vector2(2, 2); stFill.offsetMax = new Vector2(-2, -2);
+            _stamina = UIKit.Panel(stFill, new Color(0.62f, 0.9f, 0.55f));
+            _stamina.type = Image.Type.Filled; _stamina.fillMethod = Image.FillMethod.Horizontal;
+            if (!_stamina.sprite) _stamina.sprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), Vector2.one * 0.5f);
+            st.gameObject.SetActive(false);
 
             var prompt = UIKit.Rect(_hud, "Prompt", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 190), new Vector2(560, 92));
             _prompt = UIKit.Label(prompt, "", 28, TextAnchor.UpperCenter, Color.white);
@@ -358,6 +384,25 @@ namespace WildPartner.UI
             var env = EnvController.Instance;
             var w = Weather.Instance;
             if (env) _clock.text = $"<color=#FFDB8C>{(env.timeOfDay >= 6f && env.timeOfDay < 18.5f ? "☀" : "☾")}</color>  {env.ClockText()}  ·  {(w ? w.Label : "")}";
+
+            if (_petShown != PetSwitcher.Active)
+            {
+                _petShown = PetSwitcher.Active;
+                var d = CreatureDefs.Get(_petShown);
+                _petIcon.texture = d != null ? Resources.Load<Texture2D>("Icons/" + d.model) : null;
+                int n = _flow.CaughtCount;
+                _petText.text = d == null ? "" : $"<b>{d.name}</b>  <size=16><color=#D8C8FF>{(n > 1 ? "J 换伙伴" : "")}</color></size>\n<size=17>{PetSwitcher.Ability(d.id)}</size>";
+            }
+            if (_flow.CaughtCount != _petCount) { _petCount = _flow.CaughtCount; _petShown = null; }
+
+            var pcS = WildPartner.Player.PlayerController.Instance;
+            if (pcS)
+            {
+                float f = pcS.Stamina / WildPartner.Player.PlayerController.StaminaMax;
+                _stamina.transform.parent.gameObject.SetActive(pcS.Climbing || f < 0.999f);
+                _stamina.fillAmount = f;
+                _stamina.color = f < 0.25f ? new Color(0.95f, 0.45f, 0.35f) : new Color(0.62f, 0.9f, 0.55f);
+            }
 
             // capture prompt
             var cand = CaptureSystem.Candidate;

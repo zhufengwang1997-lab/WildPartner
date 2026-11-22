@@ -43,7 +43,14 @@ namespace WildPartner.Audio
             _step = MakeStep();
             _chime = MakeChime(new[] { 0, 4, 7, 12, 16 }, 0.11f);
             _fail = MakeChime(new[] { 7, 3, 0 }, 0.12f);
-            if (PlayerController.Instance) PlayerController.Instance.Footstep += PlayStep;
+            if (PlayerController.Instance)
+            {
+                var pc = PlayerController.Instance;
+                pc.Footstep += PlayStep;
+                // 1123c-B3: a big splash going in, a soft slosh on every stroke
+                pc.EnteredWater += () => { if (_water.Length == 0) return; _steps.pitch = 0.7f; _steps.PlayOneShot(_water[0], 0.9f); _steps.PlayOneShot(_water[_water.Length - 1], 0.7f); };
+                pc.SwimStroke += () => { if (_water.Length == 0) return; _steps.pitch = 0.75f + (float)_rng.NextDouble() * 0.12f; _steps.PlayOneShot(_water[_rng.Next(_water.Length)], pc.Running ? 0.42f : 0.28f); };
+            }
             CaptureSystem.Captured += _ => _sfx.PlayOneShot(_chime, 0.7f);
             CaptureSystem.Interrupted += _ => _sfx.PlayOneShot(_fail, 0.5f);
             _creak = MakeCreak(); _thud = MakeThud();

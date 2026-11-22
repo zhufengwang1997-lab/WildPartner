@@ -8,7 +8,7 @@ namespace WildPartner.Core
     {
         public static bool Blocked;
         /// <summary>Automation hooks (smoke test): behave as if the capture / sneak keys were held.</summary>
-        public static bool SimCapture, SimSneak, SimJump, SimInteract, SimRun;
+        public static bool SimCapture, SimSneak, SimJump, SimInteract, SimRun, SimSwitchPet;
         public static Vector2 SimMove;
 
         static Keyboard K => Keyboard.current;
@@ -54,6 +54,8 @@ namespace WildPartner.Core
         public static bool JumpPressed => !Blocked && (SimJump || (K != null && K.spaceKey.wasPressedThisFrame) || (G != null && G.buttonSouth.wasPressedThisFrame));
         /// <summary>E tapped (doors, bed, book in the cabin). Holding E near an animal is the capture instead.</summary>
         public static bool InteractPressed => !Blocked && (SimInteract || (K != null && K.eKey.wasPressedThisFrame) || (G != null && G.buttonWest.wasPressedThisFrame));
+        /// <summary>J / d-pad right: next collected pet (1123c-B2).</summary>
+        public static bool SwitchPetPressed => !Blocked && (SimSwitchPet || (K != null && K.jKey.wasPressedThisFrame) || (G != null && G.dpad.right.wasPressedThisFrame));
         public static bool JournalPressed => (K != null && K.tabKey.wasPressedThisFrame) || (G != null && G.selectButton.wasPressedThisFrame);
         public static bool MapPressed => (K != null && K.mKey.wasPressedThisFrame) || (G != null && G.dpad.up.wasPressedThisFrame);
         public static bool PausePressed => (K != null && K.escapeKey.wasPressedThisFrame) || (G != null && G.startButton.wasPressedThisFrame);
