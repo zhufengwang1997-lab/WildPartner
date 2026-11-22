@@ -1,4 +1,4 @@
-WildPartner smoke test 2026-11-22 16:33:05 commit=a6fb1c2-dirty gpu=Apple M5 Max api=Metal
+WildPartner smoke test 2026-11-22 16:38:54 commit=e9a014a gpu=Apple M5 Max api=Metal
 PASS 启动后进入主菜单
 PASS 新游戏：进入游戏，已收集 0
 PASS 月影兔：条件（白天）满足后出现
