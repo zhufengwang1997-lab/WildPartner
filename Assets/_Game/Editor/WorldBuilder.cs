@@ -1205,7 +1205,7 @@ namespace WildPartner.EditorTools
             orbit.OrbitStyle = CinemachineOrbitalFollow.OrbitStyles.Sphere;
             // 画面整改 6: closer and lower than before, the witch about a quarter to a third of the frame height
             // and a little left of centre, so the view ahead (path, landscape) gets the larger part of the frame
-            orbit.Radius = 4.6f;
+            orbit.Radius = 5.4f;
             orbit.HorizontalAxis.Value = WorldLayout.PlayerStartYaw;
             orbit.VerticalAxis.Range = new Vector2(-12, 65);
             orbit.VerticalAxis.Value = 7f;
@@ -1215,7 +1215,7 @@ namespace WildPartner.EditorTools
             var comp = vGo.AddComponent<CinemachineRotationComposer>();
             comp.Damping = new Vector2(0.25f, 0.2f);
             var compo = comp.Composition;
-            compo.ScreenPosition = new Vector2(-0.12f, 0.05f);
+            compo.ScreenPosition = new Vector2(-0.12f, 0f);
             comp.Composition = compo;
             // smooth pull-in on terrain, rocks, trunks and walls instead of popping; a little lift when blocked
             var deocc = vGo.AddComponent<CinemachineDeoccluder>();
@@ -1232,15 +1232,15 @@ namespace WildPartner.EditorTools
             deocc.AvoidObstacles = avoid;
 
             var pivot = new GameObject("MenuPivot").transform;
-            pivot.position = new Vector3(600, 40, 560);
+            pivot.position = new Vector3(S * 0.5f, 30, S * 0.5f);   // valley centre (600 m map)
             var mGo = new GameObject("MenuCam");
             mGo.transform.SetParent(pivot, false);
-            mGo.transform.localPosition = new Vector3(0, 150, -420);
+            mGo.transform.localPosition = new Vector3(0, 70, -235);
             var mcam = mGo.AddComponent<CinemachineCamera>();
             mcam.Lens = new LensSettings { FieldOfView = 40, NearClipPlane = 0.5f, FarClipPlane = 3000f };
             var lookAt = new GameObject("MenuLookAt").transform;
             lookAt.SetParent(pivot, false);
-            lookAt.localPosition = new Vector3(0, -10, 40);
+            lookAt.localPosition = new Vector3(0, 0, 30);
             mcam.LookAt = lookAt;
             mGo.AddComponent<CinemachineHardLookAt>();
             mcam.Priority = 20;

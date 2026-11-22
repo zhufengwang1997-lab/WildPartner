@@ -140,8 +140,11 @@ namespace WildPartner.UI
         void BuildMenu()
         {
             _menu = Screen("MainMenu", Color.clear);
+            // plum glass card behind title and buttons so they read over the bright valley (画面整改 6)
+            var back = UIKit.Rect(_menu, "MenuBack", new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(96, 30), new Vector2(860, 720));
+            UIKit.Box(back, new Color(0.14f, 0.09f, 0.22f, 0.62f), UIKit.PlumFrame, 1.6f);
             var title = UIKit.Rect(_menu, "Title", new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(140, 230), new Vector2(900, 200));
-            var t = UIKit.Label(title, "荒原伙伴", 110, TextAnchor.MiddleLeft, Color.white);
+            var t = UIKit.Label(title, "荒原伙伴", 110, TextAnchor.MiddleLeft, new Color(1f, 0.95f, 0.84f));
             var o = t.gameObject.AddComponent<Outline>(); o.effectColor = new Color(0.25f, 0.15f, 0.4f, 0.8f); o.effectDistance = new Vector2(3, -3);
             var sub = UIKit.Rect(_menu, "Sub", new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(146, 130), new Vector2(900, 60));
             var st = UIKit.Label(sub, "WildPartner · 和小伙伴们一起回到山崖上的木屋", 28, TextAnchor.MiddleLeft, new Color(1, 0.97f, 0.9f));
