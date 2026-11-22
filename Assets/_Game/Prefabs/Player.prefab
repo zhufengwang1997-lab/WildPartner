@@ -1170,6 +1170,8 @@ MonoBehaviour:
   visual: {fileID: 2060118609314629200}
   animRunSpeed: 3.195
   animSneakSpeed: 0.523
+  rideWalkSpeed: 3.4
+  rideRunSpeed: 8.5
   Frozen: 0
 --- !u!114 &2902803328288171470
 MonoBehaviour:

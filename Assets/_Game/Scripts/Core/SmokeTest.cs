@@ -217,14 +217,17 @@ namespace WildPartner.Core
                 if (def.grazes && c.Current != Creature.State.Hidden)
                 {
                     // watched from 60 m away: it strolls and stops to graze on its own
-                    bool walked = false, grazed = false; float tw = 0, walkRun = 0, longestWalk = 0;
-                    while (tw < 14f && !(walked && grazed)) {
+                    // walked = at least 1.5 m covered while wandering (short strolls count together)
+                    bool grazed = false; float tw = 0, moved = 0;
+                    Vector3 last = c.transform.position;
+                    while (tw < 20f && !(moved > 1.5f && grazed)) {
                         tw += Time.deltaTime;
-                        if (c.Grazing) { grazed = true; walkRun = 0; }
-                        else if (c.Current == Creature.State.Wander) { walkRun += Time.deltaTime; longestWalk = Mathf.Max(longestWalk, walkRun); if (walkRun > 1f) walked = true; }
+                        if (c.Grazing) grazed = true;
+                        if (c.Current == Creature.State.Wander) { var d = c.transform.position - last; d.y = 0; moved += d.magnitude; }
+                        last = c.transform.position;
                         yield return null;
                     }
-                    Step(walked && grazed, $"{def.name}：自己走动并停下吃草（{tw:0.0} 秒内）");
+                    Step(moved > 1.5f && grazed, $"{def.name}：自己走动（{moved:0.0} m）并停下吃草（{tw:0.0} 秒内）");
                 }
                 if (def.startleFirst && c.Current != Creature.State.Hidden)
                     yield return StartleCheck(player, c, def, shot++);
@@ -332,9 +335,13 @@ namespace WildPartner.Core
             GameInput.SimSneak = false;
             player.Teleport(stand, Quaternion.LookRotation(-dir).eulerAngles.y);
             yield return new WaitForSeconds(0.3f);
-            c.DebugSetAlert(0.9f);
             GameInput.SimCapture = true;
             float t = 0;
+            // the capture locks onto the nearest rabbit, which may be the other one of the pair: test that one
+            while (CaptureSystem.Target == null && t < 1.5f) { t += Time.deltaTime; yield return null; }
+            if (CaptureSystem.Target) c = CaptureSystem.Target;
+            c.DebugSetAlert(0.9f);
+            t = 0;
             while (!c.IsStartled && c.Current != Creature.State.Flee && t < 3f) { t += Time.deltaTime; yield return null; }
             GameInput.SimCapture = false;
             bool startled = c.IsStartled;

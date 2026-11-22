@@ -875,13 +875,15 @@ namespace WildPartner.EditorTools
         // =========================================================================================
         static readonly Dictionary<WorldLayout.Region, (string, float)[]> TreeMix = new Dictionary<WorldLayout.Region, (string, float)[]>
         {
-            { WorldLayout.Region.DeepForest, new[] { ("Tree_Broadleaf_A", .35f), ("Tree_Broadleaf_B", .38f), ("Tree_Pine_A", .12f), ("Tree_Pine_B", .1f) } },
-            { WorldLayout.Region.AutumnForest, new[] { ("Tree_Autumn_B", .5f), ("Tree_Autumn_A", .2f), ("Tree_Broadleaf_A", .18f), ("Tree_Pine_A", .1f) } },
-            { WorldLayout.Region.Highland, new[] { ("Tree_Pine_A", .3f), ("Tree_Pine_B", .2f), ("Tree_Autumn_B", .2f), ("Tree_Broadleaf_B", .3f) } },
+            // 2026-11-23: the user's new tree models are true to species again (broadleaf oak, white birch, golden
+            // maple, pine), so birch is back and the autumn forest uses the maple instead of a recoloured broadleaf
+            { WorldLayout.Region.DeepForest, new[] { ("Tree_Broadleaf_A", .32f), ("Tree_Broadleaf_B", .34f), ("Tree_Pine_A", .14f), ("Tree_Pine_B", .12f), ("Tree_Birch_A", .08f) } },
+            { WorldLayout.Region.AutumnForest, new[] { ("Tree_Autumn_A", .38f), ("Tree_Autumn_B", .3f), ("Tree_Birch_A", .14f), ("Tree_Broadleaf_A", .1f), ("Tree_Pine_A", .08f) } },
+            { WorldLayout.Region.Highland, new[] { ("Tree_Pine_A", .3f), ("Tree_Pine_B", .2f), ("Tree_Autumn_B", .15f), ("Tree_Birch_A", .1f), ("Tree_Broadleaf_B", .25f) } },
             { WorldLayout.Region.Edge, new[] { ("Tree_Pine_A", .5f), ("Tree_Pine_B", .5f) } },
-            { WorldLayout.Region.Lakeshore, new[] { ("Tree_Autumn_B", .4f), ("Tree_Broadleaf_A", .25f), ("Tree_Autumn_A", .2f), ("Tree_Pine_A", .15f) } },
-            { WorldLayout.Region.Meadow, new[] { ("Tree_Broadleaf_A", .55f), ("Tree_Broadleaf_B", .4f) } },
-            { WorldLayout.Region.Riverbank, new[] { ("Tree_Broadleaf_A", .55f), ("Tree_Broadleaf_B", .35f) } },
+            { WorldLayout.Region.Lakeshore, new[] { ("Tree_Autumn_A", .3f), ("Tree_Autumn_B", .25f), ("Tree_Birch_A", .25f), ("Tree_Pine_A", .2f) } },
+            { WorldLayout.Region.Meadow, new[] { ("Tree_Broadleaf_A", .45f), ("Tree_Broadleaf_B", .3f), ("Tree_Birch_A", .25f) } },
+            { WorldLayout.Region.Riverbank, new[] { ("Tree_Broadleaf_A", .35f), ("Tree_Broadleaf_B", .25f), ("Tree_Birch_A", .4f) } },
             { WorldLayout.Region.Cabin, new[] { ("Tree_Pine_A", .5f), ("Tree_Broadleaf_B", .4f) } },
         };
 
@@ -1042,7 +1044,7 @@ namespace WildPartner.EditorTools
                         var region = WorldLayout.RegionAt(tp.x, tp.y);
                         if (TreeOk(tp.x, tp.y, 5.5f))
                         {
-                            string n = region == WorldLayout.Region.AutumnForest || region == WorldLayout.Region.Lakeshore ? "Tree_Autumn_B" : "Tree_Broadleaf_A";
+                            string n = region == WorldLayout.Region.AutumnForest || region == WorldLayout.Region.Lakeshore ? "Tree_Autumn_A" : "Tree_Broadleaf_A";
                             Tree(n, tp.x, tp.y, TreeScale(n) * 1.1f);
                         }
                         var bp = at + nrm * sideSign * 3.6f + dir * 2.5f;

@@ -1,6 +1,6 @@
-"""Recolour Tripo tree textures into extra variants (画面整改 3): a deeper blue-green broadleaf, a round-canopy
-autumn broadleaf (the Tripo 'autumn' model came out conifer-shaped) and a fresher birch green. Only leaf-hued
-pixels (hue 45-175 deg) are touched, so trunks and branches keep their browns.
+"""Recolour Tripo tree textures into extra variants (画面整改 3; trees replaced by the user 2026-11-23): a deeper
+blue-green broadleaf and an orange-red autumn maple beside the golden one. Only leaf pixels are touched (green
+leaves: hue 45-175 deg; autumn leaves: bright, saturated gold), so trunks and branches keep their browns.
 Usage: python3 tools/make_tree_variants.py   (writes Assets/_Game/Models/Tripo/Variants/*.png)"""
 import colorsys, os
 import numpy as np
@@ -41,7 +41,13 @@ def variant(src, out, fn):
 os.makedirs(DST, exist_ok=True)
 # deeper, slightly blue-green canopy like the shaded trees in the reference
 variant("Tree_Broadleaf", "Broadleaf_Deep", lambda h, s, v: (np.full_like(h, 128 / 360) + (h - 100 / 360) * 0.4, s * 0.82, v * 0.8))
-# round autumn canopy: greens -> orange/red, lighter leaves more golden
-variant("Tree_Broadleaf", "Broadleaf_Autumn", lambda h, s, v: ((12 + v * 30) / 360 + (h - 100 / 360) * 0.15, np.clip(s * 1.2 + 0.1, 0, 0.92), np.clip(v * 1.15 + 0.04, 0, 1)))
-# birch leaves: lime -> fresh spring green
-variant("Tree_Birch", "Birch_Fresh", lambda h, s, v: (h + 18 / 360, s * 0.95, v * 0.9))
+# autumn maple: golden leaves -> orange-red (bright saturated gold only; the brown bark is darker / duller)
+def gold_mask(h, s, v):
+    deg = h * 360
+    return np.clip((deg - 22) / 8, 0, 1) * np.clip((72 - deg) / 8, 0, 1) * np.clip((s - 0.35) / 0.1, 0, 1) * np.clip((v - 0.42) / 0.1, 0, 1)
+
+h, s, v = hsv_arrays(Image.open(f"{SRC}/Tree_Autumn_BaseColor.png"))
+m = gold_mask(h, s, v)
+h2 = h - 24 / 360 * (0.6 + 0.4 * v); s2 = np.clip(s * 1.08, 0, 0.95); v2 = v * 0.95
+to_rgb((h * (1 - m) + h2 * m) % 1.0, s * (1 - m) + s2 * m, v * (1 - m) + v2 * m).save(f"{DST}/Autumn_Red.png")
+print("wrote Autumn_Red")

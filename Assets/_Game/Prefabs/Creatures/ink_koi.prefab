@@ -79,6 +79,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: WildPartner.Runtime::WildPartner.Creatures.Creature
   defId: ink_koi
+  instance: 0
   animRunSpeed: 4
   animWalkSpeed: 1.2
 --- !u!135 &337150062134533726

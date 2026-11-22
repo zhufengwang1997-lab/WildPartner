@@ -51,22 +51,22 @@ PrefabInstance:
     - target: {fileID: -7478014495332632224, guid: 2682c04842af049fa9c4c330e7f19ca8, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 55b670686bef6481c8146d3c26aeff27, type: 2}
+      objectReference: {fileID: 2100000, guid: 20ee951b3c5cf4687bc05f50b69462bb, type: 2}
     - target: {fileID: 919132149155446097, guid: 2682c04842af049fa9c4c330e7f19ca8, type: 3}
       propertyPath: m_Name
       value: Tree_Birch_A
       objectReference: {fileID: 0}
     - target: {fileID: 4742473837712756890, guid: 2682c04842af049fa9c4c330e7f19ca8, type: 3}
       propertyPath: m_Size
-      value: 10.018228
+      value: 9.937805
       objectReference: {fileID: 0}
     - target: {fileID: 4742473837712756890, guid: 2682c04842af049fa9c4c330e7f19ca8, type: 3}
       propertyPath: m_LocalReferencePoint.y
-      value: 5.010281
+      value: 4.9708366
       objectReference: {fileID: 0}
     - target: {fileID: 4742473837712756890, guid: 2682c04842af049fa9c4c330e7f19ca8, type: 3}
       propertyPath: m_LocalReferencePoint.z
-      value: 0.016519666
+      value: 0.2034595
       objectReference: {fileID: 0}
     - target: {fileID: 4742473837712756890, guid: 2682c04842af049fa9c4c330e7f19ca8, type: 3}
       propertyPath: m_LODs.Array.data[0].screenRelativeHeight
@@ -83,11 +83,11 @@ PrefabInstance:
     - target: {fileID: 6096593189776824471, guid: 2682c04842af049fa9c4c330e7f19ca8, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 55b670686bef6481c8146d3c26aeff27, type: 2}
+      objectReference: {fileID: 2100000, guid: 20ee951b3c5cf4687bc05f50b69462bb, type: 2}
     - target: {fileID: 7810307825234016773, guid: 2682c04842af049fa9c4c330e7f19ca8, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 55b670686bef6481c8146d3c26aeff27, type: 2}
+      objectReference: {fileID: 2100000, guid: 20ee951b3c5cf4687bc05f50b69462bb, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

@@ -25,8 +25,8 @@ namespace WildPartner.EditorTools
         /// <summary>Tripo model -> prefab names it is saved as (the names the world builder places).</summary>
         static readonly Dictionary<string, string[]> TripoTargets = new Dictionary<string, string[]>
         {
-            { "Tree_Broadleaf", new[] { "Tree_Broadleaf_A", "Tree_Broadleaf_B", "Tree_Autumn_B" } },
-            { "Tree_Autumn", new[] { "Tree_Autumn_A" } },
+            { "Tree_Broadleaf", new[] { "Tree_Broadleaf_A", "Tree_Broadleaf_B" } },
+            { "Tree_Autumn", new[] { "Tree_Autumn_A", "Tree_Autumn_B" } },
             { "Tree_Birch", new[] { "Tree_Birch_A" } },
             { "Tree_Pine", new[] { "Tree_Pine_A", "Tree_Pine_B" } },
             { "Bush", new[] { "Bush_A", "Bush_B" } },
@@ -35,10 +35,10 @@ namespace WildPartner.EditorTools
             { "Mushroom", new[] { "Mushrooms" } },
         };
         /// <summary>Prefabs that reuse a Tripo mesh with a recoloured texture (tools/make_tree_variants.py): a deeper
-        /// green broadleaf, a round-canopy autumn tree built from the broadleaf mesh, fresher birch leaves.</summary>
+        /// green broadleaf and an orange-red autumn maple (trees replaced by the user 2026-11-23).</summary>
         static readonly Dictionary<string, string> TexVariants = new Dictionary<string, string>
         {
-            { "Tree_Broadleaf_B", "Broadleaf_Deep" }, { "Tree_Autumn_B", "Broadleaf_Autumn" }, { "Tree_Birch_A", "Birch_Fresh" },
+            { "Tree_Broadleaf_B", "Broadleaf_Deep" }, { "Tree_Autumn_B", "Autumn_Red" },
         };
         public const string MatDir = "Assets/_Game/Materials";
         public const string EnvPrefabs = "Assets/_Game/Prefabs/Env";

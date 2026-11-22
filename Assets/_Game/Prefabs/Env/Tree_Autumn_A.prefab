@@ -66,11 +66,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4742473837712756890, guid: b56d7656bd5364a87bf914716246f711, type: 3}
       propertyPath: m_Size
-      value: 8.521127
+      value: 8.500758
       objectReference: {fileID: 0}
     - target: {fileID: 4742473837712756890, guid: b56d7656bd5364a87bf914716246f711, type: 3}
       propertyPath: m_LocalReferencePoint.y
-      value: 4.260856
+      value: 4.241575
+      objectReference: {fileID: 0}
+    - target: {fileID: 4742473837712756890, guid: b56d7656bd5364a87bf914716246f711, type: 3}
+      propertyPath: m_LocalReferencePoint.z
+      value: 0.06303501
       objectReference: {fileID: 0}
     - target: {fileID: 4742473837712756890, guid: b56d7656bd5364a87bf914716246f711, type: 3}
       propertyPath: m_LODs.Array.data[0].screenRelativeHeight
