@@ -332,6 +332,10 @@ namespace WildPartner.EditorTools
             bool rigged = vis.GetComponentInChildren<Animator>() != null;
             if (rigged && def.id == "moon_butterfly")
                 foreach (var r in vis.GetComponentsInChildren<SkinnedMeshRenderer>()) r.sharedMaterial.SetFloat("_Emission", 0.3f);
+            // 1123b-2: lifting the paw to the mouth opens a few small holes in the chest skin; double-sided shading
+            // shows them as dark fur instead of see-through gaps (known issue, see DECISIONS)
+            if (rigged && def.id == "cat")
+                foreach (var r in vis.GetComponentsInChildren<SkinnedMeshRenderer>()) r.sharedMaterial.SetFloat("_Cull", 0);
             vis.transform.SetParent(root.transform, false);
             var c = root.AddComponent<Creature>();
             c.defId = def.id;

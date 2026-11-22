@@ -174,16 +174,18 @@ for sfx in EARS:
     W *= (1 - w)[:, None]; W[:, NI[f"Ear.{sfx}"]] += w
 # legs: below the belly, by quadrant; along the chain by height
 legzone = (z < 0.33) & ~tail_m
+legzone_f = (z < 0.42) & ~tail_m          # front legs reach higher: the upper arm carries the shoulder fur, so a paw
+                                          # raised to the mouth lifts the arm instead of tearing the chest (1123b-2)
 for sfx, side in (("L", 1), ("R", -1)):
     for pre, ys, chain, cuts in (("F", y < (yF + yB) / 2, ("FrontUpper", "FrontLower", "FrontPaw"), (0.20, 0.24, 0.06, 0.09)),
                                  ("B", y >= (yF + yB) / 2, ("BackThigh", "BackShin", "BackPaw"), (0.20, 0.24, 0.07, 0.10))):
         fx, fy = (xF, yF) if pre == "F" else (xB, yB)
-        near = (np.hypot(x - fx * side, y - fy) < 0.095) | (z < 0.1)      # only the leg itself, not the belly fur
-        i = np.where(legzone & ys & (x * side >= 0) & near)[0]
+        near = (np.hypot(x - fx * side, y - fy) < (0.11 if pre == "F" else 0.095)) | (z < 0.1)   # only the leg itself
+        i = np.where((legzone_f if pre == "F" else legzone) & ys & (x * side >= 0) & near)[0]
         if not len(i): continue
         zz = z[i]
         up = band(zz, cuts[0], cuts[1]); paw = 1 - band(zz, cuts[2], cuts[3]); mid = (1 - up) * (1 - paw)
-        body_share = band(zz, 0.27, 0.33)                       # top of the leg blends into the body
+        body_share = band(zz, 0.32, 0.42) if pre == "F" else band(zz, 0.27, 0.33)   # top of the leg blends into the body
         keep = W[i] * body_share[:, None]
         W[i] = keep
         W[i, NI[f"{chain[0]}.{sfx}"]] += up * (1 - body_share)
@@ -198,6 +200,19 @@ root_share = 1 - band(y[i], yB + 0.09, yB + 0.16)               # where the tail
 W[i] *= root_share[:, None]
 for k, n in enumerate(tn): W[i, NI[n]] += Wt[:, k] * (1 - root_share)
 W /= np.maximum(W.sum(1, keepdims=True), 1e-9)
+# smooth the weights across the front-leg / chest seam along the mesh edges (1123b-2): with a paw raised to the
+# mouth, edges joining a leg vertex to a chest vertex (or to the other leg's inner side) otherwise tear into a fan
+_E = np.zeros(len(body.data.edges) * 2, dtype=np.int64); body.data.edges.foreach_get("vertices", _E); _E = _E.reshape(-1, 2)
+_reg = (y < yF + 0.14) & (z < 0.46) & ~tail_m
+_cols = [NI[n] for n in names if n.startswith("Front") or n in ("Chest", "Spine")]
+for _ in range(10):
+    acc = np.zeros((len(V), len(_cols))); deg = np.zeros(len(V))
+    np.add.at(acc, _E[:, 0], W[_E[:, 1]][:, _cols]); np.add.at(acc, _E[:, 1], W[_E[:, 0]][:, _cols])
+    np.add.at(deg, _E[:, 0], 1); np.add.at(deg, _E[:, 1], 1)
+    m = _reg & (deg > 0)
+    sub = W[np.ix_(m, _cols)]
+    W[np.ix_(m, _cols)] = sub * 0.5 + 0.5 * acc[m] / deg[m][:, None]
+    W /= np.maximum(W.sum(1, keepdims=True), 1e-9)
 for n in names: body.vertex_groups.new(name=n)
 vg = [body.vertex_groups[n] for n in names]
 for vi in range(len(V)):
@@ -373,26 +388,150 @@ SIT = {"Hips": [("x", -30)], "BackThigh.L": [("x", -42), ("y", -6)], "BackThigh.
        "FrontPaw.L": [("x", 2)], "FrontPaw.R": [("x", 2)],
        "Neck": [("x", 12)], "Head": [("x", 14)],
        "Tail1": [("x", 24), ("z", 10)], "Tail2": [("x", -6), ("z", 20)], "Tail3": [("z", 24)], "Tail4": [("z", 18)]}   # Tail1 +x cancels the hips pitch
+def _fit_sit_front():
+    """The sitting pose had both front paws ~5 cm in the air (the rump is the lowest point). Search the front leg
+    angles so the paws stand on the same ground as the rump (1123b-2: the supporting paw must be planted)."""
+    fv = {sd: np.where(W[:, NI[f"FrontPaw.{sd}"]] > 0.5)[0] for sd in ("L", "R")}
+    def gap(dU, dL, dP, dH=0.0, dS=0.0):
+        r = {k: list(v) for k, v in SIT.items()}
+        r["Hips"] = r.get("Hips", []) + [("x", dH)]; r["Spine"] = r.get("Spine", []) + [("x", dS)]
+        r["Tail1"] = r.get("Tail1", []) + [("x", -dH)]
+        for sd in ("L", "R"):
+            r[f"FrontUpper.{sd}"] = r.get(f"FrontUpper.{sd}", []) + [("x", dU)]
+            r[f"FrontLower.{sd}"] = r.get(f"FrontLower.{sd}", []) + [("x", dL)]
+            r[f"FrontPaw.{sd}"] = r.get(f"FrontPaw.{sd}", []) + [("x", dP)]
+        pose(r); bpy.context.view_layer.update()
+        dg = bpy.context.evaluated_depsgraph_get(); ev = body.evaluated_get(dg); me = ev.to_mesh()
+        a = np.zeros(len(me.vertices) * 3); me.vertices.foreach_get("co", a); ev.to_mesh_clear(); a = a.reshape(-1, 3)
+        rest = a[np.setdiff1d(np.arange(len(a)), np.concatenate(list(fv.values())))][:, 2].min()
+        return max(abs(a[fv[sd], 2].min() - rest) for sd in fv) + 0.0004 * (abs(dU) + abs(dL) + abs(dP) + abs(dH) + abs(dS))
+    q = [0.0, 0.0, 0.0, 0.0, 0.0]; c = gap(*q); step = 8.0
+    while step > 0.5:
+        better = False
+        for i in range(5):
+            for d in (step, -step):
+                b = list(q); b[i] += d; cb = gap(*b)
+                if cb < c: q, c, better = b, cb, True
+        if not better: step *= 0.5
+    SIT["Hips"] = SIT.get("Hips", []) + [("x", q[3])]; SIT["Spine"] = SIT.get("Spine", []) + [("x", q[4])]
+    SIT["Tail1"] = SIT.get("Tail1", []) + [("x", -q[3])]
+    for sd in ("L", "R"):
+        SIT[f"FrontUpper.{sd}"] = SIT.get(f"FrontUpper.{sd}", []) + [("x", q[0])]
+        SIT[f"FrontLower.{sd}"] = SIT.get(f"FrontLower.{sd}", []) + [("x", q[1])]
+        SIT[f"FrontPaw.{sd}"] = SIT.get(f"FrontPaw.{sd}", []) + [("x", q[2])]
+    print("SIT_FRONT_FIT " + json.dumps({"dUpper": q[0], "dLower": q[1], "dPaw": q[2], "dHips": q[3], "dSpine": q[4], "gap_m": round(c, 4)}))
+_fit_sit_front()
+
 def sit_down(t):
     a = track([(0, 0), (0.15, -0.08), (0.75, 1.06), (0.88, 0.98), (1, 1.0)], t)   # anticipation, overshoot, settle
     r = lerp_pose({}, SIT, max(a, 0))
     if a < 0: r = merge(r, {"Hips": [("x", 40 * a)], "Head": [("x", -20 * a)]})  # a small lean forward first
     return r, {}
 
+# Licking (试玩反馈 1123b-2). The old clip used fixed angles and the cat licked the air. Now the raised paw is
+# solved so its pad really meets the mouth: mouth and pad points are measured on the mesh (rest pose, attached to
+# Head / FrontPaw.L), and a small coordinate-descent search over the arm angles puts the pad just in front of the
+# mouth with the pad facing it. Head, neck and the other front paw keep the sitting pose (that paw stays planted).
+HEADW = W[:, NI["Head"]]; PAWW = W[:, NI["FrontPaw.L"]]
+_hv = V[HEADW > 0.9]
+_front = _hv[_hv[:, 1] < _hv[:, 1].min() + 0.03]
+MOUTH_REST = P(_front[_front[:, 2] < np.percentile(_front[:, 2], 40)].mean(0))         # lower front of the muzzle
+HEAD_C_REST = P(_hv.mean(0))
+_pv = V[(PAWW > 0.5) & (x > 0)]
+PAD_REST = P(_pv[_pv[:, 2] < np.percentile(_pv[:, 2], 30)].mean(0))                  # underside of the left front paw
+print("LICK_POINTS " + json.dumps({"mouth": [round(v, 3) for v in MOUTH_REST], "pad": [round(v, 3) for v in PAD_REST]}))
+
+def attached(bone_name, p_rest):
+    """Rest-pose point carried by a bone into the current pose (armature space)."""
+    return PB[bone_name].matrix @ (arm_data.bones[bone_name].matrix_local.inverted() @ p_rest)
+
+def pad_frame():
+    pad = attached("FrontPaw.L", PAD_REST)
+    n = (PB["FrontPaw.L"].matrix.to_3x3() @ (arm_data.bones["FrontPaw.L"].matrix_local.to_3x3().inverted() @ Vector((0, 0, -1)))).normalized()
+    return pad, n
+
+ARM = [("FrontUpper.L", "x"), ("FrontUpper.L", "z"), ("FrontLower.L", "x"), ("FrontPaw.L", "x"), ("FrontPaw.L", "y")]
+# joint limits: beyond these the hand-made skin weights tear (a fur sleeve stretched into a dark fan). The short
+# chibi foreleg cannot reach the mouth inside them, so the head bows down to meet the paw (as cats do).
+ARM_LIM = [(-128, 5), (-15, 30), (0, 140), (-20, 90), (-25, 25)]
+HEAD_LIM = [(8, 34), (-5, 30), (-20, 10)]                      # bow, tilt towards the paw, turn
+
+def with_arm(base, a):
+    r = {k: list(v) for k, v in base.items()}
+    for (b, ax), v in zip(ARM, a): r.setdefault(b, []).append((ax, v))
+    return r
+
+def head_pose(down, side, turn):
+    """Offsets on top of SIT (which already bows the head a little)."""
+    return {"Neck": [("x", down * 0.45), ("z", side * 0.4)], "Head": [("x", down * 0.75), ("z", side), ("y", turn)]}
+
+def lick_pose(q):
+    arm, hd = q[:5], q[5:]
+    return with_arm(merge(lerp_pose({}, SIT, 1), head_pose(*hd), {"Chest": [("y", 5)]}), arm)
+
+def solve_lick(target, q0, iters=80):
+    """Joint search over arm + head: pad meets target(mouth...) with the pad facing the head."""
+    lim = ARM_LIM + HEAD_LIM
+    clamp = lambda q: [min(max(v, lo), hi) for v, (lo, hi) in zip(q, lim)]
+    def cost(q):
+        pose(lick_pose(clamp(q))); bpy.context.view_layer.update()
+        pad, n = pad_frame(); tgt, look = target()
+        return (pad - tgt).length / S * 40 + (1 - n.dot((look - pad).normalized())) * 0.5 + q[5] * 0.002 + q[2] * 0.006   # a straighter forearm stretches the fur least
+    q = clamp(q0); c = cost(q); step = 10.0
+    for _ in range(iters):
+        improved = False
+        for i in range(len(q)):
+            for d in (step, -step):
+                b = clamp(q[:i] + [q[i] + d] + q[i + 1:]); cb = cost(b)
+                if cb < c: q, c, improved = b, cb, True
+        if not improved:
+            step *= 0.5
+            if step < 0.3: break
+    return q, c
+
+def mouth_target():
+    m = attached("Head", MOUTH_REST); h = attached("Head", HEAD_C_REST)
+    return m + (m - h).normalized() * 0.008 * S / 0.42, h        # just outside the muzzle surface
+
+def side_target(k):
+    """Points on the left side of the face for the wipe: cheek below the ear -> beside the muzzle."""
+    def f():
+        h = attached("Head", HEAD_C_REST); m = attached("Head", MOUTH_REST)
+        R = PB["Head"].matrix.to_3x3() @ arm_data.bones["Head"].matrix_local.to_3x3().inverted()
+        side = R @ Vector((1, 0, 0)); up = R @ Vector((0, 0, 1)); back = R @ Vector((0, 1, 0))
+        r = (m - h).length
+        o = [side * 0.9 * r + up * 0.35 * r, side * 0.8 * r - back * 0.3 * r, side * 0.4 * r - up * 0.15 * r - back * 0.75 * r][k]
+        return h + o * 1.05, h
+    return f
+
+LICK_Q, _c = solve_lick(mouth_target, [-110, 8, 110, 50, 0, 25, 14, -6])
+print("LICK_Q " + json.dumps({"q": [round(v, 1) for v in LICK_Q], "cost": round(_c, 4)}))
+# face wipe (fallback after the full ear-to-muzzle sweep tore the fur): the paw holds still beside the muzzle and
+# the head rubs over it — tilted onto the paw cheek-first, then rolling forward until the paw is at the mouth
+WIPE_Q = [LICK_Q[:5] + [max(LICK_Q[5] - 14, 8), min(LICK_Q[6] + 16, 30), LICK_Q[7] - 14],
+          LICK_Q[:5] + [max(LICK_Q[5] - 6, 8), min(LICK_Q[6] + 8, 30), LICK_Q[7] - 6],
+          list(LICK_Q)]
+REST_Q = [0, 0, 0, 0, 0, 0, 0, 0]
+
 def sit_lick(p):
-    # paw comes up (0.1-0.25), three quick licks, a pause, two slower ones, paw goes down (0.85-1.0)
-    raise_ = curve([(0.0, 0), (0.08, 0), (0.22, 1), (0.82, 1), (0.95, 0)], p)
+    """sit -> paw up, head bows to meet it (pad facing the mouth) -> 3 licks (head dips onto the pad and draws
+    back) -> face wipe: the paw runs from the cheek below the ear forward to the muzzle while the head tilts into
+    it -> 1 more lick -> paw down. The right front paw stays planted the whole time. 5 s loop."""
+    up = track([(0, 0), (0.06, 0), (0.17, 1), (0.86, 1), (0.97, 0), (1, 0)], p)
+    wipe = track([(0, 0), (0.52, 0), (0.57, 1), (0.71, 1), (0.76, 0), (1, 0)], p)
+    wk = track([(0, 0), (0.57, 0), (0.60, 0), (0.65, 1), (0.70, 2), (1, 2)], p)
+    i0 = int(min(wk, 1.999)); u = wk - i0
+    wq = [a + (b - a) * u for a, b in zip(WIPE_Q[i0], WIPE_Q[min(i0 + 1, 2)])]
+    q = [a + (b - a) * wipe for a, b in zip(LICK_Q, wq)]
+    q = [r0 + (a - r0) * up for r0, a in zip(REST_Q, q)]
     lick = 0.0
-    for c, w in ((0.30, 0.035), (0.37, 0.035), (0.44, 0.035), (0.62, 0.05), (0.73, 0.05)):
-        lick += max(0.0, 1 - abs(p - c) / w)
-    r = lerp_pose(SIT, {}, 0)
-    r = merge(r, {"FrontUpper.L": [("x", -72 * raise_), ("z", 10 * raise_)], "FrontLower.L": [("x", 70 * raise_)],
-                  "FrontPaw.L": [("x", 40 * raise_)],
-                  "Chest": [("y", 6 * raise_)],
-                  "Neck": [("x", 4 * raise_), ("z", 10 * raise_)],
-                  "Head": [("x", (12 + 7 * lick) * raise_), ("z", 14 * raise_), ("y", -8 * raise_)],
-                  "Ear.L": [("y", 6 * lick)], "Ear.R": [("y", -6 * lick)]})
-    r = merge(r, {"Tail3": [("z", 10 * math.sin(TAU * p))], "Tail4": [("z", 16 * math.sin(TAU * p - 0.6))]})
+    for c in (0.24, 0.32, 0.40, 0.82):
+        d = abs(p - c) / 0.04
+        if d < 1: lick = max(lick, math.cos(d * math.pi / 2) ** 2)
+    q[5] -= 8 * (1 - lick) * up * (1 - wipe)                          # head draws back between licks
+    r = lick_pose(q)
+    r = merge(r, {"Ear.L": [("y", 6 * lick - 16 * wipe)], "Ear.R": [("y", -6 * lick)], "Chest": [("y", 1 * up)],
+                  "Tail3": [("z", 10 * math.sin(TAU * p))], "Tail4": [("z", 16 * math.sin(TAU * p - 0.6))]})
     return r, {}
 
 # -------------------------------------------------------------------------------- lying on its back
@@ -458,7 +597,7 @@ acts = {
     "Walk": make_action("Walk", 22, walk),
     "Run": make_action("Run", 12, run, lift=lambda p: 0.05 * S * max(0.0, math.sin(TAU * (p - 0.55))) ** 1.5),
     "SitDown": make_action("SitDown", 22, sit_down, ground="mesh", loop=False),
-    "SitLick": make_action("SitLick", 110, sit_lick, ground="mesh"),
+    "SitLick": make_action("SitLick", 150, sit_lick, ground="mesh"),
     "LieDown": make_action("LieDown", 40, lie_down, ground="mesh", loop=False),
     "BellyUp": make_action("BellyUp", 96, belly_up, ground="mesh"),
     "Rub": make_action("Rub", 54, rub),
@@ -521,3 +660,25 @@ if RENDER:
                 bpy.ops.render.render(write_still=True)
                 files.append(p)
     print("RENDERS " + json.dumps(len(files)))
+    # SitLick key poses (试玩反馈 1123b-2 self-check): sitting, paw coming up, lick (contact), head drawn back,
+    # face wipe (head rubbing over the paw), paw going down
+    act = acts["SitLick"]; rig.animation_data.action = act; n = int(act.frame_range[1])
+    cd.ortho_scale = HEIGHT * 0.9
+    d = Vector((1, -0.75, 0.12)).normalized()                     # from the cat's left front: the licked paw side
+    cam.location = Vector((0, -0.15 * HEIGHT, HEIGHT * 0.42)) + d * HEIGHT * 5
+    cam.rotation_euler = (-d).to_track_quat("-Z", "Y").to_euler()
+    headv = np.where(HEADW > 0.6)[0]; pawv = np.where((PAWW > 0.5) & (x > 0))[0]
+    for i, ph in enumerate((0.0, 0.12, 0.24, 0.28, 0.62, 0.93)):
+        f = round(ph * n); sc.frame_set(f); bpy.context.view_layer.update()
+        dg = bpy.context.evaluated_depsgraph_get(); ev = body.evaluated_get(dg); me = ev.to_mesh()
+        co = np.zeros(len(me.vertices) * 3); me.vertices.foreach_get("co", co); ev.to_mesh_clear(); co = co.reshape(-1, 3)
+        # matrix_world of body is identity under the rig at origin
+        hp, pp = co[headv], co[pawv]
+        dmin = min(np.linalg.norm(hp - q, axis=1).min() for q in pp[:: max(1, len(pp) // 200)])
+        rv = np.where((W[:, NI["FrontPaw.R"]] > 0.5) & (x < 0))[0]
+        rz = co[rv, 2].min() - co[:, 2].min()                                  # 0 = planted on the ground
+        if i == 0:
+            low = {nm: round(float(co[np.where(W[:, NI[nm]] > 0.5)[0], 2].min() - co[:, 2].min()), 4) for nm in ("FrontPaw.L", "FrontPaw.R", "BackPaw.L", "BackPaw.R", "Hips", "Tail1")}
+            print("SIT_LOWS " + json.dumps(low))
+        print("LICKCHECK " + json.dumps({"phase": ph, "frame": f, "paw_head_min_m": round(float(dmin), 4), "rpaw_low_z": round(float(rz), 4)}))
+        p_ = os.path.join(RENDER, f"Lick_{i}_f{f:03d}.png"); sc.render.filepath = p_; bpy.ops.render.render(write_still=True)

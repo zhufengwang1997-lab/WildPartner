@@ -45,7 +45,7 @@ namespace WildPartner.EditorTools
         {
             PoseShots(cam, env, rt, tex, "cat", W(WorldLayout.PlayerStart + WorldLayout.CabinFacing * 1.6f, 0f),   // on the dirt path, not in tall grass
                       new Vector3(-WorldLayout.CabinFacing.y, 0, WorldLayout.CabinFacing.x), 1f,
-                      new[] { ("Idle", 2.1f), ("Walk", 0.2f), ("Run", 0.13f), ("SitLick", 1.3f), ("BellyUp", 1.0f), ("Rub", 0.45f), ("Point", 0.5f) });
+                      new[] { ("Idle", 2.1f), ("Walk", 0.2f), ("Run", 0.13f), ("SitLick", 0.5f), ("SitLick", 1.2f), ("SitLick", 3.2f), ("BellyUp", 1.0f), ("Rub", 0.45f), ("Point", 0.5f) });
             var deer = CreatureDefs.Get("white_deer");
             PoseShots(cam, env, rt, tex, "white_deer", W(deer.anchors[0], 0f), new Vector3(1, 0, 0.3f), 2.3f,
                       new[] { ("Idle", 1.5f), ("Walk", 0.3f), ("Run", 0.2f), ("GrazeDown", 0.6f), ("Graze", 0.4f), ("Graze", 1.1f) });
@@ -151,10 +151,9 @@ namespace WildPartner.EditorTools
                 cam.transform.position = pos;
                 cam.transform.rotation = Quaternion.LookRotation(at + Vector3.up * 0.22f * k - pos);
                 cam.targetTexture = rt;
-                var grass = Object.FindFirstObjectByType<GrassRenderer>();
-                if (grass) { grass.Setup(); grass.Submit(cam, pos); }
+                // animation check: no grass in front of the paws and no near-camera dither on the model
+                Shader.SetGlobalVector("_WP_NearFade", Vector4.zero);
                 cam.Render();
-                if (grass) grass.Submit(cam, pos);
                 cam.Render();
                 RenderTexture.active = rt;
                 tex.ReadPixels(new Rect(0, 0, 1600, 900), 0, 0); tex.Apply();
