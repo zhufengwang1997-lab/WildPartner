@@ -171,7 +171,9 @@ namespace WildPartner.Core
             bool leadTested = false;
             foreach (var def in CreatureDefs.All)
             {
-                var c = creatures.First(x => x.defId == def.id);
+                var c = creatures.First(x => x.defId == def.id && x.instance == 0);
+                int count = creatures.Count(x => x.defId == def.id);
+                if (def.Count > 1) Step(count == def.Count, $"{def.name}：场景里有 {count} 只（应为 {def.Count}）");
                 if (def.startsWithPlayer)
                 {
                     Step(c.Current == Creature.State.Companion && flow.Save.HasCaught(def.id), $"{def.name}：开局即为伙伴");
@@ -186,7 +188,7 @@ namespace WildPartner.Core
                 weather.Set(rain, true);
 
                 // park the player away from the habitat so the creature can appear, then wait for it
-                var a = def.anchors[0];
+                var a = c.Home;
                 player.Teleport(new Vector3(a.x + 60, Creature.GroundHeight(a.x + 60, a.y), a.y), 270);
                 float t = 0;
                 while (c.Current == Creature.State.Hidden && t < 5f) { t += Time.deltaTime; yield return null; }
@@ -212,6 +214,21 @@ namespace WildPartner.Core
                     if (cat.IsLeading) yield return Shot($"{shot++:00}_cat_lead");
                 }
 
+                if (def.grazes && c.Current != Creature.State.Hidden)
+                {
+                    // watched from 60 m away: it strolls and stops to graze on its own
+                    bool walked = false, grazed = false; float tw = 0, walkRun = 0, longestWalk = 0;
+                    while (tw < 14f && !(walked && grazed)) {
+                        tw += Time.deltaTime;
+                        if (c.Grazing) { grazed = true; walkRun = 0; }
+                        else if (c.Current == Creature.State.Wander) { walkRun += Time.deltaTime; longestWalk = Mathf.Max(longestWalk, walkRun); if (walkRun > 1f) walked = true; }
+                        yield return null;
+                    }
+                    Step(walked && grazed, $"{def.name}：自己走动并停下吃草（{tw:0.0} 秒内）");
+                }
+                if (def.startleFirst && c.Current != Creature.State.Hidden)
+                    yield return StartleCheck(player, c, def, shot++);
+
                 bool caught = false;
                 for (int attempt = 0; attempt < 3 && !caught; attempt++)
                 {
@@ -233,8 +250,17 @@ namespace WildPartner.Core
                 }
                 GameInput.SimSneak = false;
                 Step(caught && c.Current == Creature.State.Companion, $"{def.name}：按住捕捉成功并成为伙伴");
+                if (def.rideable && caught)
+                    yield return RideCheck(player, c, shot++);
+                if (def.Count > 1)
+                {
+                    var rest = creatures.Where(x => x.defId == def.id && x != c).ToArray();
+                    Step(rest.All(x => x.Current != Creature.State.Companion && !x.CanBeCaptured),
+                         $"{def.name}：其余 {rest.Length} 只留在野外，不能再捕捉、不显示提示");
+                }
             }
             Step(flow.AllCaught, $"图鉴集齐 {flow.CaughtCount}/{flow.Total}");
+            yield return FishCheck(player, shot++);
             weather.Set(false, true);
             env.timeOfDay = 19f;
 
@@ -285,7 +311,8 @@ namespace WildPartner.Core
             flow.Continue();
             yield return new WaitForSeconds(1.5f);
             Step(flow.State == GameFlow.FlowState.Playing && flow.CaughtCount == flow.Total, $"继续游戏：存档恢复（已收集 {flow.CaughtCount}/{flow.Total}）");
-            Step(creatures.All(x => x.Current == Creature.State.Companion), "继续游戏：伙伴全部恢复跟随");
+            Step(CreatureDefs.All.All(d => creatures.Count(x => x.defId == d.id && x.Current == Creature.State.Companion) == 1),
+                 "继续游戏：伙伴全部恢复跟随（每种一只，同种其余的留在野外）");
             yield return Shot($"{shot++:00}_continue");
 
             _log.WriteLine(_fails == 0 ? "RESULT PASS" : $"RESULT FAIL ({_fails})");
@@ -293,6 +320,103 @@ namespace WildPartner.Core
             Debug.Log($"[Smoke] done, fails={_fails}, out={_out}");
             yield return new WaitForSeconds(0.5f);
             Application.Quit(_fails == 0 ? 0 : 1);
+        }
+            /// <summary>试玩反馈 1123b-6: a capture spoiled by the alert meter only startles the rabbit (ears up ~1 s); if
+        /// the witch keeps still it relaxes and can be tried again.</summary>
+        IEnumerator StartleCheck(PlayerController player, Creature c, CreatureDef def, int shotNo)
+        {
+            var p = c.transform.position;
+            var dir = player.transform.position - p; dir.y = 0; dir = dir.sqrMagnitude > 0.01f ? dir.normalized : Vector3.back;
+            var stand = p + dir * def.captureRange * 0.55f;
+            stand.y = Creature.GroundHeight(stand.x, stand.z) + 0.1f;
+            GameInput.SimSneak = false;
+            player.Teleport(stand, Quaternion.LookRotation(-dir).eulerAngles.y);
+            yield return new WaitForSeconds(0.3f);
+            c.DebugSetAlert(0.9f);
+            GameInput.SimCapture = true;
+            float t = 0;
+            while (!c.IsStartled && c.Current != Creature.State.Flee && t < 3f) { t += Time.deltaTime; yield return null; }
+            GameInput.SimCapture = false;
+            bool startled = c.IsStartled;
+            yield return new WaitForSeconds(0.35f);
+            float ears = c.EarsUp;
+            if (startled) yield return Shot($"{shotNo:00}_{def.id}_ears_up");
+            Step(startled && ears > 0.8f, $"{def.name}：捕捉被打断时没有逃走，竖起耳朵警觉（耳朵 {ears:0.00}）");
+            t = 0;
+            while (c.IsStartled && t < 3f) { t += Time.deltaTime; yield return null; }
+            Step(startled && (c.Current == Creature.State.Alert || c.Current == Creature.State.Wander),
+                 $"{def.name}：主角站着不动，约 1 秒后放松（状态 {c.Current}）");
+            yield return new WaitForSeconds(1.5f);
+        }
+            /// <summary>试玩反馈 1123b-8: walk up to the caught deer, E to get on, ride forward, E to get off.</summary>
+        IEnumerator RideCheck(PlayerController player, Creature deer, int shotNo)
+        {
+            yield return new WaitForSeconds(1.5f);
+            var dp = deer.transform.position;
+            var st = dp - deer.transform.right * 1.8f; st.y = Creature.GroundHeight(st.x, st.z) + 0.1f;
+            player.Teleport(st, deer.transform.eulerAngles.y);
+            yield return new WaitForSeconds(0.4f);
+            string prompt = Creature.RidePrompt;
+            GameInput.SimInteract = true; yield return null; GameInput.SimInteract = false;
+            yield return new WaitForSeconds(0.3f);
+            Step(player.Riding && deer.Ridden, $"白鹿：靠近出现提示「{prompt}」，按 E 骑上");
+            var p0 = player.transform.position;
+            player.SetCameraOrbit(player.transform.eulerAngles.y + 60f, 12f);
+            GameInput.SimRun = true; GameInput.SimMove = new Vector2(0, 1);
+            yield return new WaitForSeconds(1.6f);
+            yield return Shot($"{shotNo:00}_white_deer_riding");
+            yield return new WaitForSeconds(0.6f);
+            GameInput.SimRun = false; GameInput.SimMove = Vector2.zero;
+            float moved = Vector3.Distance(p0, player.transform.position);
+            Vector3 gap = deer.transform.position - player.transform.position; gap.y = 0;
+            Step(player.Riding && moved > 10f && gap.magnitude < 1.5f, $"骑鹿奔跑：2.2 秒跑了 {moved:0.0} m，鹿一直在她身下（水平偏差 {gap.magnitude:0.00} m）");
+            yield return new WaitForSeconds(0.5f);
+            GameInput.SimInteract = true; yield return null; GameInput.SimInteract = false;
+            yield return new WaitForSeconds(0.5f);
+            Step(!player.Riding && !deer.Ridden, "按 E 从白鹿背上下来");
+        }
+
+        /// <summary>试玩反馈 1123b-7: ordinary fish schools - count, scatter when she comes close, regroup.</summary>
+        IEnumerator FishCheck(PlayerController player, int shotNo)
+        {
+            var fs = FishSchools.Instance;
+            int n = fs ? fs.Schools.Count : 0;
+            bool sizes = fs && fs.Schools.All(x => x.fish.Count >= 6 && x.fish.Count <= 12);
+            Step(n >= 3 && n <= 5 && sizes, $"鱼群：{n} 群，每群 {(fs ? string.Join("/", fs.Schools.Select(x => x.fish.Count)) : "-")} 条");
+            if (!fs || n == 0) yield break;
+            var env = EnvController.Instance; env.timeOfDay = 11f;
+            var sc = fs.Schools[0];
+            // stand on the bank 9 m from the school, looking at it from above
+            Vector3 c = sc.centre;
+            Vector3 bank = c; float best = 0;
+            for (int i = 0; i < 24; i++)
+            {
+                float a = i * Mathf.PI / 12f;
+                var q = c + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * 9f;
+                if (!WorldLayout.WaterSurface(q.x, q.z, out _)) { bank = q; best = 1; break; }
+            }
+            if (best == 0) bank = c + Vector3.right * 9f;
+            bank.y = Creature.GroundHeight(bank.x, bank.z) + 0.2f;
+            var look = c - bank; look.y = 0;
+            float yaw = Quaternion.LookRotation(look).eulerAngles.y;
+            player.Teleport(bank, yaw);
+            player.SetCameraOrbit(yaw, 38f);
+            player.SetCameraDistance(0.8f);
+            yield return new WaitForSeconds(2.5f);
+            float calm = sc.Spread;
+            yield return Shot($"{shotNo:00}_fish_school");
+            // walk right up to it: the fish dart away
+            var f0 = sc.fish[0].p; f0.y = Creature.GroundHeight(f0.x, f0.z);
+            player.Teleport(new Vector3(f0.x, Mathf.Max(f0.y, sc.surface - 0.4f), f0.z) + look.normalized * -1.5f, yaw);
+            float peak = 0, tt = 0;
+            while (tt < 1.2f) { tt += Time.deltaTime; peak = Mathf.Max(peak, sc.Spread); yield return null; }
+            bool scattered = sc.scattered;
+            player.Teleport(bank + (bank - c).normalized * 14f, yaw);
+            yield return new WaitForSeconds(5f);
+            float after = sc.Spread;
+            Step(scattered && peak > calm + 0.6f && after < peak * 0.6f,
+                 $"鱼群：靠近时散开（离队平均 {calm:0.00} → {peak:0.00} m），离开后重新聚拢（{after:0.00} m）");
+            player.SetCameraDistance(1f);
         }
     }
 }

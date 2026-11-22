@@ -41,6 +41,32 @@ namespace WildPartner.Player
         /// <summary>Ground speed of the rigged Sneak clip at 1x (0 = no sneak clips).</summary>
         public float animSneakSpeed;
 
+        // ---- riding the caught white deer (试玩反馈 1123b-8) ----
+        public float rideWalkSpeed = 3.4f, rideRunSpeed = 8.5f;
+        /// <summary>The creature she is sitting on (null on foot).</summary>
+        public Transform Mount { get; private set; }
+        public bool Riding => Mount != null;
+        float _seat;
+        Transform[] _thighs, _shins;
+        Transform _hipsBone;
+
+        /// <summary>Sit on `mount` with her hips `seat` metres higher than standing (null = get off).</summary>
+        public void SetMount(Transform mount, float seat)
+        {
+            Mount = mount;
+            _seat = mount ? seat : 0f;
+            _jumping = false; _windup = -1f;
+            if (visual) visual.localPosition = Vector3.up * _seat;
+        }
+
+        /// <summary>Move without a camera cut (getting off the deer).</summary>
+        public void Place(Vector3 pos)
+        {
+            _cc.enabled = false;
+            transform.position = pos;
+            _cc.enabled = true;
+        }
+
         public float Speed { get; private set; }
         public bool Sneaking { get; private set; }
         public bool Running { get; private set; }
@@ -112,7 +138,8 @@ namespace WildPartner.Player
             Vector2 input = Frozen ? Vector2.zero : GameInput.Move;
             Sneaking = GameInput.Sneak;   // holding still while capturing still counts as sneaking
             Running = !Frozen && GameInput.Run && !Sneaking && input.sqrMagnitude > 0.01f;
-            float target = Sneaking ? sneakSpeed : Running ? runSpeed : walkSpeed;
+            float target = Riding ? (Sneaking ? 1.4f : Running ? rideRunSpeed : rideWalkSpeed)
+                         : Sneaking ? sneakSpeed : Running ? runSpeed : walkSpeed;
 
             Vector3 fwd = Vector3.forward, right = Vector3.right;
             var cam = Camera.main;
@@ -136,7 +163,7 @@ namespace WildPartner.Player
             float dt = Time.deltaTime;
             bool grounded = _cc.isGrounded;
             _sinceGrounded = grounded ? 0f : _sinceGrounded + dt;
-            _sinceJumpPressed = (!Frozen && GameInput.JumpPressed) ? 0f : _sinceJumpPressed + dt;
+            _sinceJumpPressed = (!Frozen && !Riding && GameInput.JumpPressed) ? 0f : _sinceJumpPressed + dt;
             if (_sinceJumpPressed <= JumpBuffer && _sinceGrounded <= CoyoteTime && !_jumping)
             {
                 _jumping = true; _sinceJumpPressed = 99f;
@@ -166,7 +193,7 @@ namespace WildPartner.Player
             if (_animator)
             {
                 // blend tree: Idle 0 / Walk 1.64 / Run 3.2 m/s at 1x; faster ground speed plays the run faster
-                _animator.SetFloat(SpeedId, Mathf.Min(Speed, animRunSpeed), 0.08f, Time.deltaTime);
+                _animator.SetFloat(SpeedId, Riding ? 0f : Mathf.Min(Speed, animRunSpeed), 0.08f, Time.deltaTime);
                 bool air = _jumping || _airTime > 0.25f;   // short drops (stairs, bumps) stay on Locomotion
                 _animator.SetBool(GroundedId, !air);
                 _animator.SetFloat(AirTimeId, _airTime);
@@ -177,7 +204,7 @@ namespace WildPartner.Player
                     _animator.SetBool(SneakId, sneakAnim);
                     _animator.SetBool(CaptureId, capturing && !air);
                 }
-                _animator.speed = air || capturing ? 1f : sneakAnim ? Mathf.Clamp(Speed / animSneakSpeed, 1f, 2f) : Mathf.Max(1f, Speed / animRunSpeed);
+                _animator.speed = air || capturing || Riding ? 1f : sneakAnim ? Mathf.Clamp(Speed / animSneakSpeed, 1f, 2f) : Mathf.Max(1f, Speed / animRunSpeed);
                 if (capturing)
                 {
                     // turn to face the creature while drawing it in
@@ -187,13 +214,39 @@ namespace WildPartner.Player
                 }
             }
 
-            Noise = _jumping ? 1.2f : Speed < 0.2f ? (Sneaking ? 0.35f : 0.55f) : Sneaking ? 0.45f : Running ? 1.6f : 1f;
+            Noise = Riding ? (Speed < 0.2f ? 0.6f : Running ? 1.4f : 0.9f) : _jumping ? 1.2f : Speed < 0.2f ? (Sneaking ? 0.35f : 0.55f) : Sneaking ? 0.45f : Running ? 1.6f : 1f;
 
             // Footsteps for audio + procedural animation phase
             float prev = _stepPhase;
             _stepPhase += Speed * Time.deltaTime * (Running ? 1.05f : 1.4f);
             // fallback only for a model without foot-contact events (the rigged witch drives steps from her clips)
             if (Mathf.Floor(prev) != Mathf.Floor(_stepPhase) && Speed > 0.5f && Time.time - _lastAnimStep > 1.5f && !_animator) Footstep?.Invoke();
+        }
+
+        /// <summary>Riding: no sit clip, so the legs are posed on top of the Idle clip - thighs forward and apart
+        /// round the deer's back, shins hanging down. Runs before SecondaryMotion (order 100).</summary>
+        void LateUpdate()
+        {
+            if (!Riding || !visual) return;
+            if (_thighs == null)
+            {
+                _thighs = new Transform[2]; _shins = new Transform[2];
+                foreach (var t in visual.GetComponentsInChildren<Transform>())
+                    switch (t.name)
+                    {
+                        case "Thigh.L": _thighs[0] = t; break; case "Thigh.R": _thighs[1] = t; break;
+                        case "Shin.L": _shins[0] = t; break; case "Shin.R": _shins[1] = t; break;
+                        case "Hips": _hipsBone = t; break;
+                    }
+            }
+            Vector3 right = transform.right, fwd = transform.forward;
+            for (int i = 0; i < 2; i++)
+            {
+                if (!_thighs[i] || !_shins[i]) continue;
+                float outSign = _hipsBone && Vector3.Dot(_thighs[i].position - _hipsBone.position, right) < 0f ? -1f : 1f;
+                _thighs[i].rotation = Quaternion.AngleAxis(-70f, right) * Quaternion.AngleAxis(outSign * 24f, fwd) * _thighs[i].rotation;
+                _shins[i].rotation = Quaternion.AngleAxis(78f, right) * _shins[i].rotation;
+            }
         }
     }
 }

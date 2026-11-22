@@ -141,6 +141,16 @@ namespace WildPartner.World
             }
         }
 
+        /// <summary>Is there open water at (x, z)? Outputs the surface height of the lake, pond or river there.
+        /// Callers compare it with the terrain height for the depth (fish keep to water deeper than ~0.3 m).</summary>
+        public static bool WaterSurface(float x, float z, out float level)
+        {
+            if (LakeDistance(x, z) < 1.18f) { level = LakeLevel + 0.15f; return true; }
+            if (Vector2.Distance(new Vector2(x, z), Pond) < PondRadius + 3f) { level = 25.35f; return true; }
+            float d = RiverDistance(x, z, out level);
+            return d < RiverHalfWidth + 0.5f;
+        }
+
         public static float PathDistance(float x, float z)
         {
             // domain warp: the polylines become gently meandering trails (画面整改 1: no ruler-straight bands)

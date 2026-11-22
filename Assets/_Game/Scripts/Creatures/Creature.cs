@@ -15,9 +15,11 @@ namespace WildPartner.Creatures
     /// </summary>
     public class Creature : MonoBehaviour
     {
-        public enum State { Hidden, Wander, Alert, Flee, Companion }
+        public enum State { Hidden, Wander, Alert, Flee, Companion, Startled }
 
         public string defId;
+        /// <summary>Which of the species' <see cref="CreatureDef.homes"/> this one lives at (0 for single creatures).</summary>
+        public int instance;
         public CreatureDef Def { get; private set; }
         public State Current { get; private set; } = State.Hidden;
         public float AlertLevel { get; private set; }
@@ -52,7 +54,12 @@ namespace WildPartner.Creatures
         float _appear;            // 0..1 grow-in scale
         Vector3 _visualScale;
 
-        public bool CanBeCaptured => Current == State.Wander || Current == State.Alert;
+        /// <summary>Wild, calm enough, and its species not collected yet: once one of a species is caught the others
+        /// stay wild, still run from her, but show no prompt and cannot be caught (试玩反馈 1123b-6).</summary>
+        public bool CanBeCaptured => (Current == State.Wander || Current == State.Alert) && !SpeciesTaken;
+        public bool SpeciesTaken => Current != State.Companion && GameFlow.Instance != null && GameFlow.Instance.Save.HasCaught(defId);
+        /// <summary>Centre of its home range: its own home for multi-instance species, else the current anchor.</summary>
+        public Vector2 Home => Def.homes != null ? Def.homes[Mathf.Clamp(instance, 0, Def.homes.Length - 1)] : Def.anchors[Mathf.Clamp(_anchor, 0, Def.anchors.Length - 1)];
 
         void Awake()
         {
@@ -65,10 +72,12 @@ namespace WildPartner.Creatures
             if (_animator && _animator.runtimeAnimatorController)
                 foreach (var prm in _animator.parameters) if (prm.nameHash == MoodId) _hasMood = true;
             if (_visual) _visualScale = _visual.localScale;
+            FindRabbitBones();
         }
 
         public void Init(int anchor, bool startHidden)
         {
+            if (Ridden && PlayerController.Instance) { Ridden = false; PlayerController.Instance.SetMount(null, 0f); RidePrompt = null; }
             _anchor = anchor;
             if (_agent) _agent.enabled = false;
             Place(AnchorPos(anchor));
@@ -77,7 +86,7 @@ namespace WildPartner.Creatures
 
         Vector3 AnchorPos(int i)
         {
-            var a = Def.anchors[Mathf.Clamp(i, 0, Def.anchors.Length - 1)];
+            var a = Def.homes != null ? Home : Def.anchors[Mathf.Clamp(i, 0, Def.anchors.Length - 1)];
             return GroundPoint(a.x, a.y);
         }
 
@@ -92,11 +101,28 @@ namespace WildPartner.Creatures
             float y;
             if (Def.movement == Movement.Water)
             {
-                WorldLayout.RiverDistance(x, z, out float wl);
-                y = wl + 0.05f;
+                // lake, pond or river; a point on dry land is moved to the nearest water deep enough to swim in
+                if (!SwimmablePoint(ref x, ref z, out float wl)) WorldLayout.RiverDistance(x, z, out wl);
+                y = wl - 0.06f;
             }
             else y = GroundHeight(x, z) + Def.hover;
             return new Vector3(x, y, z);
+        }
+
+        /// <summary>Water at least 0.35 m deep at (x, z), or the nearest such point within 8 m (spiral search).</summary>
+        public static bool SwimmablePoint(ref float x, ref float z, out float level)
+        {
+            for (int ring = 0; ring <= 8; ring++)
+            {
+                int n = ring == 0 ? 1 : ring * 6;
+                for (int i = 0; i < n; i++)
+                {
+                    float a = i * Mathf.PI * 2f / n, px = x + Mathf.Cos(a) * ring, pz = z + Mathf.Sin(a) * ring;
+                    if (WorldLayout.WaterSurface(px, pz, out level) && level - GroundHeight(px, pz) > 0.35f) { x = px; z = pz; return true; }
+                }
+            }
+            level = 0f;
+            return false;
         }
 
         void Place(Vector3 p)
@@ -134,7 +160,14 @@ namespace WildPartner.Creatures
         {
             if (Current == State.Companion) return;
             bool want = Def.ConditionMet(hour, raining);
-            if (Current == State.Hidden && want)
+            if (Current == State.Hidden && want && Def.homes != null)
+            {
+                // several of a kind: each comes out at its own home, never right next to her
+                if (Vector2.Distance(Home, new Vector2(player.x, player.z)) < 18f) return;
+                Place(AnchorPos(0));
+                SetState(State.Wander);
+            }
+            else if (Current == State.Hidden && want)
             {
                 // Appear at the anchor farthest from the player that is still in the habitat.
                 int best = 0; float bestD = -1;
@@ -148,7 +181,7 @@ namespace WildPartner.Creatures
                 SetState(State.Wander);
                 Debug.Log($"[Creature] {Def.id} appears at anchor {best} ({Def.ConditionText})");
             }
-            else if (Current != State.Hidden && !want && Vector3.Distance(transform.position, player) > 25f)
+            else if (Current != State.Hidden && Current != State.Startled && !want && Vector3.Distance(transform.position, player) > 25f)
             {
                 SetState(State.Hidden);
                 Debug.Log($"[Creature] {Def.id} leaves ({Def.ConditionText} over)");
@@ -204,8 +237,10 @@ namespace WildPartner.Creatures
 
             if (Current == State.Companion) { UpdateCompanion(player); DriveAnimator(player); return; }
 
+            if (Current == State.Startled) { UpdateStartled(player, toPlayer); return; }
+
             // Senses
-            float radius = Def.alertRadius * player.Noise;
+            float radius = Def.alertRadius * player.Noise * (player.Sneaking ? Def.sneakRadiusMul : 1f);
             bool sensed = dist < radius;
             // Sneaking makes the meter rise much slower; holding capture while sneaking calms the creature
             // (it "accepts" you), holding it while not sneaking only halves the rise -> the hint "sneak up".
@@ -225,7 +260,11 @@ namespace WildPartner.Creatures
                 case State.Alert:
                     if (_agent && _agent.enabled) _agent.isStopped = true;
                     FaceTowards(toPlayer);
-                    if (AlertLevel >= 1f) Flee(pp);
+                    if (AlertLevel >= 1f)
+                    {
+                        if (Def.startleFirst && CaptureSystem.Target == this) Startle();
+                        else Flee(pp);
+                    }
                     else if (AlertLevel < 0.1f) SetState(State.Wander);
                     break;
                 case State.Flee:
@@ -234,6 +273,7 @@ namespace WildPartner.Creatures
                     {
                         AlertLevel = 0.3f;
                         SetState(State.Wander);
+                        if (Def.grazes) { _paused = true; _pauseUntil = Random.Range(3f, 7f); }   // stops and grazes again
                     }
                     break;
             }
@@ -248,22 +288,63 @@ namespace WildPartner.Creatures
                 if (_agent && _agent.enabled) _agent.isStopped = true;
                 return;
             }
-            if (_hasMood && !_paused && Def.id != "cat" && Arrived(_target) && Random.value < 0.75f)
+            if (_paused) { _paused = false; NewWanderTarget(); _walkTime = 0f; }
+            // grazers stop to graze: deer every ~3 s of walking (试玩反馈 1123b-8), rabbits mostly at the end of a
+            // stroll; rigged ones play GrazeDown -> Graze (Mood 1), the rabbit lowers its head procedurally
+            if (Def.grazes || (_hasMood && Def.id != "cat"))
             {
-                _paused = true;
-                _pauseUntil = _stateTime + Random.Range(5f, 12f);
-                return;
+                _walkTime += Time.deltaTime;
+                if (_burstLen <= 0f) _burstLen = Def.walkBurst * Random.Range(0.75f, 1.3f);
+                bool burstDone = Def.walkBurst > 0f && _walkTime > _burstLen;
+                if (burstDone || (Arrived(_target) && Random.value < 0.75f))
+                {
+                    _paused = true;
+                    _pauseUntil = _stateTime + (Def.walkBurst > 0f ? Random.Range(3.5f, 7f) : Random.Range(4f, 10f));
+                    _burstLen = 0f;
+                    if (_agent && _agent.enabled) _agent.isStopped = true;
+                    return;
+                }
             }
-            if (_stateTime > _nextWander || Arrived(_target))
-            {
-                _paused = false;
-                var a = Def.anchors[_anchor];
-                var r = Random.insideUnitCircle * Def.wanderRadius;
-                _target = GroundPoint(a.x + r.x, a.y + r.y);
-                _nextWander = _stateTime + Random.Range(4f, 9f);
-            }
+            if (_stateTime > _nextWander || Arrived(_target)) NewWanderTarget();
             MoveTo(_target, Def.wanderSpeed);
         }
+
+        float _walkTime, _burstLen;
+
+        void NewWanderTarget()
+        {
+            var a = Home;
+            var r = Random.insideUnitCircle * Def.wanderRadius;
+            _target = GroundPoint(a.x + r.x, a.y + r.y);
+            _nextWander = _stateTime + Random.Range(4f, 9f);
+        }
+
+        // ---- 试玩反馈 1123b-6: a spoiled capture first only startles the rabbit -------------------------------
+        void Startle()
+        {
+            CaptureSystem.NotifyStartled(this);
+            SetState(State.Startled);
+            AlertLevel = 1f;
+            Debug.Log($"[Creature] {Def.id} startled (ears up)");
+        }
+
+        /// <summary>Ears up, frozen, staring at her for about a second. If she moves (or jumps) it runs; if she keeps
+        /// still it relaxes back to Alert at half the meter and she may try again.</summary>
+        void UpdateStartled(PlayerController player, Vector3 toPlayer)
+        {
+            if (_agent && _agent.enabled) _agent.isStopped = true;
+            FaceTowards(toPlayer);
+            if (player.Speed > 0.3f || player.Airborne) { Flee(player.transform.position); return; }
+            if (_stateTime > 1.1f)
+            {
+                AlertLevel = 0.45f;
+                SetState(State.Alert);
+                Debug.Log($"[Creature] {Def.id} relaxes");
+            }
+        }
+        public bool IsStartled => Current == State.Startled;
+        /// <summary>Smoke test only: put the alert meter at a value (as if she had been noticed).</summary>
+        public void DebugSetAlert(float a) { AlertLevel = a; if (Current == State.Wander && a > 0.25f) SetState(State.Alert); }
 
         void Flee(Vector3 playerPos)
         {
@@ -279,10 +360,10 @@ namespace WildPartner.Creatures
             {
                 Vector3 away = transform.position - playerPos; away.y = 0;
                 if (away.sqrMagnitude < 0.01f) away = Random.insideUnitSphere;
-                away = away.normalized * Def.alertRadius * 1.8f;
+                away = away.normalized * (Def.fleeDistance > 0f ? Def.fleeDistance : Def.alertRadius * 1.8f);
                 Vector3 p = transform.position + away;
                 // stay inside the habitat
-                var a = Def.anchors[_anchor];
+                var a = Home;
                 var off = new Vector2(p.x - a.x, p.z - a.y);
                 if (off.magnitude > Def.wanderRadius * 2f) off = off.normalized * Def.wanderRadius * 2f;
                 _target = GroundPoint(a.x + off.x, a.y + off.y);
@@ -312,9 +393,9 @@ namespace WildPartner.Creatures
             Vector3 p = transform.position + _velocity * Time.deltaTime;
             if (Def.movement == Movement.Water)
             {
-                float d = WorldLayout.RiverDistance(p.x, p.z, out float wl);
-                if (d > WorldLayout.RiverHalfWidth - 1f) { p = transform.position; _velocity = -_velocity * 0.5f; _target = AnchorPos(_anchor); }
-                p.y = wl + 0.05f;
+                bool water = WorldLayout.WaterSurface(p.x, p.z, out float wl) && wl - GroundHeight(p.x, p.z) > 0.3f;
+                if (!water) { p = transform.position; _velocity = -_velocity * 0.5f; _target = AnchorPos(_anchor); WorldLayout.WaterSurface(p.x, p.z, out wl); }
+                p.y = wl - 0.06f;
             }
             else
             {
@@ -328,6 +409,50 @@ namespace WildPartner.Creatures
         void LateUpdate()
         {
             if (_animator && Current != State.Companion && Current != State.Hidden) DriveAnimator(PlayerController.Instance);
+            if (_ears != null && Current != State.Hidden) RabbitPose();
+        }
+
+        // ---- rabbit: ears up when alert, head down when grazing (no clips for either; on top of the Animator) -----
+        Transform[] _ears;
+        Transform _head, _spine;
+        float _earsW, _grazeW;
+        /// <summary>0..1 how far the ears are pricked up (smoke test / debug).</summary>
+        public float EarsUp => _earsW;
+        public bool Grazing => Current == State.Wander && _pauseUntil > _stateTime;
+
+        void FindRabbitBones()
+        {
+            if (Def == null || Def.id != "moon_rabbit") return;
+            var list = new System.Collections.Generic.List<Transform>();
+            foreach (var t in GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name.StartsWith("Ear1.") || t.name.StartsWith("Ear2.")) list.Add(t);
+                else if (t.name == "Head") _head = t;
+                else if (t.name == "Spine") _spine = t;
+            }
+            if (list.Count > 0 && _head) _ears = list.ToArray();
+        }
+
+        void RabbitPose()
+        {
+            float dt = Time.deltaTime;
+            float earsTarget = Current == State.Startled ? 1f : Current == State.Alert ? Mathf.Lerp(0.35f, 0.8f, AlertLevel) : Current == State.Flee ? 0.6f : 0f;
+            _earsW = Mathf.MoveTowards(_earsW, earsTarget, dt * (earsTarget > _earsW ? 9f : 1.6f));   // snap up, relax slowly
+            _grazeW = Mathf.MoveTowards(_grazeW, Grazing ? 1f : 0f, dt * 2.2f);
+            Vector3 right = transform.right;
+            if (_grazeW > 0.001f)
+            {
+                float nibble = Mathf.Sin(Time.time * 9f + instance) * 4f * _grazeW;
+                if (_spine) _spine.rotation = Quaternion.AngleAxis(28f * _grazeW, right) * _spine.rotation;
+                _head.rotation = Quaternion.AngleAxis(52f * _grazeW + nibble, right) * _head.rotation;
+            }
+            if (_earsW > 0.001f)
+            {
+                // both ears straight up, tipped slightly towards her
+                Vector3 up = (Vector3.up + transform.forward * 0.18f).normalized;
+                foreach (var e in _ears)
+                    e.rotation = Quaternion.Slerp(Quaternion.identity, Quaternion.FromToRotation(e.up, up), 0.9f * _earsW) * e.rotation;
+            }
         }
 
         /// <summary>Rigged models: blend-tree speed from the actual ground speed (playback sped up above the Run
@@ -399,7 +524,7 @@ namespace WildPartner.Creatures
                 Creature best = null; float bd = 50f;
                 foreach (var c in s_all)
                 {
-                    if (c == this || (c.Current != State.Wander && c.Current != State.Alert)) continue;
+                    if (c == this || (c.Current != State.Wander && c.Current != State.Alert) || c.SpeciesTaken) continue;
                     float d = Vector3.Distance(c.transform.position, player.transform.position);
                     if (d < bd) { bd = d; best = c; }
                 }
@@ -515,8 +640,84 @@ namespace WildPartner.Creatures
             return true;
         }
 
+        // ---- 试玩反馈 1123b-8: the caught white deer can be ridden ------------------------------------------------
+        /// <summary>"按 E 骑上白鹿" / "按 E 下来" while it applies (shown by GameUI like the cabin prompts).</summary>
+        public static string RidePrompt { get; private set; }
+        public bool Ridden { get; private set; }
+        Vector3 _seatLocal;     // the deer's back, in deer space (where her hips go)
+        Vector3 _prevRidePos;
+
+        /// <summary>Returns true while she is riding this one (the follow behaviour is skipped).</summary>
+        bool UpdateRide(PlayerController player)
+        {
+            var flow = GameFlow.Instance;
+            bool can = flow != null && flow.State == GameFlow.FlowState.Playing && !EnvController.Indoors && !CabinInterior.Busy;
+            // pausing, the journal or the map keep her on the deer; the menu, the ending and going indoors do not
+            bool keep = flow != null && !EnvController.Indoors && flow.State != GameFlow.FlowState.MainMenu && flow.State != GameFlow.FlowState.Ending;
+            bool e = can && GameInput.InteractPressed;
+            if (Ridden)
+            {
+                RidePrompt = can ? "按 E 从白鹿背上下来" : null;
+                if (e || !keep) { Dismount(player); return false; }
+                // the deer carries her: its back under her hips, facing where she faces
+                var rot = player.transform.rotation;
+                Vector3 p = player.transform.position - rot * new Vector3(_seatLocal.x, 0f, _seatLocal.z);
+                p.y = GroundHeight(p.x, p.z);
+                if (Terrain.activeTerrain == null) p.y = player.transform.position.y;
+                float dt = Mathf.Max(Time.deltaTime, 1e-4f);
+                _velocity = (p - _prevRidePos) / dt;
+                _prevRidePos = p;
+                transform.SetPositionAndRotation(p, rot);
+                return true;
+            }
+            Vector3 d = transform.position - player.transform.position; d.y = 0;
+            bool near = can && !player.Riding && d.magnitude < 2.8f && CaptureSystem.Candidate == null && CabinInterior.Prompt == null;
+            if (near) RidePrompt = "按 E 骑上白鹿";
+            else if (RidePrompt == "按 E 骑上白鹿") RidePrompt = null;
+            if (near && e) Mount(player);
+            return false;
+        }
+
+        public void Mount(PlayerController player)
+        {
+            // her hips go just above the deer's spine
+            Transform spine = null;
+            foreach (var t in GetComponentsInChildren<Transform>()) if (t.name == "Spine") { spine = t; break; }
+            _seatLocal = spine ? transform.InverseTransformPoint(spine.position) : new Vector3(0, 1.1f, 0);
+            float seat = Mathf.Max(0.3f, _seatLocal.y + 0.14f - 0.756f);   // 0.756 = her standing hip height
+            if (_agent) _agent.enabled = false;
+            foreach (var c in GetComponents<Collider>()) c.enabled = false;   // her capsule would bump into it
+            Ridden = true;
+            RidePrompt = null;
+            _prevRidePos = transform.position;
+            // she climbs on: put her where the deer's back is, facing the way it faces
+            var p = transform.TransformPoint(new Vector3(_seatLocal.x, 0f, _seatLocal.z));
+            p.y = player.transform.position.y;
+            player.Place(p);
+            player.transform.rotation = Quaternion.Euler(0, transform.eulerAngles.y, 0);
+            player.SetMount(transform, seat);
+            Debug.Log($"[Ride] mounted {Def.id}, seat {seat:0.00} m");
+        }
+
+        public void Dismount(PlayerController player)
+        {
+            if (!Ridden) return;
+            Ridden = false;
+            RidePrompt = null;
+            player.SetMount(null, 0f);
+            // step off to the left side of the deer
+            Vector3 off = transform.position - transform.right * 1.1f;
+            if (NavMesh.SamplePosition(off, out var hit, 2f, NavMesh.AllAreas)) off = hit.position;
+            player.Place(off + Vector3.up * 0.1f);
+            Place(transform.position);
+            foreach (var c in GetComponents<Collider>()) c.enabled = true;
+            if (_agent && _agent.enabled) { _agent.speed = 6f; _agent.stoppingDistance = 0.8f; }
+            Debug.Log($"[Ride] dismounted {Def.id}");
+        }
+
         void UpdateCompanion(PlayerController player)
         {
+            if (Def.rideable && UpdateRide(player)) return;
             if (Def.id == "cat" && Def.movement == Movement.Ground && UpdateLead(player)) return;
             if (Def.id == "cat" && Def.movement == Movement.Ground && UpdateSideSpot(player)) return;
             // Formation slots behind the player so companions never stack on each other.

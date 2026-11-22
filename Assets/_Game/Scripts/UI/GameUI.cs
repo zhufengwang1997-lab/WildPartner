@@ -363,11 +363,11 @@ namespace WildPartner.UI
             var cand = CaptureSystem.Candidate;
             var target = CaptureSystem.Target;
             bool show = cand != null;
-            string interact = WildPartner.World.CabinInterior.Prompt;
+            string interact = WildPartner.World.CabinInterior.Prompt ?? Creature.RidePrompt;
             _prompt.transform.parent.gameObject.SetActive(show || interact != null);
             if (!show && interact != null)
             {
-                _prompt.text = interact;   // cabin door / bed / book (试玩反馈 1123b-3)
+                _prompt.text = interact;   // cabin door / bed / book (试玩反馈 1123b-3), riding the deer (1123b-8)
                 _progressBg.gameObject.SetActive(false);
                 _alertRoot.gameObject.SetActive(false);
             }

@@ -76,7 +76,7 @@ namespace WildPartner.World
             UpdateWindows();
             Prompt = null;
             var flow = GameFlow.Instance; var pc = PlayerController.Instance;
-            if (_busy || flow == null || flow.State != GameFlow.FlowState.Playing || !pc || CaptureSystem.Candidate) return;
+            if (_busy || flow == null || flow.State != GameFlow.FlowState.Playing || !pc || CaptureSystem.Candidate || pc.Riding) return;
             var p = pc.transform.position;
             bool e = GameInput.InteractPressed;
             if (!Inside)

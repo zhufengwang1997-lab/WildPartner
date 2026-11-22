@@ -22,6 +22,16 @@ namespace WildPartner.Creatures
 
         void Start() => _all = FindObjectsByType<Creature>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 
+        /// <summary>The capture was spoiled but the creature only startled (rabbit): progress lost, it stays.</summary>
+        public static event Action<Creature> Startled;
+        public static void NotifyStartled(Creature c)
+        {
+            if (Target != c) return;
+            Startled?.Invoke(c);
+            Target = null;
+            Progress = 0;
+        }
+
         public static void NotifyFled(Creature c)
         {
             if (Target == c)
@@ -46,7 +56,7 @@ namespace WildPartner.Creatures
             float best = float.MaxValue;
             foreach (var c in _all)
             {
-                if (!c || !c.CanBeCaptured) continue;
+                if (!c || !c.CanBeCaptured || player.Riding) continue;   // no captures from the deer's back
                 Vector3 d = c.transform.position - player.transform.position; d.y = 0;
                 float dist = d.magnitude;
                 if (dist < c.Def.captureRange && dist < best) { best = dist; Candidate = c; }

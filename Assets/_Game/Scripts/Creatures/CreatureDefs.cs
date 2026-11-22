@@ -24,6 +24,24 @@ namespace WildPartner.Creatures
         public float hover;           // flyers: height above ground
         public bool startsWithPlayer;  // default pet (the cat): already a companion when a new game starts
         public Color journalColor;
+        /// <summary>Several of this species in the world (试玩反馈 1123b-6/7/8): one home (world xz) per instance.
+        /// Catching any one of them collects the species; the rest stay wild and can no longer be caught.
+        /// null = a single creature that roams between <see cref="anchors"/>.</summary>
+        public Vector2[] homes;
+        public int Count => homes != null ? homes.Length : 1;
+        /// <summary>Extra factor on the detection radius while the witch sneaks (rabbit: 0.5).</summary>
+        public float sneakRadiusMul = 1f;
+        /// <summary>How far it runs when scared; 0 = alertRadius * 1.8.</summary>
+        public float fleeDistance;
+        /// <summary>A capture spoiled by its alert meter first only startles it (ears up ~1 s); if the witch then
+        /// keeps still it relaxes, if she moves it runs.</summary>
+        public bool startleFirst;
+        /// <summary>Grazers: walk about this many seconds, then stop and graze (0 = graze only at the end of a stroll).</summary>
+        public float walkBurst;
+        /// <summary>Stops to graze (head down) on its strolls and after running away.</summary>
+        public bool grazes;
+        /// <summary>The caught one can be ridden (white deer).</summary>
+        public bool rideable;
 
         public bool ConditionMet(float hour, bool raining) => appear switch
         {
@@ -47,21 +65,29 @@ namespace WildPartner.Creatures
             {
                 id = "moon_rabbit", name = "月影兔", model = "MoonRabbit",
                 description = "额头有月牙印记的小兔子，耳朵末端带着淡紫色。胆子很小，一有动静就蹦得飞快。",
-                hint = "白天在中央草甸的石阵附近蹦跳。很胆小——按住 Ctrl 潜行慢慢靠近。",
+                hint = "白天在木屋坡下的草地上，两三只一群。胆小——按住 Ctrl 潜行慢慢靠近；它竖起耳朵时站着别动。",
                 movement = Movement.Ground, appear = Appear.Day,
-                alertRadius = 12f, alertRate = 0.45f, wanderSpeed = 1.8f, fleeSpeed = 9f, captureSeconds = 2.0f,
+                // 试玩反馈 1123b-6: notice distance 12 -> 7.2 m (-40%), halved again while sneaking; hold 2.0 -> 1.4 s
+                alertRadius = 7.2f, alertRate = 0.45f, wanderSpeed = 1.8f, fleeSpeed = 7f, captureSeconds = 1.4f,
+                sneakRadiusMul = 0.5f, fleeDistance = 6f, startleFirst = true, grazes = true, wanderRadius = 5f,
                 anim = Player.ProceduralAnimator.Style.Hopper, animScale = 0.8f,
-                anchors = new[] { WorldLayout.StoneCircle + new Vector2(18, -10), new Vector2(430, 500) * WorldLayout.K, new Vector2(270, 610) * WorldLayout.K },
+                anchors = new[] { new Vector2(218, 122), new Vector2(192, 143), new Vector2(178, 112) },
+                // six in three pairs on the meadow below the cabin ramp, south-west of the pond
+                homes = new[] { new Vector2(217, 121), new Vector2(219.5f, 123.5f),
+                                new Vector2(192, 143), new Vector2(194.5f, 141),
+                                new Vector2(178, 112), new Vector2(180.5f, 114.5f) },
                 journalColor = new Color(0.92f, 0.88f, 1f),
             },
             new CreatureDef
             {
                 id = "white_deer", name = "白色神鹿", model = "WhiteDeer",
                 description = "秋色林里的白鹿，传说是森林的守护者。视觉和听觉都非常敏锐。",
-                hint = "在北边的秋色林里。警觉性极高，远远就会发现你——一路潜行，别跑。",
+                hint = "石阵北边的林子里有三只，走几步就停下吃草。警觉性极高，远远就会发现你——一路潜行，别跑。收服的那只可以骑（靠近按 E）。",
                 movement = Movement.Ground, appear = Appear.Always,
                 alertRadius = 20f, alertRate = 0.4f, wanderSpeed = 1.4f, fleeSpeed = 10f, captureSeconds = 2.6f,
-                captureRange = 4.2f,
+                captureRange = 4.2f, wanderRadius = 10f, walkBurst = 3f, grazes = true, rideable = true, fleeDistance = 22f,
+                // 试玩反馈 1123b-8: three in the woods north of the stone circle, two together and one apart
+                homes = new[] { new Vector2(106f, 219f), new Vector2(109f, 221.5f), new Vector2(131f, 231f) },
                 anim = Player.ProceduralAnimator.Style.Quadruped, animScale = 2f,
                 anchors = new[] { new Vector2(560, 800) * WorldLayout.K, new Vector2(470, 830) * WorldLayout.K, new Vector2(650, 790) * WorldLayout.K },
                 journalColor = new Color(0.98f, 0.96f, 0.9f),
@@ -81,11 +107,13 @@ namespace WildPartner.Creatures
             {
                 id = "ink_koi", name = "赤墨锦鲤", model = "Koi",
                 description = "墨黑底色、赤红花纹的锦鲤，尾鳍像水墨一样飘散。平时藏在深水里。",
-                hint = "下雨的时候才会浮到木桥附近的河面上。站在岸边或桥上等它。",
+                hint = "下雨的时候才会浮上来：一条在木桥下，一条在南边的河湾，一条在大湖南岸的浅水里。站在岸边或桥上等它。",
                 movement = Movement.Water, appear = Appear.Rain,
                 alertRadius = 8f, alertRate = 0.35f, wanderSpeed = 1.2f, fleeSpeed = 4f, captureSeconds = 2.2f,
-                captureRange = 7f, wanderRadius = 14f,
+                captureRange = 7f, wanderRadius = 6f,
                 anim = Player.ProceduralAnimator.Style.Swimmer, animScale = 0.8f,
+                // 试玩反馈 1123b-7: three koi - under the bridge, at the river bend, in the lake shallows
+                homes = new[] { new Vector2(263f, 233.4f), new Vector2(253.8f, 164.5f), new Vector2(300f, 262f) },
                 anchors = new[] { new Vector2(746, 640) * WorldLayout.K, new Vector2(745, 560) * WorldLayout.K, new Vector2(712, 712) * WorldLayout.K },
                 journalColor = new Color(1f, 0.6f, 0.6f),
             },

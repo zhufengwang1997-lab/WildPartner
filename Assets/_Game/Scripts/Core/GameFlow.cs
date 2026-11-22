@@ -58,6 +58,7 @@ namespace WildPartner.Core
             for (int i = 0; i < _creatures.Length; i++) _creatures[i].Init(0, true);
             CaptureSystem.Captured += OnCaptured;
             CaptureSystem.Interrupted += c => Toast?.Invoke($"{c.Def.name}受惊逃走了！试试按住 Ctrl 潜行靠近。");
+            CaptureSystem.Startled += c => Toast?.Invoke($"{c.Def.name}竖起了耳朵——站着别动，等它放松下来再试。");
             if (!Automation) SetState(FlowState.MainMenu);
         }
 
@@ -188,7 +189,7 @@ namespace WildPartner.Core
             if (Save.HasCaught(c.defId)) return;
             Save.caught.Add(new CaughtEntry { id = c.defId, playTime = Save.playTime, gameHour = environment.timeOfDay, position = c.transform.position });
             c.BecomeCompanion(Save.caught.Count - 1);
-            Toast?.Invoke($"捕捉成功：{c.Def.name}！（{CaughtCount}/{Total}）");
+            Toast?.Invoke($"捕捉成功：{c.Def.name}！（{CaughtCount}/{Total}）" + (c.Def.Count > 1 ? $" 其余的{c.Def.name}会继续留在野外。" : ""));
             if (AllCaught) Toast?.Invoke("伙伴们都到齐了！回到悬崖木屋前的篝火吧。");
             SaveNow();
         }

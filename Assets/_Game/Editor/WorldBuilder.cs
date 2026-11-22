@@ -93,10 +93,21 @@ namespace WildPartner.EditorTools
             foreach (var def in CreatureDefs.All)
             {
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.CreaturePrefabs}/{def.id}.prefab");
-                var c = (GameObject)PrefabUtility.InstantiatePrefab(prefab, creatures);
-                var a = def.anchors[0];
-                c.transform.position = new Vector3(a.x, Height(a.x, a.y), a.y);
+                for (int i = 0; i < def.Count; i++)   // several of a kind (试玩反馈 1123b-6/7/8): one per home
+                {
+                    var c = (GameObject)PrefabUtility.InstantiatePrefab(prefab, creatures);
+                    var a = def.homes != null ? def.homes[i] : def.anchors[0];
+                    c.transform.position = new Vector3(a.x, Height(a.x, a.y), a.y);
+                    c.GetComponent<Creature>().instance = i;
+                    if (def.Count > 1) c.name = $"{def.id}_{i}";
+                }
             }
+
+            // ordinary fish schools (试玩反馈 1123b-7): scenery, not creatures
+            var fishGo = new GameObject("FishSchools");
+            var fishC = fishGo.AddComponent<FishSchools>();
+            fishC.silver = FishMat("M_Fish_Silver", new Color(0.72f, 0.76f, 0.8f));
+            fishC.gold = FishMat("M_Fish_Gold", new Color(0.93f, 0.8f, 0.5f));
 
             var flow = systems.AddComponent<GameFlow>();
             flow.player = player.GetComponent<PlayerController>();
@@ -507,6 +518,21 @@ namespace WildPartner.EditorTools
                        new[] { new GradientAlphaKey(0.9f, 0), new GradientAlphaKey(0.6f, 0.6f), new GradientAlphaKey(0, 1) });
             sc.color = sg;
             sgo.GetComponent<ParticleSystemRenderer>().sharedMaterial = ParticleMat("M_Splash", new Color(1, 1, 1, 0.9f), true);
+        }
+
+        static Material FishMat(string name, Color c)
+        {
+            string path = $"{AssetSetup.MatDir}/{name}.mat";
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (!m) { m = new Material(Shader.Find("WildPartner/Toon")); AssetDatabase.CreateAsset(m, path); }
+            m.SetColor("_BaseColor", c);
+            m.SetFloat("_Cull", 0f);
+            m.SetColor("_RimColor", new Color(1f, 1f, 1f, 0.35f));   // a glint along the back
+            m.SetFloat("_Emission", 0.35f);                          // reads through the water tint
+            m.SetColor("_ShadowColor", new Color(0.6f, 0.66f, 0.8f));
+            m.enableInstancing = true;
+            EditorUtility.SetDirty(m);
+            return m;
         }
 
         static Material ParticleMat(string name, Color c, bool soft)
