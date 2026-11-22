@@ -22,6 +22,7 @@ namespace WildPartner.Creatures
         public float animScale = 1f;
         public Vector2[] anchors;     // habitat centres (world xz)
         public float hover;           // flyers: height above ground
+        public bool startsWithPlayer;  // default pet (the cat): already a companion when a new game starts
         public Color journalColor;
 
         public bool ConditionMet(float hour, bool raining) => appear switch
@@ -90,14 +91,15 @@ namespace WildPartner.Creatures
             },
             new CreatureDef
             {
-                id = "forest_owl", name = "林鸮", model = "Owl",
-                description = "羽毛蓬松的小猫头鹰，竖着两撮耳羽。受惊时会无声地飞到另一个树桩上。",
-                hint = "住在西边深绿林的瞭望塔附近。被发现后会飞走，但不会飞太远。",
-                movement = Movement.Flying, appear = Appear.Always,
-                alertRadius = 10f, alertRate = 0.5f, wanderSpeed = 0f, fleeSpeed = 7f, captureSeconds = 2.2f,
-                anim = Player.ProceduralAnimator.Style.Perched, animScale = 1f, hover = 0f, wanderRadius = 40f,
-                anchors = new[] { WorldLayout.Watchtower + new Vector2(22, 14), WorldLayout.Watchtower + new Vector2(38, -26), WorldLayout.Watchtower + new Vector2(-8, 46), WorldLayout.Watchtower + new Vector2(60, 30) },
-                journalColor = new Color(0.85f, 0.7f, 0.5f),
+                id = "cat", name = "猫", model = "Cat", startsWithPlayer = true,
+                description = "女巫的老伙伴，毛蓬蓬的小猫。总是跟在你脚边，偶尔停下来舔舔爪子。",
+                hint = "开局就在你身边。",
+                movement = Movement.Ground, appear = Appear.Always,
+                alertRadius = 1f, alertRate = 0f, wanderSpeed = 1.2f, fleeSpeed = 6f, captureSeconds = 1f,
+                captureRange = 2f, wanderRadius = 3f,
+                anim = Player.ProceduralAnimator.Style.Quadruped, animScale = 0.45f,
+                anchors = new[] { WorldLayout.PlayerStart + new Vector2(1.5f, 1f) },
+                journalColor = new Color(0.86f, 0.84f, 0.9f),
             },
         };
 

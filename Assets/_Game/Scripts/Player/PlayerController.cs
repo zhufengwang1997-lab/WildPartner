@@ -14,11 +14,14 @@ namespace WildPartner.Player
     {
         public static PlayerController Instance { get; private set; }
 
-        public float walkSpeed = 4.5f, runSpeed = 8.5f, sneakSpeed = 2.2f;
+        public float walkSpeed = 3.0f, runSpeed = 5.5f, sneakSpeed = 1.6f;
         public float turnSpeed = 720f;
         public float gravity = -20f;
         public CinemachineCamera vcam;
         public Transform visual;
+        Animator _animator;
+        static readonly int SpeedId = Animator.StringToHash("Speed");
+        const float AnimRunSpeed = 3.2f;   // ground speed of the Run clip at 1x (stride 1.72 m / 0.53 s)
 
         public float Speed { get; private set; }
         public bool Sneaking { get; private set; }
@@ -38,6 +41,7 @@ namespace WildPartner.Player
         {
             Instance = this;
             _cc = GetComponent<CharacterController>();
+            _animator = GetComponentInChildren<Animator>();
             if (vcam) _orbit = vcam.GetComponent<CinemachineOrbitalFollow>();
         }
 
@@ -94,6 +98,13 @@ namespace WildPartner.Player
 
             _vy = _cc.isGrounded ? -2f : _vy + gravity * Time.deltaTime;
             _cc.Move((transform.forward * Speed + Vector3.up * _vy) * Time.deltaTime);
+
+            if (_animator)
+            {
+                // blend tree: Idle 0 / Walk 1.64 / Run 3.2 m/s at 1x; faster ground speed plays the run faster
+                _animator.SetFloat(SpeedId, Mathf.Min(Speed, AnimRunSpeed), 0.08f, Time.deltaTime);
+                _animator.speed = Mathf.Max(1f, Speed / AnimRunSpeed);
+            }
 
             Noise = Speed < 0.2f ? (Sneaking ? 0.35f : 0.55f) : Sneaking ? 0.45f : Running ? 1.6f : 1f;
 

@@ -54,8 +54,9 @@ namespace WildPartner.World
             K(4.5f,"#8FA6FF", 0.15f, "#101838", "#2C3866", "#26305A", "#26305A"),
             K(6,   "#FF9A5C", 0.9f,  "#5C7BC8", "#FFB08A", "#D8A0A0", "#7E7FA8"),
             K(8,   "#FFE2B0", 1.6f,  "#6FA6E8", "#F7D6D8", "#C8D2E8", "#9AB0D0"),
-            K(12,  "#FFF3DC", 2.0f,  "#5E9AE6", "#F2DCE4", "#C4D6EC", "#A8BCD8"),
-            K(16,  "#FFE0A8", 1.7f,  "#6B9DE0", "#F8D2CC", "#D2CCE0", "#A0AECB"),
+            K(12,  "#FFF1D6", 2.0f,  "#5E9AE6", "#EEDDE6", "#CFDDF0", "#A4ACD8"),
+            K(16,  "#FFD399", 1.9f,  "#6E9EE0", "#FBD3C2", "#D6D8EC", "#9C98CE"),
+            K(17,  "#FFBE7E", 1.6f,  "#6A92D8", "#FFC6A8", "#DCCFE0", "#968CC4"),
             K(18,  "#FF8A50", 1.0f,  "#4C5EA8", "#FF9A70", "#C88A90", "#8A7A9E"),
             K(19.5f,"#9AA8FF",0.25f, "#1E2650", "#5A4C80", "#3A3A66", "#3A3E70"),
             K(24,  "#8FA6FF", 0.18f, "#0B1230", "#24305A", "#1C2546", "#202A52"),
@@ -119,10 +120,10 @@ namespace WildPartner.World
 
             RenderSettings.ambientSkyColor = amb * (1 - 0.2f * rain);
             RenderSettings.ambientEquatorColor = Color.Lerp(amb, fog, 0.5f) * 0.9f;
-            RenderSettings.ambientGroundColor = amb * 0.45f;
+            RenderSettings.ambientGroundColor = Color.Lerp(amb, new Color(0.42f, 0.36f, 0.62f), 0.35f) * 0.5f;   // blue-purple shadow fill
             RenderSettings.fogColor = fog;
-            RenderSettings.fogStartDistance = Mathf.Lerp(60f, 25f, rain);
-            RenderSettings.fogEndDistance = Mathf.Lerp(520f, 260f, rain) * (night ? 0.8f : 1f);
+            RenderSettings.fogStartDistance = Mathf.Lerp(140f, 40f, rain);   // light aerial haze only (PRD-补充 §3)
+            RenderSettings.fogEndDistance = Mathf.Lerp(1100f, 380f, rain) * (night ? 0.8f : 1f);
 
             Shader.SetGlobalColor(ZenithId, zen);
             Shader.SetGlobalColor(HorizonId, hor);

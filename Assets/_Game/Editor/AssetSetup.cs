@@ -247,14 +247,14 @@ namespace WildPartner.EditorTools
             anim.style = def.anim;
             anim.scale = def.animScale;
             anim.visual = vis.transform;
-            anim.stepLength = def.id == "white_deer" ? 1.6f : 0.6f;
+            anim.stepLength = def.id == "white_deer" ? 1.6f : def.id == "cat" ? 0.3f : 0.6f;
             var col = root.AddComponent<SphereCollider>();
             col.isTrigger = true; col.radius = 0.6f; col.center = new Vector3(0, 0.4f, 0);
             if (def.movement == Movement.Ground)
             {
                 var agent = root.AddComponent<NavMeshAgent>();
-                agent.radius = def.id == "white_deer" ? 0.5f : 0.3f;
-                agent.height = def.id == "white_deer" ? 1.6f : 0.6f;
+                agent.radius = def.id == "white_deer" ? 0.5f : def.id == "cat" ? 0.2f : 0.3f;
+                agent.height = def.id == "white_deer" ? 1.6f : def.id == "cat" ? 0.45f : 0.6f;
                 agent.speed = def.wanderSpeed;
                 agent.angularSpeed = 400;
                 agent.acceleration = 14;
@@ -274,20 +274,80 @@ namespace WildPartner.EditorTools
             if (ph) Debug.LogWarning($"[Setup] {def.id}: model {def.model} missing -> placeholder capsule");
         }
 
+        public const string Rigged = "Assets/_Game/Models/Rigged";
+        public const string AnimDir = "Assets/_Game/Animation";
+
+        /// <summary>Blender-rigged model (tools/blender/rig_*.py) as "Visual" with an Animator driven by "Speed"
+        /// (Idle 0 / Walk 1.64 / Run 3.2 m/s). Null when the rigged FBX does not exist yet.</summary>
+        static GameObject RiggedVisual(string model, string texName)
+        {
+            string fbx = $"{Rigged}/{model}.fbx";
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(fbx);
+            if (!asset) return null;
+            var v = (GameObject)PrefabUtility.InstantiatePrefab(asset);
+            PrefabUtility.UnpackPrefabInstance(v, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+            v.name = "Visual";
+            v.transform.localRotation = Quaternion.Euler(0, 180, 0);
+            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>($"{Chars}/{texName}_BaseColor.png");
+            var mat = ToonMat("M_" + model, tex, m => { m.SetFloat("_RampSteps", 3); m.SetColor("_RimColor", new Color(1, 0.95f, 0.9f, 0.35f)); });
+            foreach (var r in v.GetComponentsInChildren<SkinnedMeshRenderer>())
+            {
+                r.sharedMaterial = mat;
+                r.updateWhenOffscreen = false;
+                r.skinnedMotionVectors = true;
+            }
+            var animator = v.GetComponent<Animator>() ?? v.AddComponent<Animator>();
+            animator.applyRootMotion = false;
+            animator.cullingMode = AnimatorCullingMode.CullUpdateTransforms;
+            animator.runtimeAnimatorController = LocomotionController(model, fbx);
+            return v;
+        }
+
+        static UnityEditor.Animations.AnimatorController LocomotionController(string model, string fbx)
+        {
+            Directory.CreateDirectory(AnimDir);
+            string path = $"{AnimDir}/{model}.controller";
+            AssetDatabase.DeleteAsset(path);
+            var ctrl = UnityEditor.Animations.AnimatorController.CreateAnimatorControllerAtPath(path);
+            ctrl.AddParameter("Speed", AnimatorControllerParameterType.Float);
+            AnimationClip Clip(string n)
+            {
+                foreach (var o in AssetDatabase.LoadAllAssetsAtPath(fbx))
+                    if (o is AnimationClip c && c.name == n) return c;
+                Debug.LogWarning($"[Setup] {model}: clip {n} missing");
+                return null;
+            }
+            var sm = ctrl.layers[0].stateMachine;
+            var state = ctrl.CreateBlendTreeInController("Locomotion", out var tree, 0);
+            tree.blendType = UnityEditor.Animations.BlendTreeType.Simple1D;
+            tree.blendParameter = "Speed";
+            tree.useAutomaticThresholds = false;
+            tree.AddChild(Clip("Idle"), 0f);
+            tree.AddChild(Clip("Walk"), 1.64f);
+            tree.AddChild(Clip("Run"), 3.2f);
+            sm.defaultState = state;
+            EditorUtility.SetDirty(ctrl);
+            return ctrl;
+        }
+
         static void BuildPlayer(Material placeholder)
         {
             var root = new GameObject("Player");
             root.tag = "Player";
-            var vis = Visual("Witch", "Witch", placeholder, out _);
+            var vis = RiggedVisual("Witch", "Witch") ?? Visual("Witch", "Witch", placeholder, out _);
+            bool rigged = vis.GetComponentInChildren<Animator>() != null;
             vis.transform.SetParent(root.transform, false);
             var cc = root.AddComponent<CharacterController>();
             cc.height = 1.6f; cc.radius = 0.35f; cc.center = new Vector3(0, 0.82f, 0); cc.stepOffset = 0.45f; cc.slopeLimit = 50;
             var pc = root.AddComponent<PlayerController>();
             pc.visual = vis.transform;
-            var anim = root.AddComponent<ProceduralAnimator>();
-            anim.style = ProceduralAnimator.Style.Walker;
-            anim.visual = vis.transform;
-            anim.stepLength = 0.75f;
+            if (!rigged)   // fallback when there is no Blender-rigged model yet
+            {
+                var anim = root.AddComponent<ProceduralAnimator>();
+                anim.style = ProceduralAnimator.Style.Walker;
+                anim.visual = vis.transform;
+                anim.stepLength = 0.75f;
+            }
             var target = new GameObject("CameraTarget");
             target.transform.SetParent(root.transform, false);
             target.transform.localPosition = new Vector3(0, 1.45f, 0);

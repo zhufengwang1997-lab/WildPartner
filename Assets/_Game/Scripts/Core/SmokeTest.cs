@@ -61,7 +61,8 @@ namespace WildPartner.Core
             flow.NewGame();
             yield return new WaitForSeconds(2f);
             var player = PlayerController.Instance;
-            Step(flow.State == GameFlow.FlowState.Playing && flow.CaughtCount == 0, "新游戏：进入游戏，已收集 0");
+            int starters = CreatureDefs.All.Count(d => d.startsWithPlayer);
+            Step(flow.State == GameFlow.FlowState.Playing && flow.CaughtCount == starters, $"新游戏：进入游戏，已收集 {starters}（默认宠物）");
             yield return Shot("02_newgame");
 
             var env = EnvController.Instance;
@@ -71,6 +72,11 @@ namespace WildPartner.Core
             foreach (var def in CreatureDefs.All)
             {
                 var c = creatures.First(x => x.defId == def.id);
+                if (def.startsWithPlayer)
+                {
+                    Step(c.Current == Creature.State.Companion && flow.Save.HasCaught(def.id), $"{def.name}：开局即为伙伴");
+                    continue;
+                }
                 // a time/weather that satisfies the creature's condition, with an hour of margin either side
                 bool rain = !def.ConditionMet(12f, false) && def.ConditionMet(12f, true);
                 float hour = 12f;

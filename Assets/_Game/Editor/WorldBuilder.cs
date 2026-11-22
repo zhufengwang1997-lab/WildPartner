@@ -813,6 +813,8 @@ namespace WildPartner.EditorTools
             var ca = profile.Add<ColorAdjustments>(true); ca.postExposure.Override(0.15f); ca.contrast.Override(8f); ca.saturation.Override(-4f);
             var smh = profile.Add<ShadowsMidtonesHighlights>(true);
             smh.shadows.Override(new Vector4(0.92f, 0.95f, 1.12f, 0f)); smh.highlights.Override(new Vector4(1.05f, 1.0f, 0.92f, 0f));
+            var st = profile.Add<SplitToning>(true); st.shadows.Override(new Color(0.42f, 0.40f, 0.70f)); st.highlights.Override(new Color(1f, 0.82f, 0.60f)); st.balance.Override(-15f);
+            var wb = profile.Add<WhiteBalance>(true); wb.temperature.Override(6f);
             var vig = profile.Add<Vignette>(true); vig.intensity.Override(0.18f); vig.smoothness.Override(0.5f);
             foreach (var c in profile.components) AssetDatabase.AddObjectToAsset(c, profile);
             AssetDatabase.SaveAssets();

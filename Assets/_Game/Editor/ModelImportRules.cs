@@ -11,11 +11,13 @@ namespace WildPartner.EditorTools
             if (!assetPath.StartsWith("Assets/_Game/Models")) return;
             var m = (ModelImporter)assetImporter;
             m.materialImportMode = ModelImporterMaterialImportMode.None;
-            m.importAnimation = false;
             m.importBlendShapes = false;
             m.importCameras = false;
             m.importLights = false;
-            m.animationType = ModelImporterAnimationType.None;
+            bool rigged = assetPath.Contains("/Rigged/");
+            m.importAnimation = rigged;
+            m.animationType = rigged ? ModelImporterAnimationType.Generic : ModelImporterAnimationType.None;
+            if (rigged) m.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
             m.importNormals = ModelImporterNormals.Import;
             m.bakeAxisConversion = true;
             m.useFileScale = true;
@@ -49,6 +51,25 @@ namespace WildPartner.EditorTools
                 t.localRotation = Quaternion.identity;
             }
         }
+
+        // Rigged characters (tools/blender/rig_*.py): clips are named "<Rig>|<Action>" -> "<Action>"; loops loop.
+        void OnPreprocessAnimation()
+        {
+            if (!assetPath.Contains("/_Game/Models/Rigged/")) return;
+            var m = (ModelImporter)assetImporter;
+            var clips = m.defaultClipAnimations;
+            foreach (var c in clips)
+            {
+                int bar = c.name.LastIndexOf('|');
+                if (bar >= 0) c.name = c.name.Substring(bar + 1);
+                c.loopTime = LoopClips.Contains(c.name);
+                c.lockRootRotation = c.lockRootHeightY = c.lockRootPositionXZ = false;
+            }
+            m.clipAnimations = clips;
+        }
+
+        static readonly System.Collections.Generic.HashSet<string> LoopClips = new System.Collections.Generic.HashSet<string>
+        { "Idle", "Walk", "Run", "Sneak", "Ride", "Hop", "Swim", "Flap", "Eat", "SitLoop", "LieLoop", "RubLoop" };
 
         void OnPreprocessTexture()
         {

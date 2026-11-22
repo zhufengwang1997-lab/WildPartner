@@ -24,7 +24,7 @@ namespace WildPartner.Core
         public Transform campfire;
         public Transform menuCameraPivot;
         public float autosaveSeconds = 20f;
-        public float startHour = 8.5f;
+        public float startHour = 16.5f;   // warm late-afternoon light as the opening (PRD-补充 §3)
 
         public FlowState State { get; private set; } = FlowState.MainMenu;
         public SaveData Save { get; private set; } = new SaveData();
@@ -80,7 +80,14 @@ namespace WildPartner.Core
             _endingTriggered = false;
             foreach (var c in _creatures) c.Init(0, true);
             var start = WorldLayout.PlayerStart;
-            player.Teleport(new Vector3(start.x, Creature.GroundHeight(start.x, start.y) + 0.2f, start.y), WorldLayout.PlayerStartYaw);
+            var startPos = new Vector3(start.x, Creature.GroundHeight(start.x, start.y) + 0.2f, start.y);
+            player.Teleport(startPos, WorldLayout.PlayerStartYaw);
+            foreach (var c in _creatures)   // the default pet (cat) is with the witch from the start
+                if (c.Def.startsWithPlayer)
+                {
+                    Save.caught.Add(new CaughtEntry { id = c.defId, playTime = 0, gameHour = startHour });
+                    c.RestoreAsCompanion(Save.caught.Count - 1, startPos);
+                }
             environment.timeOfDay = startHour;
             weather.Set(false, true);
             SetState(FlowState.Playing);
@@ -89,7 +96,7 @@ namespace WildPartner.Core
                 "WASD 移动，鼠标转动视角，Shift 奔跑",
                 "按住 Ctrl 潜行：动物不容易发现你",
                 "靠近动物后按住 E 捕捉；Tab 打开图鉴查看线索",
-                "收集全部 5 种伙伴，再回到木屋前的篝火",
+                $"猫已经在你身边了。再找到另外 {Total - CaughtCount} 种伙伴，然后回到木屋前的篝火",
             });
             SaveNow();
             Debug.Log("[Flow] new game");

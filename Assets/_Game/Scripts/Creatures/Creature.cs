@@ -215,7 +215,7 @@ namespace WildPartner.Creatures
         {
             CaptureSystem.NotifyFled(this);
             SetState(State.Flee);
-            if (Def.id == "forest_owl")
+            if (Def.movement == Movement.Flying && Def.wanderSpeed <= 0f)   // perched flyers hop to another perch
             {
                 // fly to a different perch
                 _anchor = (_anchor + 1 + Random.Range(0, Def.anchors.Length - 1)) % Def.anchors.Length;
