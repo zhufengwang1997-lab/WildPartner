@@ -1180,9 +1180,11 @@ namespace WildPartner.EditorTools
             var mat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_GrassBlades.mat");
             if (!mat) { mat = new Material(Shader.Find("WildPartner/Grass")); AssetDatabase.CreateAsset(mat, $"{AssetSetup.MatDir}/M_GrassBlades.mat"); }
             // colours live here (not only as shader defaults) so re-running the builder applies tweaks
-            mat.SetColor("_BaseColor", new Color(0.27f, 0.46f, 0.14f)); mat.SetColor("_TipColor", new Color(0.44f, 0.70f, 0.27f));
-            mat.SetColor("_DryColor", new Color(0.72f, 0.72f, 0.36f)); mat.SetColor("_ShadowColor", new Color(0.47f, 0.53f, 0.76f));
-            mat.SetVector("_HeightRange", new Vector4(0.15f, 0.35f)); mat.SetVector("_Fade", new Vector4(48, 66));
+            // 试玩反馈 5: dark green roots, bright yellow-green tips, 30–70 cm blades; far colour = the terrain's grass layer
+            mat.SetColor("_BaseColor", new Color(0.14f, 0.34f, 0.08f)); mat.SetColor("_TipColor", new Color(0.54f, 0.84f, 0.22f));
+            mat.SetColor("_DryColor", new Color(0.78f, 0.75f, 0.38f)); mat.SetColor("_ShadowColor", new Color(0.45f, 0.52f, 0.80f));
+            mat.SetColor("_FarColor", new Color(0.40f, 0.62f, 0.20f));
+            mat.SetVector("_HeightRange", new Vector4(0.3f, 0.62f));
             EditorUtility.SetDirty(mat);
             gr.material = mat; gr.grassMap = mapTex; gr.groundTint = tintTex;
             var tm = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Terrain.mat");

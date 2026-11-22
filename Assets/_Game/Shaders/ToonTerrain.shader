@@ -28,6 +28,7 @@ Shader "WildPartner/ToonTerrain"
         TEXTURE2D(_Splat0); SAMPLER(sampler_Splat0);
         TEXTURE2D(_Splat1); TEXTURE2D(_Splat2); TEXTURE2D(_Splat3);
         TEXTURE2D(_GroundTint); SAMPLER(sampler_GroundTint);
+        TEXTURE2D(_WP_GrassMap);   // global, set by GrassRenderer (R = grass density)
         CBUFFER_START(UnityPerMaterial)
             float4 _Control_ST, _Control_TexelSize;
             float4 _Splat0_ST, _Splat1_ST, _Splat2_ST, _Splat3_ST;
@@ -92,6 +93,12 @@ Shader "WildPartner/ToonTerrain"
                 albedo *= lerp(half3(1, 1, 1), tint, 0.85);
                 float macro = vn(wuv * 0.05) * 0.6 + vn(wuv * 0.2) * 0.4;
                 albedo *= lerp(1 - _Variation * 0.3, 1 + _Variation * 0.3, macro);
+                // under the grass the ground takes the colour of the lower blades near the camera and of the distant
+                // lawn further out, so gaps between thin blades read as more grass and the far edge has no seam (试玩反馈 5)
+                half dens = SAMPLE_TEXTURE2D(_WP_GrassMap, sampler_GroundTint, wuv / _WorldSize).r;
+                float camD = distance(i.positionWS.xz, _WorldSpaceCameraPos.xz);
+                half3 under = lerp(half3(0.15, 0.31, 0.07), half3(0.33, 0.53, 0.15), smoothstep(6, 45, camD)) * tint;   // flat ground is lit brighter than blades: keep it a shade darker
+                albedo = lerp(albedo, under, saturate(dens * 1.3) * 0.9);
 
                 half3 n = normalize(i.normalWS);
                 // steep slopes become painted rock (画面整改 2/cliff): warm grey with horizontal strata and lighter

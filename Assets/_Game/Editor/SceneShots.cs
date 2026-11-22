@@ -61,6 +61,61 @@ namespace WildPartner.EditorTools
                       new[] { ("Idle", 1.0f), ("Walk", 0.3f), ("SneakIdle", 1.0f), ("Sneak", 0.4f), ("Sneak", 0.9f), ("Capture", 0.5f) });
         }
 
+        /// <summary>Witch, cat and rabbit standing in meadow grass (试玩反馈 5: the grass should half-hide the small
+        /// animals but not the witch's legs) -> Logs/shots/14_grass_pets.png</summary>
+        static void GrassPets(Camera cam, EnvController env, RenderTexture rt, Texture2D tex)
+        {
+            var spot = new Vector2(400, 470) * WorldLayout.K;
+            var fwd = new Vector3(-0.8f, 0, 0.6f).normalized;
+            var right = Vector3.Cross(Vector3.up, fwd);
+            var witchAt = W(spot, 0);
+            var cast = new System.Collections.Generic.List<GameObject>();
+            var pushers = new Vector4[6];
+            void Put(string id, Vector3 at, Vector3 face, string clipName, float time, int slot)
+            {
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(id == "witch" ? "Assets/_Game/Prefabs/Player.prefab" : $"Assets/_Game/Prefabs/Creatures/{id}.prefab");
+                if (!prefab) return;
+                var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+                go.transform.SetPositionAndRotation(at, Quaternion.LookRotation(face));
+                var anim = go.GetComponentInChildren<Animator>();
+                var clip = anim ? System.Array.Find(anim.runtimeAnimatorController.animationClips, c => c.name == clipName) : null;
+                if (clip) clip.SampleAnimation(anim.gameObject, time);
+                foreach (var smr in go.GetComponentsInChildren<SkinnedMeshRenderer>())
+                {
+                    var m = new Mesh(); smr.BakeMesh(m, true);
+                    var b = new GameObject("baked", typeof(MeshFilter), typeof(MeshRenderer));
+                    b.transform.SetPositionAndRotation(smr.transform.position, smr.transform.rotation);
+                    b.GetComponent<MeshFilter>().sharedMesh = m;
+                    b.GetComponent<MeshRenderer>().sharedMaterials = smr.sharedMaterials;
+                    smr.enabled = false; cast.Add(b);
+                }
+                cast.Add(go);
+                if (slot >= 0) pushers[slot] = new Vector4(at.x, at.y, at.z, 0.75f);
+                else Shader.SetGlobalVector("_WP_PlayerPos", new Vector4(at.x, at.y, at.z, 0.9f));
+            }
+            Put("witch", witchAt, fwd, "Idle", 1f, -1);
+            Put("cat", W(spot + new Vector2(right.x, right.z) * 1.1f + new Vector2(fwd.x, fwd.z) * 0.6f, 0), fwd - right * 0.6f, "Idle", 2.1f, 0);
+            Put("moon_rabbit", W(spot - new Vector2(right.x, right.z) * 1.2f + new Vector2(fwd.x, fwd.z) * 1.3f, 0), right, "Idle", 0.7f, 1);
+            Shader.SetGlobalVectorArray("_WP_GrassPushers", pushers);
+            env.timeOfDay = 10.5f; env.Apply();
+            var pos = witchAt - fwd * 3.6f + right * 0.6f + Vector3.up * 1.5f;
+            cam.transform.position = pos;
+            cam.transform.rotation = Quaternion.LookRotation(witchAt + fwd * 1.0f + Vector3.up * 0.35f - pos);
+            cam.targetTexture = rt;
+            var grass = Object.FindFirstObjectByType<GrassRenderer>();
+            if (grass) { grass.Setup(); grass.Submit(cam, pos); }
+            cam.Render();
+            if (grass) grass.Submit(cam, pos);
+            cam.Render();
+            RenderTexture.active = rt;
+            tex.ReadPixels(new Rect(0, 0, 1600, 900), 0, 0); tex.Apply();
+            RenderTexture.active = null;
+            File.WriteAllBytes("Logs/shots/14_grass_pets.png", tex.EncodeToPNG());
+            foreach (var go in cast) Object.DestroyImmediate(go);
+            Shader.SetGlobalVectorArray("_WP_GrassPushers", new Vector4[6]);
+            Shader.SetGlobalVector("_WP_PlayerPos", new Vector4(0, -999, 0, 0.9f));
+        }
+
         /// <summary>Close-ups of a rigged creature prefab sampled at given clip times -> Logs/shots/&lt;id&gt;_&lt;clip&gt;.png</summary>
         static void PoseShots(Camera cam, EnvController env, RenderTexture rt, Texture2D tex, string id, Vector3 at, Vector3 facing, float k,
                               (string, float)[] poses)
@@ -171,6 +226,7 @@ namespace WildPartner.EditorTools
                     }
                 Debug.Log($"[Shots] {v.name} near props:{near}");
             }
+            GrassPets(cam, env, rt, tex);
             CatPoses(cam, env, rt, tex);
             cam.targetTexture = null;
             Debug.Log($"[World] shots written: {views.Length}");

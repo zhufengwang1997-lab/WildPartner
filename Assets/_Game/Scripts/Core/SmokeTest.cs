@@ -171,6 +171,24 @@ namespace WildPartner.Core
             weather.Set(false, true);
             env.timeOfDay = 19f;
 
+            // grass cost check (试玩反馈 5): stand in the meadow, uncapped frame rate, 3 s average. Logged, and fails
+            // only below 30 fps on this machine (the real budget check is the perf runner on the 1070 Ti)
+            {
+                var meadow = new Vector2(400, 470) * WorldLayout.K;
+                player.Teleport(new Vector3(meadow.x, Creature.GroundHeight(meadow.x, meadow.y) + 0.2f, meadow.y), 300);
+                env.timeOfDay = 11f;
+                int vs = QualitySettings.vSyncCount, tf = Application.targetFrameRate;
+                QualitySettings.vSyncCount = 0; Application.targetFrameRate = -1;
+                yield return new WaitForSeconds(1.5f);
+                int frames = 0; float t0 = Time.realtimeSinceStartup;
+                while (Time.realtimeSinceStartup - t0 < 3f) { frames++; yield return null; }
+                float ms = (Time.realtimeSinceStartup - t0) * 1000f / frames;
+                QualitySettings.vSyncCount = vs; Application.targetFrameRate = tf;
+                int chunks = GrassRenderer.Instance ? GrassRenderer.Instance.LastChunkCount : 0;
+                Step(ms < 33.3f, $"草地帧时间 {ms:0.0} ms（{1000f / ms:0} fps，{Screen.width}x{Screen.height}，草地块 {chunks}）");
+                yield return Shot($"{shot++:00}_meadow_grass");
+            }
+
             flow.OpenJournal();
             yield return new WaitForSecondsRealtime(0.5f);
             Step(flow.State == GameFlow.FlowState.Journal, "打开图鉴");

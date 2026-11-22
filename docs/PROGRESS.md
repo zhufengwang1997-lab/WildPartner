@@ -49,3 +49,11 @@
 
 ## 下一步
 - 阶段 2：com.zfw.upscaling 超分中间件（IUpscaler、RenderScale/FSR1/STP/MetalFX/DLSS、F3 调试面板）
+
+## 试玩反馈（2026-11-23）
+- [x] 1 脚步声：动画落脚帧触发，草/土/木地板/浅水 4 种，每种 4–6 个变体，音高 ±5%、音量随机，跑重潜行轻（CC0 录音，见 CREDITS）。已验证：冒烟测试"脚步声"项、频谱图 `docs/screenshots/feedback-1123/1_footsteps.png`；未人耳试听。
+- [x] 2 雨声：CC0 雨声循环（去刺耳高频、首尾交叉淡化无接缝），3–5 s 淡入淡出，室内低通闷响，偶发叶滴，音量低于脚步。已验证：频谱图 `2_rain.png`；未人耳试听。
+- [x] 3 地图：左上角圆形小地图（随镜头旋转、地标图标、方位字），M 打开羊皮纸大地图（暂停、地标名、伙伴发现位置），底图编辑器预烘焙。已验证：冒烟 `3_minimap.jpg`、`3_bigmap.jpg`、`3_map_baked.jpg`。
+- [x] 4 地图缩到 360 m：见 STATUS.md。已验证：`4_map_shrink.jpg`、冒烟测试。
+- [x] 5 草：细草叶成丛、根暗尖亮、背光偏蓝、从根部随风弯、动物推草、无缝 LOD 淡入地面。已验证：`5_grass_pets.jpg`、`5_grass_yard.jpg`、`5_grass_meadow.jpg`、`5_grass_vs_style.jpg`；Mac（M5 Max）草地实测 1.9 ms/帧。未验证：1070 Ti 上的帧时间、运动矢量在超分下的表现。
+- 冒烟测试 24/24 通过。
