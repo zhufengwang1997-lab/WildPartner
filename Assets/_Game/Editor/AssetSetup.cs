@@ -55,6 +55,7 @@ namespace WildPartner.EditorTools
             Directory.CreateDirectory("Assets/Resources/Icons");
             AssetDatabase.Refresh();
 
+            BakeStepEvents("Witch", new[] { "Walk", "Run", "Sneak" });
             var palette = AssetDatabase.LoadAssetAtPath<Texture2D>($"{Gen}/Palette.png");
             var world = ToonMat("M_World", palette);
             var foliage = ToonMat("M_Foliage", palette, m => { m.EnableKeyword("_WIND"); m.SetFloat("_Wind", 1); m.SetFloat("_WindStrength", 0.22f); m.SetFloat("_Translucency", 0.35f); m.SetColor("_RimColor", new Color(1, 0.95f, 0.75f, 0.25f)); });
@@ -398,6 +399,54 @@ namespace WildPartner.EditorTools
             return v;
         }
 
+        /// <summary>
+        /// Finds the foot-contact frames of the given loop clips (each foot's lowest point in the cycle, sampled
+        /// on an instance of the model) and writes them as normalised times to &lt;model&gt;_steps.json; the import
+        /// rules turn them into "OnFootstep" animation events. Reimports the FBX when the table changed.
+        /// </summary>
+        static void BakeStepEvents(string model, string[] clipNames)
+        {
+            string fbx = $"{Rigged}/{model}.fbx";
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(fbx);
+            if (!asset) return;
+            var clips = AssetDatabase.LoadAllAssetsAtPath(fbx);
+            var go = Object.Instantiate(asset);
+            var feet = new List<Transform>();
+            foreach (var t in go.GetComponentsInChildren<Transform>())
+                if (t.name.StartsWith("Foot")) feet.Add(t);
+            var table = new ModelImportRules.StepTable();
+            foreach (var name in clipNames)
+            {
+                AnimationClip clip = null;
+                foreach (var o in clips) if (o is AnimationClip c && c.name == name && !c.name.StartsWith("__preview")) clip = c;
+                if (!clip || feet.Count == 0) continue;
+                var entry = new ModelImportRules.StepEntry { clip = name };
+                const int N = 96;
+                foreach (var foot in feet)
+                {
+                    var y = new float[N];
+                    for (int i = 0; i < N; i++) { clip.SampleAnimation(go, clip.length * i / N); y[i] = foot.position.y; }
+                    float min = Mathf.Min(y), max = Mathf.Max(y);
+                    // touch-down = first sample of a stretch near the lowest point, after the foot was lifted
+                    float thr = min + (max - min) * 0.12f;
+                    for (int i = 0; i < N; i++)
+                        if (y[i] <= thr && y[(i + N - 1) % N] > thr) entry.times.Add(i / (float)N);
+                }
+                entry.times.Sort();
+                table.clips.Add(entry);
+                Debug.Log($"[Setup] {model} {name} foot contacts at {string.Join(", ", entry.times.ConvertAll(t => t.ToString("0.00")))}");
+            }
+            Object.DestroyImmediate(go);
+            string path = $"{Rigged}/{model}_steps.json";
+            string json = JsonUtility.ToJson(table, true);
+            if (!File.Exists(path) || File.ReadAllText(path) != json)
+            {
+                File.WriteAllText(path, json);
+                AssetDatabase.ImportAsset(path);
+                AssetDatabase.ImportAsset(fbx, ImportAssetOptions.ForceUpdate);
+            }
+        }
+
         [System.Serializable] public class Speeds { public float Walk = 1f, Run = 3.2f, JumpLaunch = 0f, Sneak = 0f; }
         public static Speeds ClipSpeeds(string model)
         {
@@ -574,6 +623,7 @@ namespace WildPartner.EditorTools
             cc.height = 1.6f; cc.radius = 0.35f; cc.center = new Vector3(0, 0.82f, 0); cc.stepOffset = 0.45f; cc.slopeLimit = 50;
             var pc = root.AddComponent<PlayerController>();
             pc.visual = vis.transform;
+            if (rigged) vis.GetComponentInChildren<Animator>().gameObject.AddComponent<FootstepRelay>();
             if (rigged) { var sp = ClipSpeeds("Witch"); pc.animRunSpeed = sp.Run; pc.jumpWindup = sp.JumpLaunch; pc.animSneakSpeed = sp.Sneak; }
             if (!rigged)   // fallback when there is no Blender-rigged model yet
             {

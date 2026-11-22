@@ -54,6 +54,14 @@ namespace WildPartner.Player
         float _stepPhase;
         public float StepPhase => _stepPhase;
         public event System.Action Footstep;
+        float _lastAnimStep = -10f;
+        /// <summary>Called by FootstepRelay on a foot-contact animation event.</summary>
+        public void AnimFootstep()
+        {
+            if (Speed < 0.3f || _jumping) return;
+            _lastAnimStep = Time.time;
+            Footstep?.Invoke();
+        }
 
         void Awake()
         {
@@ -174,7 +182,8 @@ namespace WildPartner.Player
             // Footsteps for audio + procedural animation phase
             float prev = _stepPhase;
             _stepPhase += Speed * Time.deltaTime * (Running ? 1.05f : 1.4f);
-            if (Mathf.Floor(prev) != Mathf.Floor(_stepPhase) && Speed > 0.5f) Footstep?.Invoke();
+            // fallback only for a model without foot-contact events (the rigged witch drives steps from her clips)
+            if (Mathf.Floor(prev) != Mathf.Floor(_stepPhase) && Speed > 0.5f && Time.time - _lastAnimStep > 1.5f && !_animator) Footstep?.Invoke();
         }
     }
 }

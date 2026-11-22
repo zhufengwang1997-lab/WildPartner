@@ -65,8 +65,23 @@ namespace WildPartner.EditorTools
                 c.loopTime = LoopClips.Contains(c.name);
                 c.lockRootRotation = c.lockRootHeightY = c.lockRootPositionXZ = false;
             }
+            // foot-contact events (AssetSetup.BakeStepEvents writes <model>_steps.json next to the FBX)
+            string stepsPath = assetPath.Substring(0, assetPath.Length - 4) + "_steps.json";
+            if (System.IO.File.Exists(stepsPath))
+            {
+                var steps = JsonUtility.FromJson<StepTable>(System.IO.File.ReadAllText(stepsPath));
+                foreach (var c in clips)
+                {
+                    var entry = steps.clips.Find(e => e.clip == c.name);
+                    if (entry == null) continue;
+                    c.events = entry.times.ConvertAll(t => new AnimationEvent { functionName = "OnFootstep", time = t }).ToArray();
+                }
+            }
             m.clipAnimations = clips;
         }
+
+        [System.Serializable] public class StepEntry { public string clip; public System.Collections.Generic.List<float> times = new System.Collections.Generic.List<float>(); }
+        [System.Serializable] public class StepTable { public System.Collections.Generic.List<StepEntry> clips = new System.Collections.Generic.List<StepEntry>(); }
 
         static readonly System.Collections.Generic.HashSet<string> LoopClips = new System.Collections.Generic.HashSet<string>
         { "Idle", "Walk", "Run", "Sneak", "Ride", "Hop", "Swim", "Flap", "Fall", "Eat", "SitLoop", "LieLoop", "RubLoop", "SitLick", "BellyUp", "Rub", "Graze", "SneakIdle", "Capture", "Point" };

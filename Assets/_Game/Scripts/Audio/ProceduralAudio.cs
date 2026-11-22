@@ -7,28 +7,42 @@ using WildPartner.World;
 namespace WildPartner.Audio
 {
     /// <summary>
-    /// All sound is synthesised at start-up (no third-party audio, so no licence questions — see CREDITS):
-    /// wind and rain beds (filtered noise), footsteps (short noise bursts), a capture chime (pentatonic
-    /// arpeggio) and a gentle background loop (pentatonic plucks over a soft pad).
+    /// Game audio. Footsteps and the rain bed are CC0 field recordings (Resources/Audio, see docs/CREDITS.md,
+    /// processed by tools/audio/process_sfx.py); wind, leaf drips in the rain, the capture chime, the meow and the
+    /// background loop are synthesised at start-up.
+    /// Footsteps come from animation events on the witch's foot-contact frames and pick their sound from the
+    /// ground under her: grass, dirt (terrain splat layer 2), wooden floor (inside the cabin), shallow water.
     /// </summary>
     public class ProceduralAudio : MonoBehaviour
     {
         const int Rate = 44100;
-        AudioSource _wind, _rain, _music, _sfx;
-        AudioClip _step, _chime, _fail, _meow;
+        AudioSource _wind, _rain, _music, _sfx, _steps;
+        AudioLowPassFilter _rainLp;
+        AudioClip _step, _chime, _fail, _meow, _drip;
+        AudioClip[] _grass, _dirt, _wood, _water;
+        int _lastVariant = -1;
+        float _rainVol, _nextDrip;
+        public enum Surface { Grass, Dirt, Wood, Water }
+        public static Surface LastSurface { get; private set; }
         System.Random _rng = new System.Random(7);
 
         void Start()
         {
             _wind = Loop(MakeNoise(8f, 0.02f, 0.25f), 0.25f);
-            _rain = Loop(MakeNoise(6f, 0.25f, 0.6f), 0f);
+            var rainClip = Resources.Load<AudioClip>("Audio/rain_loop");
+            _rain = Loop(rainClip ? rainClip : MakeNoise(6f, 0.25f, 0.6f), 0f);
+            _rainLp = _rain.gameObject.AddComponent<AudioLowPassFilter>();   // muffled "on the roof" indoors
+            _rainLp.cutoffFrequency = 22000;
+            _grass = LoadSet("step_grass_", 6); _dirt = LoadSet("step_dirt_", 6); _wood = LoadSet("step_wood_", 4); _water = LoadSet("step_water_", 4);
+            _steps = gameObject.AddComponent<AudioSource>(); _steps.playOnAwake = false;
+            _drip = MakeDrip();
             _music = Loop(MakeMusic(), 0.22f);
             _sfx = gameObject.AddComponent<AudioSource>();
             _sfx.playOnAwake = false;
             _step = MakeStep();
             _chime = MakeChime(new[] { 0, 4, 7, 12, 16 }, 0.11f);
             _fail = MakeChime(new[] { 7, 3, 0 }, 0.12f);
-            if (PlayerController.Instance) PlayerController.Instance.Footstep += () => _sfx.PlayOneShot(_step, PlayerController.Instance.Running ? 0.5f : 0.3f);
+            if (PlayerController.Instance) PlayerController.Instance.Footstep += PlayStep;
             CaptureSystem.Captured += _ => _sfx.PlayOneShot(_chime, 0.7f);
             CaptureSystem.Interrupted += _ => _sfx.PlayOneShot(_fail, 0.5f);
             _meow = MakeMeow();
@@ -48,12 +62,69 @@ namespace WildPartner.Audio
             return s;
         }
 
+        AudioClip[] LoadSet(string prefix, int n)
+        {
+            var list = new System.Collections.Generic.List<AudioClip>();
+            for (int i = 0; i < n; i++) { var c = Resources.Load<AudioClip>("Audio/" + prefix + i); if (c) list.Add(c); }
+            return list.ToArray();
+        }
+
+        /// <summary>Inside the cabin (wooden floor, rain on the roof).</summary>
+        static bool Indoors(Vector3 p) => Vector2.Distance(new Vector2(p.x, p.z), WorldLayout.House) < 3.6f;
+
+        public static Surface SurfaceAt(Vector3 p)
+        {
+            if (Indoors(p)) return Surface.Wood;
+            if (WorldLayout.RiverDistance(p.x, p.z, out float lvl) < WorldLayout.RiverHalfWidth && p.y < lvl + 0.4f) return Surface.Water;
+            if (WorldLayout.LakeDistance(p.x, p.z) < 1.02f && p.y < WorldLayout.LakeLevel + 0.4f) return Surface.Water;
+            var t = Terrain.activeTerrain;
+            if (t)
+            {
+                var td = t.terrainData;
+                var lp = p - t.transform.position;
+                int ax = Mathf.Clamp(Mathf.RoundToInt(lp.x / td.size.x * (td.alphamapWidth - 1)), 0, td.alphamapWidth - 1);
+                int az = Mathf.Clamp(Mathf.RoundToInt(lp.z / td.size.z * (td.alphamapHeight - 1)), 0, td.alphamapHeight - 1);
+                var a = td.GetAlphamaps(ax, az, 1, 1);
+                if (td.alphamapLayers > 2 && a[0, 0, 2] > 0.5f) return Surface.Dirt;
+            }
+            return Surface.Grass;
+        }
+
+        void PlayStep()
+        {
+            var pc = PlayerController.Instance;
+            if (!pc) return;
+            var surf = SurfaceAt(pc.transform.position);
+            LastSurface = surf;
+            var set = surf == Surface.Dirt ? _dirt : surf == Surface.Wood ? _wood : surf == Surface.Water ? _water : _grass;
+            if (set == null || set.Length == 0) { _sfx.PlayOneShot(_step, 0.3f); return; }
+            int k = _rng.Next(set.Length);
+            if (k == _lastVariant && set.Length > 1) k = (k + 1) % set.Length;   // never the same take twice in a row
+            _lastVariant = k;
+            // running: a little heavier (lower, louder); sneaking: lighter and softer; ±5 % pitch, ±15 % volume
+            float basePitch = pc.Running ? 0.95f : pc.Sneaking ? 1.03f : 1f;
+            float baseVol = pc.Running ? 0.55f : pc.Sneaking ? 0.16f : 0.36f;
+            _steps.pitch = basePitch * (0.95f + (float)_rng.NextDouble() * 0.1f);
+            _steps.PlayOneShot(set[k], baseVol * (0.85f + (float)_rng.NextDouble() * 0.3f));
+        }
+
         void Update()
         {
             var w = Weather.Instance;
             float rain = w ? w.RainAmount : 0;
-            _rain.volume = rain * 0.45f;
-            _wind.volume = 0.18f + rain * 0.12f;
+            // soft, low rain bed: ~4 s fade in/out on top of the weather ramp, kept under the music and footsteps
+            _rainVol = Mathf.MoveTowards(_rainVol, rain * 0.16f, Time.unscaledDeltaTime * 0.16f / 4f);
+            _rain.volume = _rainVol;
+            bool inside = PlayerController.Instance && Indoors(PlayerController.Instance.transform.position);
+            _rainLp.cutoffFrequency = Mathf.MoveTowards(_rainLp.cutoffFrequency, inside ? 650f : 22000f, Time.unscaledDeltaTime * 30000f);
+            if (_rainVol > 0.02f && !inside && Time.time > _nextDrip)   // occasional drops ticking on leaves
+            {
+                _nextDrip = Time.time + 0.25f + (float)_rng.NextDouble() * 1.4f;
+                _sfx.pitch = 0.8f + (float)_rng.NextDouble() * 0.5f;
+                _sfx.PlayOneShot(_drip, _rainVol * (0.4f + (float)_rng.NextDouble() * 0.5f));
+                _sfx.pitch = 1f;
+            }
+            _wind.volume = 0.18f + rain * 0.04f;
             bool menu = GameFlow.Instance && GameFlow.Instance.State == GameFlow.FlowState.MainMenu;
             _music.volume = Mathf.MoveTowards(_music.volume, menu ? 0.3f : 0.18f, Time.unscaledDeltaTime * 0.2f);
         }
@@ -79,6 +150,24 @@ namespace WildPartner.Audio
             var trimmed = new float[n - fade]; System.Array.Copy(d, trimmed, n - fade);
             c.SetData(trimmed, 0);
             return c;
+        }
+
+        /// <summary>A tiny water drop on a leaf: a soft band-limited tick with a short resonant "tip".</summary>
+        AudioClip MakeDrip()
+        {
+            int n = Rate / 20;
+            var d = new float[n];
+            float y = 0, prev = 0;
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)Rate;
+                float env = Mathf.Exp(-t * 90f);
+                float white = (float)_rng.NextDouble() * 2 - 1;
+                y += 0.45f * (white - y);
+                float hp = y - prev; prev = y;   // band-limit: low-pass then high-pass
+                d[i] = (hp * 0.6f + Mathf.Sin(2 * Mathf.PI * 2300f * t) * 0.25f * Mathf.Exp(-t * 140f)) * env;
+            }
+            var c = AudioClip.Create("drip", n, 1, Rate, false); c.SetData(d, 0); return c;
         }
 
         AudioClip MakeStep()

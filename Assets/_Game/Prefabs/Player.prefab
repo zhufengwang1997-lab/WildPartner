@@ -264,6 +264,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2060118609314629200}
   - component: {fileID: 9126917308083002782}
+  - component: {fileID: 4889426585649729228}
   m_Layer: 0
   m_Name: Visual
   m_TagString: Untagged
@@ -310,6 +311,18 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &4889426585649729228
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2511132907379251550}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5e8128e6b38244569186dd74e46fcc8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: WildPartner.Runtime::WildPartner.Player.FootstepRelay
 --- !u!1 &2521302015531492399
 GameObject:
   m_ObjectHideFlags: 0

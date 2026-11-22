@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Collections;
 using System.IO;
@@ -83,6 +84,18 @@ namespace WildPartner.Core
                 }
                 Step(top - y0 > player.jumpHeight * 0.7f && !player.Airborne && (anim == null || sawJumpAnim),
                      $"空格跳跃：起跳高度 {top - y0:0.00} m，落地，{(anim ? (sawJumpAnim ? "播放了跳跃动画" : "没有跳跃动画") : "无骨骼动画")}");
+            }
+
+            // footsteps: fired by the walk clip's foot-contact events (not a timer), sound picked by the ground
+            {
+                int steps = 0; var times = new List<float>(); var surfaces = new HashSet<string>();
+                System.Action onStep = () => { steps++; times.Add(Time.time); surfaces.Add(Audio.ProceduralAudio.SurfaceAt(player.transform.position).ToString()); };
+                player.Footstep += onStep;
+                GameInput.SimMove = new Vector2(0.35f, 1); yield return new WaitForSeconds(3f); GameInput.SimMove = Vector2.zero;
+                player.Footstep -= onStep;
+                var gaps = new List<string>(); for (int i = 1; i < times.Count; i++) gaps.Add((times[i] - times[i - 1]).ToString("0.00"));
+                Debug.Log($"[Smoke] footsteps {steps}, gaps {string.Join(" ", gaps)} s, surfaces {string.Join("/", surfaces)}");
+                Step(steps >= 4, $"脚步声：走 3 秒触发 {steps} 次（动画落脚帧），地面 {string.Join("/", surfaces)}");
             }
 
             var env = EnvController.Instance;
