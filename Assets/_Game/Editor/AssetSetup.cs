@@ -303,7 +303,7 @@ namespace WildPartner.EditorTools
             return v;
         }
 
-        [System.Serializable] public class Speeds { public float Walk = 1f, Run = 3.2f; }
+        [System.Serializable] public class Speeds { public float Walk = 1f, Run = 3.2f, JumpLaunch = 0f; }
         public static Speeds ClipSpeeds(string model)
         {
             string p = $"{Rigged}/{model}_speeds.json";
@@ -382,7 +382,7 @@ namespace WildPartner.EditorTools
             cc.height = 1.6f; cc.radius = 0.35f; cc.center = new Vector3(0, 0.82f, 0); cc.stepOffset = 0.45f; cc.slopeLimit = 50;
             var pc = root.AddComponent<PlayerController>();
             pc.visual = vis.transform;
-            if (rigged) pc.animRunSpeed = ClipSpeeds("Witch").Run;
+            if (rigged) { var sp = ClipSpeeds("Witch"); pc.animRunSpeed = sp.Run; pc.jumpWindup = sp.JumpLaunch; }
             if (!rigged)   // fallback when there is no Blender-rigged model yet
             {
                 var anim = root.AddComponent<ProceduralAnimator>();

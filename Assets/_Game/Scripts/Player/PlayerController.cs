@@ -19,6 +19,8 @@ namespace WildPartner.Player
         public float gravity = -20f;
         [Tooltip("Jump apex height (m). Short coyote time / input buffer make the jump forgiving on slopes.")]
         public float jumpHeight = 0.9f;
+        [Tooltip("Anticipation crouch before the feet leave the ground (matches the JumpUp clip)")]
+        public float jumpWindup = 0f;
         const float CoyoteTime = 0.12f, JumpBuffer = 0.12f;
         public CinemachineCamera vcam;
         public Transform visual;
@@ -29,6 +31,7 @@ namespace WildPartner.Player
         static readonly int AirTimeId = Animator.StringToHash("AirTime");
         float _sinceGrounded, _sinceJumpPressed = 99f, _airTime;
         bool _jumping;
+        float _windup = -1f;   // >= 0 while crouching before take-off
         /// <summary>True while airborne (jumping or falling).</summary>
         public bool Airborne => _airTime > 0.15f || _jumping;
         public event System.Action Jumped, Landed;
@@ -115,10 +118,20 @@ namespace WildPartner.Player
             _sinceJumpPressed = (!Frozen && GameInput.JumpPressed) ? 0f : _sinceJumpPressed + dt;
             if (_sinceJumpPressed <= JumpBuffer && _sinceGrounded <= CoyoteTime && !_jumping)
             {
-                _vy = Mathf.Sqrt(2f * -gravity * jumpHeight);
-                _jumping = true; _sinceJumpPressed = 99f; _sinceGrounded = 99f;
+                _jumping = true; _sinceJumpPressed = 99f;
+                _windup = grounded ? jumpWindup : 0f;      // coyote jumps (already off the edge) launch at once
                 if (_animator) _animator.SetTrigger(JumpId);
-                Jumped?.Invoke();
+            }
+            if (_windup >= 0f)
+            {
+                _windup -= dt;
+                if (_windup < 0f)
+                {
+                    _vy = Mathf.Sqrt(2f * -gravity * jumpHeight);
+                    _sinceGrounded = 99f;
+                    Jumped?.Invoke();
+                }
+                else _vy = -2f;
             }
             else if (grounded && _vy <= 0f)
             {

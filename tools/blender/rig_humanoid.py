@@ -80,7 +80,21 @@ for side, sfx in ((1, "L"), (-1, "R")):
     bone(f"Thigh.{sfx}", J("HipJ", side), J("Knee", side), "Hips")
     bone(f"Shin.{sfx}", J("Knee", side), J("Ankle", side), f"Thigh.{sfx}", True)
     bone(f"Foot.{sfx}", J("Ankle", side), J("Toe", side), f"Shin.{sfx}", True)
+# secondary bones (keyframed follow-through): two 3-bone hair chains from the back of the head,
+# four skirt panels (front / back / left / right) hanging from the hips
+HAIR_PTS = [(0.735, 0.085), (0.635, 0.115), (0.545, 0.125), (0.455, 0.115)]   # (z, y) along the chain
+for side, sfx in ((1, "L"), (-1, "R")):
+    prev = "Head"
+    for k, nm in enumerate(("HairA", "HairB", "HairC")):
+        (z0, y0), (z1, y1) = HAIR_PTS[k], HAIR_PTS[k + 1]
+        bone(f"{nm}.{sfx}", Vector((0.05 * side, y0, z0)) * HEIGHT, Vector((0.05 * side, y1, z1)) * HEIGHT, prev, k > 0)
+        prev = f"{nm}.{sfx}"
+SKIRT = {"Skirt.F": ((0, -0.09, 0.47), (0, -0.13, 0.30)), "Skirt.B": ((0, 0.09, 0.47), (0, 0.15, 0.22)),
+         "Skirt.L": ((0.11, 0, 0.47), (0.16, 0, 0.30)), "Skirt.R": ((-0.11, 0, 0.47), (-0.16, 0, 0.30))}
+for n, (h, t) in SKIRT.items():
+    bone(n, Vector(h) * HEIGHT, Vector(t) * HEIGHT, "Hips")
 bpy.ops.object.mode_set(mode="OBJECT")
+SEC = [b.name for b in arm_data.bones if b.name.startswith(("Hair", "Skirt"))]
 DEFORM = [b.name for b in arm_data.bones if b.name != "Root"]
 arm_data.bones["Root"].use_deform = False
 
@@ -98,6 +112,7 @@ ISL = np.array([_f(i) for i in range(len(_par))])
 # --- weights ------------------------------------------------------------------------------------
 V = np.array([v.co[:] for v in body.data.vertices]) / HEIGHT     # normalised
 segs = {b.name: (np.array(b.head_local) / HEIGHT, np.array(b.tail_local) / HEIGHT) for b in arm_data.bones if b.name in DEFORM}
+SEGS_SEC = {n: segs.pop(n) for n in SEC}   # secondary bones get weights from region rules below, not by distance
 def seg_dist(P, a, b):
     ab = b - a; t = np.clip(((P - a) @ ab) / (ab @ ab), 0, 1)
     return np.linalg.norm(P - (a + t[:, None] * ab), axis=1), t
@@ -167,8 +182,26 @@ for sfx, side in (("L", 1), ("R", -1)):
     W[i, names.index("Hips")] = th * hip_share
     W[i, names.index(f"Shin.{sfx}")] = sh
     W[i, names.index(f"Foot.{sfx}")] = ft
-# skirt: everything in the skirt band that is not leg skin or arm -> hips + thighs by side
-skirt = (z > 0.10) & (z < 0.58) & ~in_arm & ~legzone
+# hair: pieces hanging behind the back (centroid behind the body, between the nape and the waist)
+W = np.concatenate([W, np.zeros((len(V), len(SEC)))], 1)
+names = names + SEC
+cnt = np.bincount(ISL, minlength=len(V))
+cen = np.stack([np.bincount(ISL, weights=V[:, k], minlength=len(V)) for k in range(3)], 1) / np.maximum(cnt, 1)[:, None]
+hair_isl = (cen[:, 1] > 0.065) & (cen[:, 2] > 0.51) & (cen[:, 2] < 0.75)   # > 0.51 keeps the back peplum shards on the skirt
+hair = hair_isl[ISL] & (z > 0.43) & (z < 0.76) & (y > 0.02) & ~in_arm & ~legzone
+if hair.any():
+    i = np.where(hair)[0]
+    W[i] = 0
+    share = band(0.745 - z[i], 0.0, 0.07)                 # top of the hair stays on the head
+    lt = np.clip(0.5 + x[i] / 0.05, 0, 1)                 # L/R chains blend across the parting
+    W[i, names.index("Head")] = 1 - share
+    for sfx, wside in (("L", lt), ("R", 1 - lt)):
+        ch = [f"{nm}.{sfx}" for nm in ("HairA", "HairB", "HairC")]
+        dd = np.stack([seg_dist(V[i], *SEGS_SEC[n])[0] for n in ch], 1)
+        ww = 1.0 / (dd ** 4 + 1e-12); ww /= ww.sum(1, keepdims=True)
+        for k, n in enumerate(ch): W[i, names.index(n)] = share * wside * ww[:, k]
+# skirt: everything in the skirt band that is not leg skin, arm or hair -> hips + thighs by side
+skirt = (z > 0.10) & (z < 0.58) & ~in_arm & ~legzone & ~hair
 if skirt.any():
     i = np.where(skirt)[0]
     W[i] = 0
@@ -183,6 +216,14 @@ if skirt.any():
     W[i, names.index("Hips")] += (1 - hips) * (1 - off)
     W[i, names.index("Thigh.L")] = leg * (x[i] > 0)
     W[i, names.index("Thigh.R")] = leg * (x[i] <= 0)
+    # part of the hips share moves to the four skirt panels (angular lobes), more towards the hem
+    ang = np.arctan2(x[i], -y[i])                          # 0 front, +90 left, 180 back
+    lobes = np.stack([np.maximum(0, np.cos(ang - a)) ** 2 for a in (0, np.pi, np.pi / 2, -np.pi / 2)], 1)
+    lobes /= np.maximum(lobes.sum(1, keepdims=True), 1e-9)
+    f = band(0.50 - z[i], 0.0, 0.14) * 0.85
+    hs = W[i, names.index("Hips")] + W[i, names.index("Spine")]
+    W[i, names.index("Hips")] *= (1 - f); W[i, names.index("Spine")] *= (1 - f)
+    for k, n in enumerate(("Skirt.F", "Skirt.B", "Skirt.L", "Skirt.R")): W[i, names.index(n)] = hs * f * lobes[:, k]
 dead = W.sum(1) < 1e-6        # rows whose best bones were all arm bones but sit outside the capsule
 if dead.any():                 # -> nearest arm bone (raw distance), never a body bone (that tears)
     arm_names = [n for n in names if n.startswith(("UpperArm", "ForeArm", "Hand"))]
@@ -191,7 +232,7 @@ if dead.any():                 # -> nearest arm bone (raw distance), never a bod
     rows = np.where(dead)[0]
     for k, n in enumerate(arm_names): W[rows[best == k], names.index(n)] = 1.0
 W /= np.maximum(W.sum(1, keepdims=True), 1e-9)
-print("WEIGHTS " + json.dumps({"verts": int(len(V)), "arm": int(in_arm.sum()), "refilled": int(dead.sum())}))
+print("WEIGHTS " + json.dumps({"verts": int(len(V)), "arm": int(in_arm.sum()), "hair": int(hair.sum()), "refilled": int(dead.sum())}))
 for n in names: body.vertex_groups.new(name=n)
 vg = [body.vertex_groups[n] for n in names]
 for vi in range(len(V)):
@@ -252,7 +293,8 @@ def make_action(name, frames, fn, plant=True, lift=None, loop=True):
     if plant:
         for f, (r, l) in enumerate(poses):
             pose(r, l); off[f] = ground_offset()
-    h = [-off[f] + (lift(f / frames) if lift else 0.0) for f in range(n)]
+    pw = plant if callable(plant) else (lambda q: 1.0)
+    h = [-off[f] * pw(f / frames) + (lift(f / frames) if lift else 0.0) for f in range(n)]
     idx = (lambda i: i % n) if loop else (lambda i: min(max(i, 0), n - 1))
     for _ in range(2 if plant else 0):   # low-pass: no kinks where the supporting foot changes
         h = [(h[idx(f - 2)] + 2 * h[idx(f - 1)] + 3 * h[f] + 2 * h[idx(f + 1)] + h[idx(f + 2)]) / 9 for f in range(n)]
@@ -284,8 +326,8 @@ def curve(pts, q):
 # Gait curves (degrees) per leg, phase 0 = that foot's heel strike. Shapes follow captured human gait
 # (as in Mixamo's in-place walk/run): hip flex +, knee flex +, ankle dorsiflex +.
 WALK = dict(
-    hip=[(0.0, 28), (0.15, 21), (0.35, 3), (0.52, -15), (0.62, -12), (0.75, 12), (0.88, 30)],
-    knee=[(0.0, 4), (0.12, 17), (0.3, 8), (0.45, 6), (0.6, 36), (0.72, 58), (0.85, 28), (0.95, 6)],
+    hip=[(0.0, 33), (0.15, 25), (0.35, 4), (0.52, -19), (0.62, -15), (0.75, 14), (0.88, 35)],
+    knee=[(0.0, 4), (0.12, 18), (0.3, 8), (0.45, 7), (0.6, 40), (0.72, 63), (0.85, 30), (0.95, 6)],
     ankle=[(0.0, 2), (0.08, -6), (0.3, 4), (0.48, 10), (0.6, -16), (0.7, -8), (0.82, 4), (0.94, 3)],
 )
 RUN = dict(
@@ -383,18 +425,21 @@ def sides(spec_lr):
                          for a, pts in r.items()}
     return out
 
+JUMP_LAUNCH = 0.15   # fraction of JumpUp at which the feet leave the ground (game delays the launch to match)
+
 def jump_up(t):
-    """0.47 s: push-off extension (legs straight, toes pointed, arms swing up) -> tuck at the apex."""
+    """0.67 s: quick anticipation crouch -> explosive push-off (legs straight, toes pointed, arms swing
+    up) -> feet leave the ground at JUMP_LAUNCH -> tuck towards the apex."""
     leg = lambda hip, knee, ank: {"Thigh": {"x": [(tt, -v) for tt, v in hip]}, "Shin": {"x": knee}, "Foot": {"x": [(tt, -v) for tt, v in ank]}}
-    L = leg([(0, 8), (0.25, -4), (0.6, 40), (1, 46)], [(0, 22), (0.25, 2), (0.6, 70), (1, 78)], [(0, 6), (0.25, -30), (0.6, -14), (1, -10)])
-    R = leg([(0, 2), (0.25, -8), (0.6, 22), (1, 30)], [(0, 14), (0.25, 4), (0.6, 46), (1, 60)], [(0, 4), (0.25, -32), (0.6, -18), (1, -12)])
-    arm = {"y": [(0, 18), (0.3, -8), (0.7, -22), (1, -24)], "x": [(0, 10), (0.3, -55), (0.7, -30), (1, -22)], "z": [(0, 0), (1, 6)]}
+    L = leg([(0, 6), (0.1, 34), (0.2, -4), (0.5, 36), (1, 46)], [(0, 10), (0.1, 62), (0.2, 2), (0.5, 64), (1, 78)], [(0, 4), (0.1, 28), (0.2, -30), (0.5, -14), (1, -10)])
+    R = leg([(0, 4), (0.1, 32), (0.2, -8), (0.5, 20), (1, 30)], [(0, 8), (0.1, 60), (0.2, 4), (0.5, 42), (1, 60)], [(0, 4), (0.1, 28), (0.2, -32), (0.5, -18), (1, -12)])
+    arm = {"y": [(0, 20), (0.1, 16), (0.22, -8), (0.6, -22), (1, -24)], "x": [(0, 0), (0.1, 32), (0.22, -60), (0.6, -30), (1, -22)], "z": [(0, 0), (1, 6)]}
     spec = sides({"Thigh": (L["Thigh"], R["Thigh"]), "Shin": (L["Shin"], R["Shin"]), "Foot": (L["Foot"], R["Foot"]),
-                  "UpperArm": (arm, arm), "ForeArm": ({"x": [(0, -20), (0.3, -10), (1, -35)]},) * 2,
+                  "UpperArm": (arm, arm), "ForeArm": ({"x": [(0, -14), (0.1, -10), (0.22, -12), (1, -35)]},) * 2,
                   "Hand": ({"x": [(0, -8), (1, -14)], "z": [(0, 6), (1, 10)]},) * 2})
-    spec.update({"Hips": {"x": [(0, 10), (0.25, -2), (1, 6)]}, "Spine": {"x": [(0, 6), (0.25, -4), (1, 4)]},
-                 "Chest": {"x": [(0, 4), (0.25, -6), (1, 3)]}, "Neck": {"x": [(0, -6), (0.25, 2), (1, -2)]},
-                 "Head": {"x": [(0, -4), (0.25, 4), (1, -2)]}})
+    spec.update({"Hips": {"x": [(0, 2), (0.1, 16), (0.2, -2), (1, 6)]}, "Spine": {"x": [(0, 1), (0.1, 12), (0.2, -5), (1, 4)]},
+                 "Chest": {"x": [(0, 0), (0.1, 8), (0.2, -6), (1, 3)]}, "Neck": {"x": [(0, 0), (0.1, -10), (0.2, 3), (1, -2)]},
+                 "Head": {"x": [(0, 0), (0.1, -8), (0.2, 4), (1, -2)]}})
     return keyed(spec, t)
 
 def fall(p):
@@ -414,27 +459,78 @@ def fall(p):
 def land(t):
     """0.4 s: legs reach for the ground -> absorb into a crouch (pelvis drops via foot planting) -> stand."""
     leg = lambda hip, knee, ank: ({"x": [(tt, -v) for tt, v in hip]}, {"x": knee}, {"x": [(tt, -v) for tt, v in ank]})
-    Lt, Ls, Lf = leg([(0, 26), (0.22, 48), (0.55, 24), (1, 2)], [(0, 40), (0.22, 92), (0.55, 44), (1, 4)], [(0, -6), (0.22, 30), (0.55, 16), (1, 2)])
-    Rt, Rs, Rf = leg([(0, 16), (0.22, 44), (0.55, 20), (1, 0)], [(0, 30), (0.22, 86), (0.55, 40), (1, 3)], [(0, -8), (0.22, 30), (0.55, 16), (1, 2)])
+    Lt, Ls, Lf = leg([(0, 26), (0.2, 56), (0.5, 26), (1, 2)], [(0, 40), (0.2, 104), (0.5, 46), (1, 4)], [(0, -6), (0.2, 34), (0.5, 16), (1, 2)])
+    Rt, Rs, Rf = leg([(0, 16), (0.2, 52), (0.5, 22), (1, 0)], [(0, 30), (0.2, 98), (0.5, 42), (1, 3)], [(0, -8), (0.2, 34), (0.5, 16), (1, 2)])
     arm = {"y": [(0, -22), (0.22, -6), (0.6, 12), (1, 20)], "x": [(0, -24), (0.22, -34), (0.6, -8), (1, 0)], "z": [(0, 6), (1, 0)]}
     spec = sides({"Thigh": (Lt, Rt), "Shin": (Ls, Rs), "Foot": (Lf, Rf), "UpperArm": (arm, arm),
                   "ForeArm": ({"x": [(0, -32), (0.22, -40), (1, -12)]},) * 2,
                   "Hand": ({"x": [(0, -14), (1, -8)], "z": [(0, 10), (1, 6)]},) * 2})
-    spec.update({"Hips": {"x": [(0, 6), (0.22, 16), (0.6, 6), (1, 1)]}, "Spine": {"x": [(0, 4), (0.22, 12), (0.6, 4), (1, 0)]},
+    spec.update({"Hips": {"x": [(0, 6), (0.2, 20), (0.6, 6), (1, 1)]}, "Spine": {"x": [(0, 4), (0.2, 14), (0.6, 4), (1, 0)]},
                  "Chest": {"x": [(0, 3), (0.22, 8), (0.6, 2), (1, 0)]}, "Neck": {"x": [(0, -3), (0.22, -10), (1, 0)]},
                  "Head": {"x": [(0, -3), (0.22, -8), (1, 0)]}})
     return keyed(spec, t)
 
+# --- secondary motion: hair and skirt follow-through ---------------------------------------------
+# Hair bones: +x lifts the hair back/up off the back, y swings it sideways. Skirt: F -x / B +x lift the
+# front / back panel outwards, L -y / R +y flare the sides, y on F/B and x on L/R swing the skirt around.
+HAIR_W = (0.42, 0.36, 0.3)   # per-bone share; rotations accumulate down the chain (tip ~1.1x)
+
+def add_sec(rot, hair_lift, hair_side, flare, back, front, swing, lag=0.0):
+    """Each argument is a function of a per-bone delay d (in loop/phase units) -> degrees, so every
+    bone further down the chain trails the one above it (overlapping action)."""
+    for sfx in ("L", "R"):
+        for k, nm in enumerate(("HairA", "HairB", "HairC")):
+            d = lag + 0.05 * k
+            rot[f"{nm}.{sfx}"] = [("x", max(0.0, hair_lift(d)) * HAIR_W[k]), ("y", hair_side(d) * HAIR_W[k])]
+    d = lag + 0.04
+    rot["Skirt.F"] = [("x", -max(0.0, front(d))), ("y", swing(d))]
+    rot["Skirt.B"] = [("x", max(0.0, back(d))), ("y", swing(d))]
+    rot["Skirt.L"] = [("y", -max(0.0, flare(d))), ("x", 0.5 * swing(d))]
+    rot["Skirt.R"] = [("y", max(0.0, flare(d))), ("x", -0.5 * swing(d))]
+    return rot
+
+def loop_sec(fn, frames, hair, side, flare, back, front, swing, lag):
+    """Wrap a loop clip: each secondary term is (base, amp, harmonic, phase) evaluated with lag."""
+    def term(spec, p, d):
+        base, amp, hz, ph = spec
+        return base + amp * math.cos(TAU * (hz * (p - d) + ph))
+    def g(p):
+        rot, loc = fn(p)
+        add_sec(rot, lambda d: term(hair, p, d), lambda d: term(side, p, d), lambda d: term(flare, p, d),
+                lambda d: term(back, p, d), lambda d: term(front, p, d), lambda d: term(swing, p, d), lag)
+        return rot, loc
+    return g
+
+def shot_sec(fn, hair, side, flare, back, front, swing):
+    """Wrap a one-shot clip: secondary channels are keyed tracks; per-bone delay shifts the time."""
+    def g(t):
+        rot, loc = fn(t)
+        add_sec(rot, lambda d: track(hair, t - d * 0.6), lambda d: track(side, t - d * 0.6), lambda d: track(flare, t - d * 0.6),
+                lambda d: track(back, t - d * 0.6), lambda d: track(front, t - d * 0.6), lambda d: track(swing, t - d * 0.6))
+        return rot, loc
+    return g
+
+walk = lambda p: gait(p, WALK, arm_amp=19, arm_lag=0.04, elbow=12, elbow_amp=14, arm_in=20,
+                      lean=3, sway=0.012, pel_yaw=7, pel_roll=4, chest_counter=1.0, head_amp=1.2)
+run = lambda p: gait(p, RUN, arm_amp=30, arm_lag=0.03, elbow=62, elbow_amp=26, arm_in=15,
+                     lean=11, sway=0.008, pel_yaw=9, pel_roll=3, chest_counter=1.2, head_amp=2.0)
+Z = (0, 0, 1, 0)
 acts = {
-    "Idle": make_action("Idle", 150, idle),
-    "Walk": make_action("Walk", 26, lambda p: gait(p, WALK, arm_amp=17, arm_lag=0.04, elbow=12, elbow_amp=14, arm_in=20,
-                                                    lean=3, sway=0.012, pel_yaw=6, pel_roll=4, chest_counter=1.0, head_amp=1.2)),
-    "Run":  make_action("Run", 20, lambda p: gait(p, RUN, arm_amp=30, arm_lag=0.03, elbow=62, elbow_amp=26, arm_in=15,
-                                                   lean=11, sway=0.008, pel_yaw=9, pel_roll=3, chest_counter=1.2, head_amp=2.0),
+    #                                    hair lift           hair side          skirt flare        back               front              swing          lag
+    "Idle": make_action("Idle", 150, loop_sec(idle, 150, (2.0, 1.2, 2, 0), (0, 1.2, 1, 0), (1.0, 0.6, 2, 0), (1.0, 0.6, 2, 0), (0.5, 0.4, 2, 0), (0, 1.0, 1, 0.2), 0.06)),
+    "Walk": make_action("Walk", 28, loop_sec(walk, 28, (6.0, 3.5, 2, 0), (0, 5.0, 1, 0.25), (3.0, 2.0, 2, 0), (4.0, 3.0, 2, 0), (2.0, 2.0, 2, 0.5), (0, 4.0, 1, 0.25), 0.1)),
+    "Run":  make_action("Run", 20, loop_sec(run, 20, (24.0, 8.0, 2, 0), (0, 8.0, 1, 0.25), (9.0, 5.0, 2, 0), (14.0, 6.0, 2, 0), (6.0, 4.0, 2, 0.5), (0, 6.0, 1, 0.25), 0.12),
                         lift=lambda p: 0.025 * HEIGHT * max(0.0, math.sin(TAU * 2 * (p - 0.27))) ** 1.5),
-    "JumpUp": make_action("JumpUp", 14, jump_up, plant=False, loop=False),
-    "Fall": make_action("Fall", 24, fall, plant=False),
-    "Land": make_action("Land", 12, land, loop=False),
+    "JumpUp": make_action("JumpUp", 20, shot_sec(jump_up,
+                          hair=[(0, 4), (0.1, 10), (0.22, 0), (0.5, 8), (1, 30)], side=[(0, 0), (1, 0)],
+                          flare=[(0, 2), (0.1, 6), (0.22, 0), (0.6, 10), (1, 18)], back=[(0, 3), (0.1, 8), (0.22, 0), (0.6, 8), (1, 16)],
+                          front=[(0, 2), (0.1, 0), (0.22, 2), (0.6, 6), (1, 12)], swing=[(0, 0), (1, 0)]),
+                          plant=lambda p: 1.0 - min(1.0, max(0.0, (p - JUMP_LAUNCH) / 0.08)), loop=False),
+    "Fall": make_action("Fall", 24, loop_sec(fall, 24, (32.0, 4.0, 1, 0), (0, 4.0, 1, 0.3), (18.0, 3.0, 1, 0.2), (16.0, 3.0, 1, 0), (12.0, 3.0, 1, 0.5), (0, 3.0, 1, 0.1), 0.08), plant=False),
+    "Land": make_action("Land", 14, shot_sec(land,
+                        hair=[(0, 30), (0.2, 0), (0.42, 12), (0.7, 4), (1, 3)], side=[(0, 0), (1, 0)],
+                        flare=[(0, 18), (0.2, 0), (0.42, 7), (0.7, 2), (1, 1.5)], back=[(0, 16), (0.2, 1), (0.42, 8), (0.7, 3), (1, 1.5)],
+                        front=[(0, 12), (0.2, 0), (0.42, 5), (0.7, 2), (1, 0.8)], swing=[(0, 0), (1, 0)]), loop=False),
 }
 # ground speed of each clip at 1x = speed of the planted foot sliding back (in-place loop); Unity's
 # blend-tree thresholds use these so the feet do not skate (written next to the FBX as JSON)
@@ -447,6 +543,7 @@ def clip_speed(act):
     v = sorted((ys[f + 1] - ys[f]) * FPS for f in range(n) if zs[f] < 0.015 and zs[f + 1] < 0.015)
     return round(v[len(v) // 2], 3) if v else 0.0
 SPEEDS = {k: clip_speed(acts[k]) for k in ("Walk", "Run")}
+SPEEDS["JumpLaunch"] = round(JUMP_LAUNCH * acts["JumpUp"].frame_range[1] / FPS, 3)   # s of crouch before take-off
 print("SPEEDS " + json.dumps(SPEEDS))
 rig.animation_data.action = acts["Idle"]
 bpy.ops.object.mode_set(mode="OBJECT")

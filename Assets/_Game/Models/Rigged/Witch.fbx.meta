@@ -94,7 +94,7 @@ ModelImporter:
       takeName: Witch_Rig|JumpUp
       internalID: -2933581993074851466
       firstFrame: 0
-      lastFrame: 14
+      lastFrame: 20
       wrapMode: 0
       orientationOffsetY: 0
       level: 0
@@ -123,7 +123,7 @@ ModelImporter:
       takeName: Witch_Rig|Land
       internalID: 535150504433261467
       firstFrame: 0
-      lastFrame: 12
+      lastFrame: 14
       wrapMode: 0
       orientationOffsetY: 0
       level: 0
@@ -181,7 +181,7 @@ ModelImporter:
       takeName: Witch_Rig|Walk
       internalID: 8680369900993338023
       firstFrame: 0
-      lastFrame: 26
+      lastFrame: 28
       wrapMode: 0
       orientationOffsetY: 0
       level: 0
