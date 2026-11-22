@@ -22,6 +22,7 @@ CBUFFER_START(UnityPerMaterial)
     half   _WindFrequency;
     half   _Translucency;
     half   _Emission;
+    half   _UpNormal;
 CBUFFER_END
 
 #ifdef UNITY_DOTS_INSTANCING_ENABLED

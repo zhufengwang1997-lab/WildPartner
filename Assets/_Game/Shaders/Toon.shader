@@ -18,6 +18,7 @@ Shader "WildPartner/Toon"
         _SphereNormal ("Sphere Normal Blend (foliage)", Range(0, 1)) = 0
         _Translucency ("Back-light Translucency", Range(0, 1)) = 0
         _Emission ("Emission (x base colour)", Range(0, 8)) = 0
+        _UpNormal ("Up Normal (grass)", Range(0, 1)) = 0
         [Toggle(_WIND)] _Wind ("Wind", Float) = 0
         _WindStrength ("Wind Strength (m)", Range(0, 1)) = 0.15
         _WindFrequency ("Wind Frequency", Range(0.1, 4)) = 1.2
@@ -90,6 +91,7 @@ Shader "WildPartner/Toon"
 
                 float3 posOS = ApplyWindOS(v.positionOS.xyz, v.color.r, _WP_WindTime);
                 float3 nOS = normalize(lerp(v.normalOS, normalize(v.positionOS.xyz - float3(0, v.color.g * 4.0, 0) + 1e-4), _SphereNormal));
+                nOS = normalize(lerp(nOS, TransformWorldToObjectDir(float3(0, 1, 0)), _UpNormal));
                 VertexPositionInputs p = GetVertexPositionInputs(posOS);
                 o.positionCS = p.positionCS;
                 o.positionWS = p.positionWS;
@@ -121,7 +123,7 @@ Shader "WildPartner/Toon"
                 LODFadeCrossFade(i.positionCS);
                 #endif
 
-                half3 n = normalize(i.normalWS) * (facing ? 1 : -1);
+                half3 n = normalize(i.normalWS) * ((facing || _UpNormal > 0.5) ? 1 : -1);
                 float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS);
                 Light main = GetMainLight(shadowCoord);
                 half ndl = dot(n, main.direction) * 0.5 + 0.5;            // half-lambert
