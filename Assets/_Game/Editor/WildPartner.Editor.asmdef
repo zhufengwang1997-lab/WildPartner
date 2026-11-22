@@ -1,0 +1,9 @@
+{
+  "name": "WildPartner.Editor",
+  "rootNamespace": "WildPartner.EditorTools",
+  "references": ["WildPartner.Runtime", "Zfw.GpuCaps", "Zfw.QualityTiers", "Zfw.PerfRunner",
+                 "Unity.RenderPipelines.Universal.Runtime", "Unity.RenderPipelines.Core.Runtime",
+                 "Unity.Cinemachine", "Unity.AI.Navigation", "Unity.AI.Navigation.Editor", "Unity.InputSystem"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": false
+}

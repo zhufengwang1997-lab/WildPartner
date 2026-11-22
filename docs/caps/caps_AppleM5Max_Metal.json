@@ -1,0 +1,48 @@
+{
+    "schema": 1,
+    "api": "Metal",
+    "source": "native",
+    "gpu": {
+        "name": "Apple M5 Max",
+        "vendorId": 4203,
+        "dedicatedMemoryMB": 38338
+    },
+    "driver": {
+        "version": "26.4.1",
+        "raw": 260401
+    },
+    "os": "macOS Version 26.4.1 (Build 25E253)",
+    "features": {
+        "bindless": {
+            "value": "supported",
+            "raw": "ArgumentBuffersTier2"
+        },
+        "raytracing": {
+            "value": "supported",
+            "raw": "hardware (Apple9)"
+        },
+        "vrs": {
+            "value": "supported",
+            "raw": "RasterizationRateMap"
+        },
+        "meshShader": {
+            "value": "supported",
+            "raw": "MTLGPUFamilyMetal3"
+        },
+        "shaderModel": {
+            "value": "Metal 4 / Apple10",
+            "raw": ""
+        }
+    },
+    "unity": {
+        "graphicsDeviceType": "Metal",
+        "graphicsDeviceVersion": "Metal",
+        "graphicsShaderLevel": 50,
+        "graphicsMemorySize": 38338,
+        "maxTextureSize": 16384,
+        "supportsComputeShaders": true,
+        "supportsRayTracing": false,
+        "unityVersion": "6000.3.28f1"
+    },
+    "error": ""
+}

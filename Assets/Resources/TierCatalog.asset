@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ef77a045faf94474b08599c82c81269, type: 3}
+  m_Name: TierCatalog
+  m_EditorClassIdentifier: Zfw.QualityTiers::Zfw.QualityTiers.TierCatalog
+  low: {fileID: 11400000, guid: 0311672e31d254c4d8240c2b97dc7e5c, type: 2}
+  medium: {fileID: 11400000, guid: 0151c4b12d69543e0aa4611022de8efe, type: 2}
+  high: {fileID: 11400000, guid: cb5c69b65de9d4c3b8f47247f091ac39, type: 2}
+  ultra: {fileID: 11400000, guid: 09c4cc2dd97b24faba2d68025efb90f8, type: 2}
