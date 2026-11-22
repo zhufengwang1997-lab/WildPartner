@@ -74,6 +74,26 @@ if NAME.startswith("Tree") or NAME == "Bush":
         ca.data[v.index].color = (w, 0.0, 0.0, 1.0)
     obj.data.color_attributes.active_color = ca
 
+# 1123c-C1: canopy normals from an ellipsoid round the crown, so the toon ramp shades the crown as one soft
+# volume instead of thousands of facets (the "mosaic" look). Trunk vertices keep their own normals.
+def canopy_normals(o):
+    me = o.data
+    H_ = float(mx[2] - mn[2])
+    vco = np.array([v.co[:] for v in me.vertices])
+    rr = np.sqrt(vco[:, 0] ** 2 + vco[:, 1] ** 2)
+    leaf = (vco[:, 2] > 0.55 * H_) | ((vco[:, 2] > 0.25 * H_) & (rr > 0.09 * H_))
+    if leaf.sum() < 50: return
+    lc = vco[leaf]; cmin, cmax = lc.min(0), lc.max(0)
+    centre = (cmin + cmax) / 2; radii = np.maximum((cmax - cmin) / 2, 1e-3)
+    centre[2] -= radii[2] * 0.15                      # a little low: tops face up more, the underside darkens
+    orig = np.array([v.normal[:] for v in me.vertices])
+    e = (vco - centre) / (radii ** 2)                  # ellipsoid gradient
+    e /= np.maximum(np.linalg.norm(e, axis=1, keepdims=True), 1e-6)
+    n = np.where(leaf[:, None], 0.2 * orig + 0.8 * e, orig)
+    n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-6)
+    me.normals_split_custom_set_from_vertices([tuple(x) for x in n])
+    print(f"NORMALS {o.name}: {int(leaf.sum())}/{len(vco)} canopy vertices on an ellipsoid r={np.round(radii, 2).tolist()}")
+
 # base colour -> PNG (max 2048)
 tex_path = None
 for slot in obj.material_slots:
@@ -85,7 +105,9 @@ for slot in obj.material_slots:
             if links and links[0].from_node.type == "TEX_IMAGE":
                 img = links[0].from_node.image
                 w, hh = img.size
-                if max(w, hh) > 2048: img.scale(2048 * w // max(w, hh), 2048 * hh // max(w, hh))
+                cap = 4096 if NAME.startswith("Tree") else 2048   # 1123c-C1: leaf texture at full resolution
+                print(f"TEXTURE {NAME} {w}x{hh}")
+                if max(w, hh) > cap: img.scale(cap * w // max(w, hh), cap * hh // max(w, hh))
                 tex_path = os.path.join(OUT, f"{NAME}_BaseColor.png")
                 img.filepath_raw = tex_path; img.file_format = "PNG"; img.save()
                 break
@@ -102,6 +124,7 @@ for i, target in enumerate(LODS):
         m = o.modifiers.new("dec", "DECIMATE"); m.ratio = target / t; m.use_collapse_triangulate = True
         bpy.ops.object.select_all(action="DESELECT"); o.select_set(True)
         bpy.ops.object.modifier_apply(modifier=m.name)
+    if NAME.startswith("Tree"): canopy_normals(o)
     lods.append(o)
 bpy.data.objects.remove(obj)
 
@@ -111,7 +134,7 @@ fbx = os.path.join(OUT, f"{NAME}.fbx")
 bpy.ops.export_scene.fbx(filepath=fbx, use_selection=True, object_types={"MESH"},
                          apply_unit_scale=True, apply_scale_options="FBX_SCALE_UNITS",
                          axis_forward="-Z", axis_up="Y", path_mode="STRIP", embed_textures=False,
-                         mesh_smooth_type="FACE", bake_anim=False, colors_type="LINEAR")
+                         mesh_smooth_type=("OFF" if NAME.startswith("Tree") else "FACE"), bake_anim=False, colors_type="LINEAR")
 size = [round(float(v), 2) for v in (mx - mn)]
 print("RESULT " + json.dumps({"name": NAME, "tris_in": tris_in, "lods": [tris(o) for o in lods], "size_m": size,
                               "texture": bool(tex_path)}))

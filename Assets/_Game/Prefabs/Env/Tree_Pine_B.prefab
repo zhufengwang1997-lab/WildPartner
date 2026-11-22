@@ -48,6 +48,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -8628722250142761487, guid: aa0f6e37965de4b17b6c01e8068d9249, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 9737a9fd1f82c43b6a6c062db0a96a0f, type: 2}
     - target: {fileID: -4538955493794497102, guid: aa0f6e37965de4b17b6c01e8068d9249, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
@@ -66,27 +70,31 @@ PrefabInstance:
       objectReference: {fileID: 2100000, guid: 9737a9fd1f82c43b6a6c062db0a96a0f, type: 2}
     - target: {fileID: 4742473837712756890, guid: aa0f6e37965de4b17b6c01e8068d9249, type: 3}
       propertyPath: m_Size
-      value: 12.002222
+      value: 12.012995
       objectReference: {fileID: 0}
     - target: {fileID: 4742473837712756890, guid: aa0f6e37965de4b17b6c01e8068d9249, type: 3}
       propertyPath: m_LocalReferencePoint.y
-      value: 6.0073977
+      value: 6.0020113
       objectReference: {fileID: 0}
     - target: {fileID: 4742473837712756890, guid: aa0f6e37965de4b17b6c01e8068d9249, type: 3}
       propertyPath: m_LocalReferencePoint.z
-      value: -0.051858187
+      value: -0.040094376
       objectReference: {fileID: 0}
     - target: {fileID: 4742473837712756890, guid: aa0f6e37965de4b17b6c01e8068d9249, type: 3}
       propertyPath: m_LODs.Array.data[0].screenRelativeHeight
-      value: 0.22
+      value: 0.3
       objectReference: {fileID: 0}
     - target: {fileID: 4742473837712756890, guid: aa0f6e37965de4b17b6c01e8068d9249, type: 3}
       propertyPath: m_LODs.Array.data[1].screenRelativeHeight
-      value: 0.07
+      value: 0.1
       objectReference: {fileID: 0}
     - target: {fileID: 4742473837712756890, guid: aa0f6e37965de4b17b6c01e8068d9249, type: 3}
       propertyPath: m_LODs.Array.data[2].screenRelativeHeight
-      value: 0.012
+      value: 0.03
+      objectReference: {fileID: 0}
+    - target: {fileID: 4742473837712756890, guid: aa0f6e37965de4b17b6c01e8068d9249, type: 3}
+      propertyPath: m_LODs.Array.data[3].screenRelativeHeight
+      value: 0.008
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

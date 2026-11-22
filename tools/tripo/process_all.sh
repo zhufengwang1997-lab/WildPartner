@@ -3,10 +3,10 @@
 #   tools/tripo/process_all.sh [Name ...]     (no names = all in the table)
 cd "$(dirname "$0")/../.."
 B=/Applications/Blender.app/Contents/MacOS/Blender
-TABLE='Tree_Broadleaf Tree_Broadleaf h=9 6000,1800,400
-Tree_Birch Tree_Birch h=10 6000,1800,400
-Tree_Autumn Tree_Autumn h=8.5 6000,1800,400
-Tree_Pine Tree_Pine h=12 6000,1800,400
+TABLE='Tree_Broadleaf Tree_Broadleaf h=9 48000,14000,4000,1000
+Tree_Birch Tree_Birch h=10 48000,14000,4000,1000
+Tree_Autumn Tree_Autumn h=8.5 48000,14000,4000,1000
+Tree_Pine Tree_Pine h=12 48000,14000,4000,1000
 Bush Bush h=1.6 2500,800,200
 Rock_Large Rock_Large h=2.8 3000,900,200
 Rock_Small Rock_Small h=0.7 1200,400
@@ -30,4 +30,4 @@ mkdir -p Logs/tripo
 echo "$TABLE" | while read -r src name size lods; do
   if [ $# -gt 0 ] && ! printf '%s\n' "$@" | grep -qx "$name"; then continue; fi
   echo "$src $name $size $lods"
-done | xargs -P 4 -L 1 sh -c '"'$B'" -b -P tools/blender/process_tripo.py -- "Assets/_Game/Models/_Inbox/$0.glb" Assets/_Game/Models/Tripo "$1" "$2" "$3" "Logs/tripo/$1.png" 2>&1 | grep -E "^RESULT|Error|Traceback" | sed "s/^/[$1] /"'
+done | xargs -P 4 -L 1 sh -c '"'$B'" -b -P tools/blender/process_tripo.py -- "Assets/_Game/Models/_Inbox/$0.glb" Assets/_Game/Models/Tripo "$1" "$2" "$3" "Logs/tripo/$1.png" 2>&1 | grep -E "^RESULT|^NORMALS|^TEXTURE|Error|Traceback" | sed "s/^/[$1] /"'
