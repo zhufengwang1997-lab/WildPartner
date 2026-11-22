@@ -127,6 +127,22 @@ namespace WildPartner.Core
                 Step(steps >= 4, $"脚步声：走 3 秒触发 {steps} 次（动画落脚帧），地面 {string.Join("/", surfaces)}");
             }
 
+            // 试玩反馈 1123b-5: she stops -> the cat walks to ~0.5 m on her right and faces her way
+            if (catC)
+            {
+                float tc = 0;
+                while (!catC.AtSideSpot && tc < 6f) { tc += Time.deltaTime; yield return null; }
+                yield return new WaitForSeconds(1f);
+                var pt = player.transform;
+                Vector3 off = catC.transform.position - pt.position; off.y = 0;
+                float side = Vector3.Dot(off, pt.right);
+                float ang = Vector3.Angle(Vector3.ProjectOnPlane(catC.transform.forward, Vector3.up), Vector3.ProjectOnPlane(pt.forward, Vector3.up));
+                string where = catC.SideSpotKind switch { 0 => "右侧", 1 => "左侧（右侧被挡）", 2 => "身后（两侧被挡）", _ => "附近" };
+                Step(catC.AtSideSpot && off.magnitude < 0.9f && ang < 50f && (catC.SideSpotKind != 0 || side > 0.25f),
+                     $"猫：主角停下后走到{where}，离她 {off.magnitude:0.00} m，朝向差 {ang:0}°");
+                yield return Shot("02b1_cat_beside");
+            }
+
             if (cabin)
             {
                 var fwd = new Vector3(WorldLayout.CabinFacing.x, 0, WorldLayout.CabinFacing.y);

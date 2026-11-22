@@ -162,6 +162,7 @@ namespace WildPartner.Creatures
             if (_agent && !_agent.enabled && Def.movement == Movement.Ground) Place(transform.position);
             SetState(State.Companion);
             if (_agent && _agent.enabled) { _agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance; _agent.avoidancePriority = 40 + slot; _agent.stoppingDistance = 0.8f; }
+            if (_agent && Def.id == "cat") _agent.angularSpeed = 260f;   // gets up and turns after her, never on the spot
         }
 
         /// <summary>Companion follows the witch through a cut (cabin door): appear next to `p` at once.</summary>
@@ -436,9 +437,88 @@ namespace WildPartner.Creatures
             return true;
         }
 
+        // ---- 试玩反馈 1123b-5: when the witch stops, the cat settles ~0.5 m on her right -------------------------
+        float _playerStill;
+        bool _hasSpot;
+        Vector3 _spot;
+        /// <summary>Which side the cat chose last time (0 right, 1 left, 2 behind; -1 none) - smoke test / debug.</summary>
+        public int SideSpotKind { get; private set; } = -1;
+        public Vector3 SideSpot => _spot;
+        public bool AtSideSpot { get; private set; }
+
+        /// <summary>She has stood still for a moment: walk (not run) to the spot beside her right leg, turn to face
+        /// roughly where she faces, and stay there; the sit / lick / belly-up moods then start from that spot
+        /// (DriveAnimator). Returns false while she moves, so the normal follow-behind takes over again; the
+        /// NavMeshAgent turns at its own limited angular speed, so getting up and following is never a snap turn.</summary>
+        bool UpdateSideSpot(PlayerController player)
+        {
+            float dt = Time.deltaTime;
+            _playerStill = player.Speed < 0.1f && !player.Airborne ? _playerStill + dt : 0f;
+            if (_playerStill < 0.35f || _rubTime > 0f || !_agent || !_agent.enabled)
+            {
+                if (_hasSpot && _agent && _agent.enabled) _agent.stoppingDistance = 0.8f;
+                _hasSpot = false; AtSideSpot = false;
+                return false;
+            }
+            if (!_hasSpot)
+            {
+                _spot = PickSideSpot(player, out int kind);
+                SideSpotKind = kind;
+                _hasSpot = true;
+            }
+            Vector3 to = _spot - transform.position; to.y = 0;
+            if (to.magnitude > 0.12f && !AtSideSpot)
+            {
+                _agent.isStopped = false;
+                _agent.stoppingDistance = 0.05f;
+                _agent.speed = Mathf.Lerp(1.1f, 2.4f, Mathf.InverseLerp(1f, 4f, to.magnitude));   // walk over, trot if far
+                _agent.SetDestination(_spot);
+            }
+            else
+            {
+                AtSideSpot = true;
+                _agent.isStopped = true;
+                FaceTowards(player.transform.forward);
+            }
+            return true;
+        }
+
+        static readonly Collider[] s_hits = new Collider[16];
+
+        /// <summary>0.5 m to her right (by her facing); if a wall, tree, rock or the edge of the walkable area is
+        /// there, the left side; then behind her; as a last resort the nearest walkable point behind.</summary>
+        Vector3 PickSideSpot(PlayerController player, out int kind)
+        {
+            var pt = player.transform;
+            Vector3 p = pt.position, r = pt.right, f = pt.forward;
+            Vector3[] cands = { p + r * 0.5f, p - r * 0.5f, p - f * 0.65f };
+            for (int i = 0; i < cands.Length; i++)
+                if (SpotFree(p, cands[i], out var ok)) { kind = i; return ok; }
+            kind = 3;
+            return NavMesh.SamplePosition(p - f * 0.8f, out var hit, 1.5f, NavMesh.AllAreas) ? hit.position : transform.position;
+        }
+
+        bool SpotFree(Vector3 from, Vector3 c, out Vector3 spot)
+        {
+            spot = c;
+            if (!NavMesh.SamplePosition(c, out var hit, 0.3f, NavMesh.AllAreas)) return false;
+            if (Vector2.Distance(new Vector2(hit.position.x, hit.position.z), new Vector2(c.x, c.z)) > 0.15f) return false;
+            if (NavMesh.Raycast(from, hit.position, out _, NavMesh.AllAreas)) return false;   // a wall / edge between
+            int n = Physics.OverlapSphereNonAlloc(hit.position + Vector3.up * 0.25f, 0.13f, s_hits, ~0, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < n; i++)
+            {
+                var col = s_hits[i];
+                if (col is TerrainCollider || col.GetComponentInParent<Creature>() || col.GetComponentInParent<PlayerController>()) continue;
+                return false;   // trunk, rock, furniture, wall
+            }
+            spot = hit.position;
+            return true;
+        }
+
         void UpdateCompanion(PlayerController player)
         {
             if (Def.id == "cat" && Def.movement == Movement.Ground && UpdateLead(player)) return;
+            if (Def.id == "cat" && Def.movement == Movement.Ground && UpdateSideSpot(player)) return;
             // Formation slots behind the player so companions never stack on each other.
             float ang = 140f + CompanionSlot * 22f;
             float side = CompanionSlot % 2 == 0 ? 1 : -1;
