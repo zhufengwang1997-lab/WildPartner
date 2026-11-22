@@ -623,13 +623,42 @@ namespace WildPartner.EditorTools
                     var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
                     if (Vector2.Dot(dir, WorldLayout.CabinFacing) < -0.55f) continue;                       // back shoulder
                     if (Mathf.Abs(Mathf.DeltaAngle(a * Mathf.Rad2Deg, rampAng * Mathf.Rad2Deg)) < 20f) continue;
-                    float rr = WorldLayout.CabinRadius + (ring == 0 ? 2.5f : 8.5f) + (float)_rng.NextDouble() * 1.5f;
+                    // 画面整改 (cliff round 2): break the even "stone wall" — gaps, mixed sizes and heights, tilted
+                    // stones, some stretched tall, bushes tucked on ledges and at the foot
+                    if (_rng.NextDouble() < 0.22) continue;
+                    float rr = WorldLayout.CabinRadius + (ring == 0 ? 0.8f + (float)_rng.NextDouble() * 1.4f : 6f + (float)_rng.NextDouble() * 5f);   // ring 0 on the rim, ring 1 down the slope
                     var p = c + dir * rr;
-                    float sc = ring == 0 ? 2.3f + (float)_rng.NextDouble() * 0.9f : 2.8f + (float)_rng.NextDouble() * 1.0f;
-                    float topY = WorldLayout.CabinPlateau - (ring == 0 ? 0.8f : 7f);
-                    var rock = Place("Rock_A", root, p, _rng.Next(360), sc);
-                    if (rock) { var pos = rock.transform.position; pos.y = topY - 2.6f * sc; rock.transform.position = pos; }
+                    float big = (float)_rng.NextDouble();
+                    float sc = (ring == 0 ? 1.7f : 2.2f) + big * big * 2.2f;
+                    float topY = WorldLayout.CabinPlateau - (ring == 0 ? 0.8f : 7f) - (float)_rng.NextDouble() * (ring == 0 ? 2.5f : 4f);
+                    var rock = Place(_rng.NextDouble() < 0.7 ? "Rock_A" : "Rock_B", root, p, _rng.Next(360), sc);
+                    if (rock)
+                    {
+                        var pos = rock.transform.position; pos.y = ring == 0 ? Mathf.Min(topY - 2.6f * sc, TerrainH(p.x, p.y) + 0.4f * sc) : Mathf.Min(topY - 2.6f * sc, TerrainH(p.x, p.y) - 0.35f * sc); rock.transform.position = pos;   // never hovering over the slope
+                        rock.transform.rotation = Quaternion.Euler(((float)_rng.NextDouble() - 0.5f) * 24f, _rng.Next(360), ((float)_rng.NextDouble() - 0.5f) * 24f);
+                        rock.transform.localScale = new Vector3(sc, sc * (0.8f + (float)_rng.NextDouble() * 0.6f), sc);
+                    }
+                    for (int b = 0; b < 2; b++) if (_rng.NextDouble() < 0.6)   // bushes on the slope below the crag
+                    {
+                        var bp = c + dir * (rr + 2f + (float)_rng.NextDouble() * 7f) + new Vector2(-dir.y, dir.x) * ((float)_rng.NextDouble() - 0.5f) * 4f;
+                        Place(_rng.NextDouble() < 0.5 ? "Bush_A" : "Bush_B", root, bp, _rng.Next(360), 1.2f + (float)_rng.NextDouble() * 0.9f, -0.2f);
+                    }
                 }
+            }
+            // wooded flanks: a loose ring of broadleaf trees and bushes part-way down the slope, so the plateau
+            // reads as a wooded crag with rock showing through instead of a bare mound
+            for (int i = 0; i < 44; i++)
+            {
+                float a = (i + (float)_rng.NextDouble() * 0.6f) / 44f * Mathf.PI * 2;
+                var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                if (Vector2.Dot(dir, WorldLayout.CabinFacing) < -0.55f) continue;
+                if (Mathf.Abs(Mathf.DeltaAngle(a * Mathf.Rad2Deg, rampAng * Mathf.Rad2Deg)) < 14f) continue;
+                var p = c + dir * (WorldLayout.CabinRadius + 4f + (float)_rng.NextDouble() * 22f);
+                if (_rng.NextDouble() < 0.6)
+                    Place(_rng.NextDouble() < 0.5 ? "Tree_Broadleaf_A" : "Tree_Broadleaf_B", root, p, _rng.Next(360), 0.75f + (float)_rng.NextDouble() * 0.4f, -0.4f);
+                for (int b = 0; b < 2; b++)
+                    Place(_rng.NextDouble() < 0.5 ? "Bush_A" : "Bush_B", root, p + new Vector2((float)_rng.NextDouble() - 0.5f, (float)_rng.NextDouble() - 0.5f) * 6f,
+                          _rng.Next(360), 1.3f + (float)_rng.NextDouble() * 1.0f, -0.25f);
             }
             return fire.transform;
         }
@@ -826,7 +855,7 @@ namespace WildPartner.EditorTools
             { WorldLayout.Region.DeepForest, .12f }, { WorldLayout.Region.Edge, .05f },
         };
 
-        static readonly Vector3[] ViewClearings = { new Vector3(420, 470, 10), new Vector3(640, 700, 30), new Vector3(545, 748, 14), new Vector3(720, 640, 10), new Vector3(345, 768, 10), new Vector3(298, 524, 10) };   // x, z (map units), radius (m)
+        static readonly Vector3[] ViewClearings = { new Vector3(420, 470, 16), new Vector3(640, 700, 30), new Vector3(545, 748, 14), new Vector3(720, 640, 10), new Vector3(345, 768, 10), new Vector3(298, 524, 10) };   // x, z (map units), radius (m)
 
         static bool Blocked(float x, float z, float pathClear, float waterClear)
         {
@@ -890,6 +919,7 @@ namespace WildPartner.EditorTools
                 if (Blocked(px, pz, pathClear, 3f)) return false;
                 foreach (var c in ViewClearings)   // small clearings at the scenic viewpoints (SceneShots) so no trunk sits in the lens
                     if (Vector2.Distance(new Vector2(px, pz), new Vector2(c.x, c.y) * WorldLayout.K) < c.z) return false;
+                if (Vector2.Distance(new Vector2(px, pz), WorldLayout.Cabin + WorldLayout.CabinFacing * 95f + new Vector2(12, -30)) < 14f) return false;   // 02_cabin viewpoint
                 var reg = WorldLayout.RegionAt(px, pz);
                 return _td.GetSteepness(px / S, pz / S) <= (reg == WorldLayout.Region.Edge ? 46f : 40f);
             }

@@ -68,7 +68,7 @@ Shader "WildPartner/FarRidge"
                 float3 snowC = lerp(float3(0.66, 0.70, 0.92) * lerp(0.7, 1, day), lerp(1, _WP_SunColor.rgb, 0.25) * 1.05, lit);
                 float3 c = lerp(rock, snowC, snow) * lerp(0.22, 1, day);
 
-                float3 haze = lerp(_WP_SkyHorizon.rgb, _WP_FogColor.rgb, 0.35);
+                float3 haze = lerp(_WP_SkyHorizon.rgb, _WP_FogColor.rgb, 0.7);   // mostly the blue fog colour: the peach horizon mixed in turned ridges lilac
                 float baseH = saturate(1 - (i.posWS.y - _BaseFade.x) / _BaseFade.y);
                 float f = saturate(_Fade + (1 - _Fade) * baseH * baseH * 0.85);
                 c = lerp(c, haze, f);

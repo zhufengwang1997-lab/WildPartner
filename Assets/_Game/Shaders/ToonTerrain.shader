@@ -94,6 +94,19 @@ Shader "WildPartner/ToonTerrain"
                 albedo *= lerp(1 - _Variation * 0.3, 1 + _Variation * 0.3, macro);
 
                 half3 n = normalize(i.normalWS);
+                // steep slopes become painted rock (画面整改 2/cliff): warm grey with horizontal strata and lighter
+                // ledges, instead of grass colour stretched over a cliff (read as one flat purple sheet in shade)
+                float steep = smoothstep(0.74, 0.50, n.y);
+                if (steep > 0.001)
+                {
+                    float3 pw = i.positionWS;
+                    float along = dot(pw.xz, normalize(float2(-n.z, n.x) + 1e-4));
+                    float strata = vn(float2(along * 0.08, pw.y * 0.9)) * 0.6 + vn(float2(along * 0.3, pw.y * 2.7)) * 0.4;
+                    float ledge = smoothstep(0.55, 0.7, vn(float2(along * 0.05, pw.y * 0.35)));
+                    half3 rock = lerp(half3(0.36, 0.34, 0.37), half3(0.56, 0.50, 0.45), strata);
+                    rock = lerp(rock, half3(0.42, 0.55, 0.30), ledge * 0.6);   // moss on the ledges
+                    albedo = lerp(albedo, rock, steep);
+                }
                 Light main = GetMainLight(TransformWorldToShadowCoord(i.positionWS));
                 half ndl = dot(n, main.direction) * 0.5 + 0.5;
                 half shadow = lerp(1, main.shadowAttenuation, _ShadowStrength);
