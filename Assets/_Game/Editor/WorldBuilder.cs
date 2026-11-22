@@ -578,7 +578,22 @@ namespace WildPartner.EditorTools
             Place("Planter", root, L(5.2f, 7.6f), yaw, 1f);
             Place("Chest", root, L(4.6f, 1.6f), yaw - 75, 1f);
             Place("Woodpile", root, L(-5.0f, 0.5f), yaw + 90, 1f);
-            Place("Stump", root, L(-2.4f, 9.5f), 40, 1f);
+            // 试玩反馈 1123b-1: the stump used to sit in the middle of the yard path. Now it grows in the grass beside it:
+            // first spot ≥ 3.2 m from any path, base sunk into the grass, mushrooms and a few flowers at its foot
+            {
+                Vector2 spot = L(-5.5f, 11f);
+                for (float y = 8f; y <= 13f && WorldLayout.PathDistance(spot.x, spot.y) < 3.2f; y += 0.5f)
+                    for (float x = -3.5f; x >= -8f; x -= 0.5f)
+                    {
+                        var q = L(x, y);
+                        if (WorldLayout.PathDistance(q.x, q.y) >= 3.2f && Vector2.Distance(q, L(-4.5f, 6.5f)) > 2.5f && Vector2.Distance(q, L(-6.5f, 9.5f)) > 1.8f) { spot = q; break; }
+                    }
+                Place("Stump", root, spot, 40, 1f, -0.14f);
+                Place("Mushrooms", root, spot + side * 0.55f + toRamp * 0.35f, 120, 0.9f, -0.02f);
+                Place("Mushrooms", root, spot - side * 0.5f - toRamp * 0.45f, 260, 0.7f, -0.02f);
+                Place("Flowers_White", root, spot + toRamp * 0.9f - side * 0.3f, 30, 0.8f);
+                Place("Flowers_Purple", root, spot - toRamp * 0.8f + side * 0.6f, 200, 0.7f);
+            }
             var perp = new Vector2(-rampDir.y, rampDir.x);
             Place("Signpost", root, RampTop - rampDir * 2.5f + perp * 3.2f, yaw + 20, 1f);
 
