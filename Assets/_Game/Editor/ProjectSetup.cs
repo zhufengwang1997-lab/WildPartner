@@ -31,8 +31,8 @@ namespace WildPartner.EditorTools
         {
             new TierSpec { tier = Tier.Low,    renderScale = 1f, shadowRes = 1024, shadowDistance = 60,  cascades = 1, particles = 0.4f, softParticles = false, bloom = false, bloomIter = 0, fog = true },
             new TierSpec { tier = Tier.Medium, renderScale = 1f, shadowRes = 2048, shadowDistance = 90,  cascades = 2, particles = 0.7f, softParticles = true,  bloom = true,  bloomIter = 3, fog = true },
-            new TierSpec { tier = Tier.High,   renderScale = 1f, shadowRes = 2048, shadowDistance = 140, cascades = 3, particles = 1.0f, softParticles = true,  bloom = true,  bloomIter = 5, fog = true },
-            new TierSpec { tier = Tier.Ultra,  renderScale = 1f, shadowRes = 4096, shadowDistance = 200, cascades = 4, particles = 1.0f, softParticles = true,  bloom = true,  bloomIter = 6, fog = true },
+            new TierSpec { tier = Tier.High,   renderScale = 1f, shadowRes = 4096, shadowDistance = 110, cascades = 4, particles = 1.0f, softParticles = true,  bloom = true,  bloomIter = 5, fog = true },
+            new TierSpec { tier = Tier.Ultra,  renderScale = 1f, shadowRes = 4096, shadowDistance = 160, cascades = 4, particles = 1.0f, softParticles = true,  bloom = true,  bloomIter = 6, fog = true },
         };
 
         [MenuItem("WildPartner/Project Setup")]
@@ -86,7 +86,7 @@ namespace WildPartner.EditorTools
                 so.FindProperty("m_ShadowCascadeCount").intValue = s.cascades;
                 so.FindProperty("m_RequireDepthTexture").boolValue = true;
                 so.FindProperty("m_RequireOpaqueTexture").boolValue = false;
-                so.FindProperty("m_SoftShadowQuality").intValue = s.tier == Tier.Low ? 1 : 2;
+                so.FindProperty("m_SoftShadowQuality").intValue = s.tier == Tier.Low ? 1 : s.tier == Tier.Medium ? 2 : 3;
                 so.ApplyModifiedPropertiesWithoutUndo();
                 EditorUtility.SetDirty(asset);
                 result[(int)s.tier] = asset;

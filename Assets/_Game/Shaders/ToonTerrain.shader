@@ -10,7 +10,7 @@ Shader "WildPartner/ToonTerrain"
         [HideInInspector] _Splat1 ("Layer 1", 2D) = "white" {}
         [HideInInspector] _Splat2 ("Layer 2", 2D) = "white" {}
         [HideInInspector] _Splat3 ("Layer 3", 2D) = "white" {}
-        _ShadowColor ("Shadow Tint", Color) = (0.42, 0.45, 0.72, 1)
+        _ShadowColor ("Shadow Tint", Color) = (0.47, 0.53, 0.74, 1)
         _RampSteps ("Ramp Steps", Range(1, 5)) = 3
         _RampSmooth ("Ramp Softness", Range(0.001, 0.5)) = 0.08
         _ShadowStrength ("Shadow Strength", Range(0, 1)) = 0.8

@@ -13,6 +13,8 @@ CBUFFER_START(UnityPerMaterial)
     half4  _BaseColor;
     half4  _ShadowColor;
     half4  _RimColor;
+    half   _RimPower;
+    half   _RimAmbient;
     half   _Cutoff;
     half   _RampSteps;
     half   _RampSmooth;

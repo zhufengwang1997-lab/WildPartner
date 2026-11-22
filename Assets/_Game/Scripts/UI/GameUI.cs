@@ -85,7 +85,7 @@ namespace WildPartner.UI
         RectTransform Screen(string name, Color bg)
         {
             var rt = UIKit.Stretch(_canvas.transform, name);
-            if (bg.a > 0) UIKit.Panel(rt, bg);
+            if (bg.a > 0) UIKit.Panel(rt, bg).sprite = null;
             rt.gameObject.SetActive(false);
             return rt;
         }
@@ -93,7 +93,7 @@ namespace WildPartner.UI
         RectTransform Card(Transform parent, Vector2 size)
         {
             var rt = UIKit.Rect(parent, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, size);
-            UIKit.Panel(rt, UIKit.Paper);
+            UIKit.Box(rt, UIKit.Paper, UIKit.ParchmentFrame, 1.2f);
             return rt;
         }
 
@@ -102,19 +102,23 @@ namespace WildPartner.UI
         {
             _hud = Screen("HUD", Color.clear);
             var obj = UIKit.Rect(_hud, "Objective", new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(36, -30), new Vector2(760, 60));
-            UIKit.Panel(obj, UIKit.Dim);
-            _objective = UIKit.Label(obj, "", 26, TextAnchor.MiddleLeft, Color.white);
-            _objective.rectTransform.offsetMin = new Vector2(18, 0);
+            UIKit.Box(obj, UIKit.Plum, UIKit.PlumFrame);
+            var star = UIKit.Label(obj, "✦", 26, TextAnchor.MiddleLeft, UIKit.Gold, "Icon");
+            star.rectTransform.offsetMin = new Vector2(20, 0);
+            _objective = UIKit.Label(obj, "", 26, TextAnchor.MiddleLeft, new Color(1f, 0.97f, 0.92f));
+            _objective.rectTransform.offsetMin = new Vector2(54, 0);
+            UIKit.Shade(_objective);
 
             var clock = UIKit.Rect(_hud, "Clock", new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-36, -30), new Vector2(300, 60));
-            UIKit.Panel(clock, UIKit.Dim);
-            _clock = UIKit.Label(clock, "", 24, TextAnchor.MiddleCenter, Color.white);
+            UIKit.Box(clock, UIKit.Plum, UIKit.PlumFrame);
+            _clock = UIKit.Label(clock, "", 24, TextAnchor.MiddleCenter, new Color(1f, 0.97f, 0.92f));
+            UIKit.Shade(_clock);
 
             var prompt = UIKit.Rect(_hud, "Prompt", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 190), new Vector2(560, 92));
             _prompt = UIKit.Label(prompt, "", 28, TextAnchor.UpperCenter, Color.white);
             var shadow = _prompt.gameObject.AddComponent<Outline>(); shadow.effectColor = new Color(0, 0, 0, 0.6f);
             var bar = UIKit.Rect(prompt, "Bar", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 6), new Vector2(420, 16));
-            _progressBg = UIKit.Panel(bar, new Color(0, 0, 0, 0.5f));
+            _progressBg = UIKit.Box(bar, new Color(0.12f, 0.08f, 0.2f, 0.7f), UIKit.PlumFrame, 0.3f);
             var fill = UIKit.Rect(bar, "Fill", Vector2.zero, new Vector2(0, 1), new Vector2(0, 0.5f), Vector2.zero, Vector2.zero);
             _progressFill = UIKit.Panel(fill, new Color(0.75f, 0.6f, 1f));
             var alert = UIKit.Rect(prompt, "Alert", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, -12), new Vector2(420, 8));
@@ -127,8 +131,9 @@ namespace WildPartner.UI
             var o2 = _toast.gameObject.AddComponent<Outline>(); o2.effectColor = new Color(0.2f, 0.1f, 0.3f, 0.8f); o2.effectDistance = new Vector2(2, -2);
 
             var hint = UIKit.Rect(_hud, "Hint", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 60), new Vector2(900, 56));
-            UIKit.Panel(hint, UIKit.Dim);
+            UIKit.Box(hint, UIKit.Plum, UIKit.PlumFrame);
             _hint = UIKit.Label(hint, "", 26, TextAnchor.MiddleCenter, new Color(1, 0.96f, 0.85f));
+            UIKit.Shade(_hint);
         }
 
         // ------------------------------------------------------------------ main menu
@@ -347,7 +352,7 @@ namespace WildPartner.UI
             _objective.text = _flow.Objective;
             var env = EnvController.Instance;
             var w = Weather.Instance;
-            if (env) _clock.text = $"{env.ClockText()}  ·  {(w ? w.Label : "")}";
+            if (env) _clock.text = $"<color=#FFDB8C>{(env.timeOfDay >= 6f && env.timeOfDay < 18.5f ? "☀" : "☾")}</color>  {env.ClockText()}  ·  {(w ? w.Label : "")}";
 
             // capture prompt
             var cand = CaptureSystem.Candidate;

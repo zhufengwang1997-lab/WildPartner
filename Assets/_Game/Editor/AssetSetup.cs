@@ -152,6 +152,7 @@ namespace WildPartner.EditorTools
             m.shader = Toon;
             m.SetTexture("_BaseMap", tex);
             m.SetColor("_BaseColor", Color.white);
+            m.SetColor("_ShadowColor", new Color(0.47f, 0.52f, 0.76f));   // lighter blue-violet shade (画面整改 4)
             cfg?.Invoke(m);
             m.enableInstancing = true;
             EditorUtility.SetDirty(m);
@@ -272,7 +273,7 @@ namespace WildPartner.EditorTools
                 PrefabUtility.UnpackPrefabInstance(v, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
                 var tex = AssetDatabase.LoadAssetAtPath<Texture2D>($"{Chars}/{texName}_BaseColor.png");
                 Material mat;
-                if (tex) mat = ToonMat("M_" + model, tex, m => { m.SetFloat("_RampSteps", 3); m.SetColor("_RimColor", new Color(1, 0.95f, 0.9f, 0.35f)); cfg?.Invoke(m); });
+                if (tex) mat = ToonMat("M_" + model, tex, m => { m.SetFloat("_RampSteps", 3); m.SetColor("_RimColor", new Color(1, 0.95f, 0.9f, 0.55f)); m.SetFloat("_RimPower", 2.8f); m.SetFloat("_RimAmbient", 1f); cfg?.Invoke(m); });
                 else mat = AssetDatabase.LoadAssetAtPath<Material>($"{MatDir}/M_World.mat");
                 foreach (var r in v.GetComponentsInChildren<MeshRenderer>()) r.sharedMaterial = mat;
                 isPlaceholder = false;
@@ -348,7 +349,7 @@ namespace WildPartner.EditorTools
             v.name = "Visual";
             v.transform.localRotation = Quaternion.Euler(0, 180, 0);
             var tex = AssetDatabase.LoadAssetAtPath<Texture2D>($"{Chars}/{texName}_BaseColor.png");
-            var mat = ToonMat("M_" + model, tex, m => { m.SetFloat("_RampSteps", 3); m.SetColor("_RimColor", new Color(1, 0.95f, 0.9f, 0.35f)); });
+            var mat = ToonMat("M_" + model, tex, m => { m.SetFloat("_RampSteps", 3); m.SetColor("_RimColor", new Color(1, 0.95f, 0.9f, 0.55f)); m.SetFloat("_RimPower", 2.8f); m.SetFloat("_RimAmbient", 1f); });
             foreach (var r in v.GetComponentsInChildren<SkinnedMeshRenderer>())
             {
                 r.sharedMaterial = mat;

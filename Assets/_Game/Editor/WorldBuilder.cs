@@ -41,6 +41,7 @@ namespace WildPartner.EditorTools
         public static void Build()
         {
             var t0 = DateTime.Now;
+            RenderFeatures.Ensure();
             _rng = new Random(WorldLayout.Seed);
             Directory.CreateDirectory(TerrainDir);
             Directory.CreateDirectory("Assets/_Game/Scenes");
@@ -242,7 +243,7 @@ namespace WildPartner.EditorTools
             {
                 Layer("Grass", new Color(0.5f, 0.64f, 0.3f), new Color(0.38f, 0.53f, 0.24f), 7f, 0),
                 Layer("ForestFloor", new Color(0.33f, 0.52f, 0.24f), new Color(0.27f, 0.42f, 0.2f), 6f, 1),
-                Layer("Dirt", new Color(0.8f, 0.62f, 0.4f), new Color(0.7f, 0.52f, 0.33f), 4f, 2),
+                Layer("Dirt", new Color(0.74f, 0.6f, 0.45f), new Color(0.63f, 0.5f, 0.38f), 4f, 2),
                 Layer("Rock", new Color(0.58f, 0.56f, 0.6f), new Color(0.46f, 0.44f, 0.5f), 9f, 3),
             };
             _td.terrainLayers = layers;
@@ -650,18 +651,109 @@ namespace WildPartner.EditorTools
             GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.NavigationStatic);
         }
 
+        // Far mountains (画面整改 5): four concentric ridge rings around the valley instead of the old cone
+        // "pyramids". Each ring is one mesh + one FarRidge material; nearer rings are darker and crisper,
+        // farther ones paler and bluer, the last two carry snow. Queues are ordered farthest-first so nearer
+        // silhouettes overlap farther ones (they don't write depth; see FarRidge.shader).
+        static readonly (float radius, float baseH, float amp, float freq, Color rock, float fade, float snow, float seed)[] RidgeLayers =
+        {
+            (1750f, 260f, 420f, 5f,  new Color(0.52f, 0.60f, 0.74f), 0.72f, 520f, 11f),
+            (1250f, 170f, 330f, 7f,  new Color(0.42f, 0.50f, 0.64f), 0.52f, 360f, 23f),
+            ( 880f, 100f, 210f, 9f,  new Color(0.32f, 0.42f, 0.50f), 0.34f, 255f, 37f),
+            ( 620f,  55f, 105f, 13f, new Color(0.24f, 0.36f, 0.36f), 0.20f, 9999f, 53f),
+        };
+
         static void BuildBackground(Transform parent)
         {
             var root = new GameObject("Background").transform;
             root.SetParent(parent, false);
-            var mp = AssetDatabase.LoadAssetAtPath<GameObject>($"{AssetSetup.EnvPrefabs}/SnowMountains.prefab");
-            foreach (var (pos, yaw, s) in new[] { (new Vector3(260, 0, 900), 0f, 1.1f), (new Vector3(900, 0, 430), 90f, 1.0f), (new Vector3(860, 0, 860), 45f, 1.25f) })
+            var shader = Shader.Find("WildPartner/FarRidge");
+            var centre = new Vector3(S * 0.5f, 0, S * 0.5f);
+            for (int li = 0; li < RidgeLayers.Length; li++)
             {
-                var go = (GameObject)PrefabUtility.InstantiatePrefab(mp, root);
-                go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0, yaw, 0));
-                go.transform.localScale = Vector3.one * s;
+                var L = RidgeLayers[li];
+                var mesh = RidgeMesh(L.radius, L.baseH, L.amp, L.freq, L.seed);
+                string mpath = $"{AssetSetup.Gen}/FarRidge_{li}.asset";
+                AssetDatabase.DeleteAsset(mpath);
+                AssetDatabase.CreateAsset(mesh, mpath);
+                string matPath = $"{AssetSetup.MatDir}/M_FarRidge_{li}.mat";
+                var mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+                if (!mat) { mat = new Material(shader); AssetDatabase.CreateAsset(mat, matPath); }
+                mat.shader = shader;
+                mat.SetColor("_RockColor", L.rock);
+                mat.SetFloat("_Fade", L.fade);
+                mat.SetFloat("_SnowLine", L.snow);
+                mat.SetVector("_BaseFade", new Vector4(0, L.baseH * 0.9f, 0, 0));
+                mat.renderQueue = 2600 + li;
+                EditorUtility.SetDirty(mat);
+
+                var go = new GameObject($"FarRidge_{li}");
+                go.transform.SetParent(root, false);
+                go.transform.position = centre;
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var r = go.AddComponent<MeshRenderer>();
+                r.sharedMaterial = mat;
+                r.shadowCastingMode = ShadowCastingMode.Off; r.receiveShadows = false;
+                r.lightProbeUsage = LightProbeUsage.Off; r.reflectionProbeUsage = ReflectionProbeUsage.Off;
+                r.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
             }
-            // (the old low "clouds" read as floating rocks in front of the hills: removed, 画面整改 2/5)
+        }
+
+        static float RidgeNoise(float a, float freq, float seed)
+        {
+            // seamless around the ring: sample 2D Perlin on a circle, a few ridged octaves
+            float h = 0, amp = 1, norm = 0, f = freq;
+            for (int o = 0; o < 4; o++)
+            {
+                float p = Mathf.PerlinNoise(seed + o * 7.3f + Mathf.Cos(a) * f * 0.16f, seed * 0.7f + o * 3.1f + Mathf.Sin(a) * f * 0.16f);
+                float rdg = 1 - Mathf.Abs(p * 2 - 1);
+                h += rdg * rdg * amp; norm += amp; amp *= 0.5f; f *= 2.1f;
+            }
+            return h / norm;
+        }
+
+        static Mesh RidgeMesh(float radius, float baseH, float amp, float freq, float seed)
+        {
+            const int seg = 1024;
+            var hs = new float[seg + 1];
+            for (int i = 0; i <= seg; i++)
+            {
+                float a = i / (float)seg * Mathf.PI * 2;
+                // broad massifs (low frequency) times sharper ridges
+                float massif = Mathf.PerlinNoise(seed * 1.3f + Mathf.Cos(a) * 1.6f, seed + Mathf.Sin(a) * 1.6f);
+                hs[i] = baseH + amp * Mathf.Pow(RidgeNoise(a, freq, seed), 1.6f) * Mathf.Lerp(0.45f, 1.25f, massif);
+            }
+            hs[seg] = hs[0];
+            float step = Mathf.PI * 2 * radius / seg;
+            var v = new List<Vector3>(); var n = new List<Vector3>(); var uv = new List<Vector2>(); var t = new List<int>();
+            // three rows per column: foot (-40 m), shoulder (55 % up, pushed outward) and crest, so each ridge
+            // has a lit and a shaded face rather than reading as a flat card
+            for (int i = 0; i <= seg; i++)
+            {
+                float a = i / (float)seg * Mathf.PI * 2;
+                var radial = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                var tangent = new Vector3(-Mathf.Sin(a), 0, Mathf.Cos(a));
+                float h = hs[i];
+                float slope = (hs[(i + 5) % seg] - hs[(i - 5 + seg) % seg]) / (10 * step);   // wide window: no per-column banding
+                var nrm = (-radial * 0.8f - tangent * slope * 1.6f + Vector3.up * 0.35f).normalized;
+                float u = i * step;
+                v.Add(radial * (radius + 60) + Vector3.up * -40); n.Add((-radial + Vector3.up * 0.2f).normalized); uv.Add(new Vector2(u, 0));
+                v.Add(radial * (radius + 25) + Vector3.up * (h * 0.55f)); n.Add(Vector3.Lerp(nrm, -radial, 0.4f).normalized); uv.Add(new Vector2(u, 0.55f));
+                v.Add(radial * radius + Vector3.up * h); n.Add(nrm); uv.Add(new Vector2(u, 1));
+            }
+            for (int i = 0; i < seg; i++)
+            {
+                int c = i * 3, d = c + 3;
+                for (int r = 0; r < 2; r++)
+                {
+                    t.Add(c + r); t.Add(c + r + 1); t.Add(d + r + 1);
+                    t.Add(c + r); t.Add(d + r + 1); t.Add(d + r);
+                }
+            }
+            var m = new Mesh { name = "FarRidge", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            m.SetVertices(v); m.SetNormals(n); m.SetUVs(0, uv); m.SetTriangles(t, 0);
+            m.RecalculateBounds();
+            return m;
         }
 
         // =========================================================================================
@@ -669,20 +761,20 @@ namespace WildPartner.EditorTools
         // =========================================================================================
         static readonly Dictionary<WorldLayout.Region, (string, float)[]> TreeMix = new Dictionary<WorldLayout.Region, (string, float)[]>
         {
-            { WorldLayout.Region.DeepForest, new[] { ("Tree_Pine_A", .35f), ("Tree_Pine_B", .25f), ("Tree_Broadleaf_B", .3f), ("Tree_Birch_A", .1f) } },
+            { WorldLayout.Region.DeepForest, new[] { ("Tree_Broadleaf_A", .3f), ("Tree_Broadleaf_B", .2f), ("Tree_Pine_A", .25f), ("Tree_Pine_B", .15f), ("Tree_Birch_A", .1f) } },
             { WorldLayout.Region.AutumnForest, new[] { ("Tree_Autumn_A", .45f), ("Tree_Autumn_B", .25f), ("Tree_Pine_A", .15f), ("Tree_Birch_A", .15f) } },
             { WorldLayout.Region.Highland, new[] { ("Tree_Pine_A", .3f), ("Tree_Pine_B", .2f), ("Tree_Autumn_B", .3f), ("Tree_Broadleaf_A", .2f) } },
             { WorldLayout.Region.Edge, new[] { ("Tree_Pine_A", .5f), ("Tree_Pine_B", .5f) } },
             { WorldLayout.Region.Lakeshore, new[] { ("Tree_Autumn_A", .5f), ("Tree_Autumn_B", .3f), ("Tree_Pine_A", .2f) } },
-            { WorldLayout.Region.Meadow, new[] { ("Tree_Broadleaf_A", .45f), ("Tree_Birch_A", .35f), ("Tree_Broadleaf_B", .2f) } },
-            { WorldLayout.Region.Riverbank, new[] { ("Tree_Broadleaf_A", .5f), ("Tree_Birch_A", .5f) } },
+            { WorldLayout.Region.Meadow, new[] { ("Tree_Broadleaf_A", .6f), ("Tree_Broadleaf_B", .25f), ("Tree_Birch_A", .15f) } },
+            { WorldLayout.Region.Riverbank, new[] { ("Tree_Broadleaf_A", .7f), ("Tree_Birch_A", .3f) } },
             { WorldLayout.Region.Cabin, new[] { ("Tree_Pine_A", .6f), ("Tree_Birch_A", .4f) } },
         };
 
         static readonly Dictionary<WorldLayout.Region, float> TreeDensity = new Dictionary<WorldLayout.Region, float>
         {
-            { WorldLayout.Region.DeepForest, .55f }, { WorldLayout.Region.AutumnForest, .5f }, { WorldLayout.Region.Highland, .4f },
-            { WorldLayout.Region.Edge, .7f }, { WorldLayout.Region.Lakeshore, .18f }, { WorldLayout.Region.Meadow, .025f },
+            { WorldLayout.Region.DeepForest, .82f }, { WorldLayout.Region.AutumnForest, .75f }, { WorldLayout.Region.Highland, .55f },
+            { WorldLayout.Region.Edge, .85f }, { WorldLayout.Region.Lakeshore, .3f }, { WorldLayout.Region.Meadow, .025f },
             { WorldLayout.Region.Riverbank, .05f }, { WorldLayout.Region.Cabin, .03f },
         };
 
@@ -743,19 +835,105 @@ namespace WildPartner.EditorTools
             }
             float J(float cell) => ((float)_rng.NextDouble() - 0.5f) * cell * 0.9f;
 
-            // trees
-            const float tc = 7f;
+            // ---- trees (画面整改 3): big trees, closed canopy in the woods, groups of 3–5 in the open
+            float TreeScale(string n)
+            {
+                float r = (float)_rng.NextDouble();
+                return n.StartsWith("Tree_Broadleaf") ? 1.2f + r * 0.45f : n.StartsWith("Tree_Autumn") ? 1.15f + r * 0.4f :
+                       n.StartsWith("Tree_Birch") ? 1.0f + r * 0.3f : 0.9f + r * 0.4f;
+            }
+            bool TreeOk(float px, float pz, float pathClear)
+            {
+                if (Blocked(px, pz, pathClear, 3f)) return false;
+                var reg = WorldLayout.RegionAt(px, pz);
+                return _td.GetSteepness(px / S, pz / S) <= (reg == WorldLayout.Region.Edge ? 46f : 40f);
+            }
+            var placedTrees = new List<Vector2>();
+            void Tree(string n, float px, float pz, float scale)
+            {
+                Add(n, px, pz, (float)_rng.NextDouble() * 360f, scale, 0.3f);
+                placedTrees.Add(new Vector2(px, pz));
+                // understory: bushes / ferns at the foot of the tree
+                if (_rng.NextDouble() < 0.55)
+                {
+                    float a = (float)_rng.NextDouble() * Mathf.PI * 2, r = 2.2f + (float)_rng.NextDouble() * 2.2f;
+                    float bx = px + Mathf.Cos(a) * r, bz = pz + Mathf.Sin(a) * r;
+                    if (!Blocked(bx, bz, 2f, 1f)) Add(_rng.NextDouble() < 0.6 ? "Bush_A" : "Bush_B", bx, bz, (float)_rng.NextDouble() * 360f, 0.55f + (float)_rng.NextDouble() * 0.6f);
+                }
+            }
+            // closed woods: jittered grid
+            const float tc = 6.5f;
             for (float z = tc / 2; z < S; z += tc)
                 for (float x = tc / 2; x < S; x += tc)
                 {
                     float px = x + J(tc), pz = z + J(tc);
                     var region = WorldLayout.RegionAt(px, pz);
-                    if (_rng.NextDouble() > TreeDensity[region]) continue;
-                    if (Blocked(px, pz, 4.5f, 3f)) continue;
-                    if (_td.GetSteepness(px / S, pz / S) > (region == WorldLayout.Region.Edge ? 46f : 40f)) continue;
-                    if (region == WorldLayout.Region.Cabin && Vector2.Distance(new Vector2(px, pz), WorldLayout.Cabin) < WorldLayout.CabinRadius - 8) continue;
-                    Add(Pick(TreeMix[region]), px, pz, (float)_rng.NextDouble() * 360f, 0.8f + (float)_rng.NextDouble() * 0.45f, 0.3f);
+                    if (region == WorldLayout.Region.Meadow || region == WorldLayout.Region.Riverbank || region == WorldLayout.Region.Cabin) continue;
+                    if (_rng.NextDouble() > TreeDensity[region] || !TreeOk(px, pz, 4.5f)) continue;
+                    var n = Pick(TreeMix[region]);
+                    Tree(n, px, pz, TreeScale(n));
                 }
+            // open ground: groups of 3–5 trees (one big, the rest smaller) with bushes and a rock, sight lines left open
+            const float gcell = 34f;
+            for (float z = gcell / 2; z < S; z += gcell)
+                for (float x = gcell / 2; x < S; x += gcell)
+                {
+                    float cx = x + J(gcell), cz = z + J(gcell);
+                    var region = WorldLayout.RegionAt(cx, cz);
+                    if (region != WorldLayout.Region.Meadow && region != WorldLayout.Region.Riverbank && region != WorldLayout.Region.Cabin) continue;
+                    if (_rng.NextDouble() > 0.62 || WorldLayout.PathDistance(cx, cz) < 9f) continue;
+                    int k = 3 + _rng.Next(3);
+                    for (int t = 0; t < k; t++)
+                    {
+                        float a = (float)_rng.NextDouble() * Mathf.PI * 2, r = t == 0 ? 0 : 3.5f + (float)_rng.NextDouble() * 5f;
+                        float px = cx + Mathf.Cos(a) * r, pz = cz + Mathf.Sin(a) * r;
+                        if (!TreeOk(px, pz, 6f)) continue;
+                        var n = Pick(TreeMix[region]);
+                        Tree(n, px, pz, TreeScale(n) * (t == 0 ? 1.15f : 0.8f));
+                    }
+                    for (int b = 0; b < 2 + _rng.Next(3); b++)
+                    {
+                        float a = (float)_rng.NextDouble() * Mathf.PI * 2, r = 4f + (float)_rng.NextDouble() * 5f;
+                        float px = cx + Mathf.Cos(a) * r, pz = cz + Mathf.Sin(a) * r;
+                        if (!Blocked(px, pz, 2.5f, 1f)) Add(_rng.NextDouble() < 0.6 ? "Bush_A" : "Bush_B", px, pz, (float)_rng.NextDouble() * 360f, 0.7f + (float)_rng.NextDouble() * 0.7f);
+                    }
+                    if (_rng.NextDouble() < 0.6)
+                    {
+                        float a = (float)_rng.NextDouble() * Mathf.PI * 2;
+                        float px = cx + Mathf.Cos(a) * 6f, pz = cz + Mathf.Sin(a) * 6f;
+                        if (!Blocked(px, pz, 2.5f, 1f)) Add("Rock_A", px, pz, (float)_rng.NextDouble() * 360f, 0.5f + (float)_rng.NextDouble() * 0.5f, 0.4f);
+                    }
+                }
+            // path-side vignettes (±15 m of the paths, PRD-补充 §2): every ~30 m, alternating sides, a framing tree with
+            // a bush, a rock and a flower patch, so walking the path is a sequence of composed views
+            foreach (var path in WorldLayout.Paths)
+            {
+                float carry = 12f; int sideSign = 1;
+                for (int i = 0; i < path.Length - 1; i++)
+                {
+                    var a0 = path[i]; var a1 = path[i + 1];
+                    float len = Vector2.Distance(a0, a1);
+                    var dir = (a1 - a0) / len; var nrm = new Vector2(-dir.y, dir.x);
+                    for (float u = carry; u < len; u += 26f + (float)_rng.NextDouble() * 10f)
+                    {
+                        var at = a0 + dir * u;
+                        if (Vector2.Distance(at, WorldLayout.Cabin) < WorldLayout.CabinRadius + 20) continue;
+                        sideSign = -sideSign;
+                        var tp = at + nrm * sideSign * (6.5f + (float)_rng.NextDouble() * 4f);
+                        var region = WorldLayout.RegionAt(tp.x, tp.y);
+                        if (TreeOk(tp.x, tp.y, 5.5f))
+                        {
+                            string n = region == WorldLayout.Region.AutumnForest || region == WorldLayout.Region.Lakeshore ? "Tree_Autumn_A" : "Tree_Broadleaf_A";
+                            Tree(n, tp.x, tp.y, TreeScale(n) * 1.1f);
+                        }
+                        var bp = at + nrm * sideSign * 3.6f + dir * 2.5f;
+                        if (!Blocked(bp.x, bp.y, 2.4f, 1f)) Add("Bush_A", bp.x, bp.y, (float)_rng.NextDouble() * 360f, 0.8f + (float)_rng.NextDouble() * 0.4f);
+                        var rp = at - nrm * sideSign * 4.5f - dir * 3f;
+                        if (_rng.NextDouble() < 0.5 && !Blocked(rp.x, rp.y, 2.6f, 1f)) Add("Rock_A", rp.x, rp.y, (float)_rng.NextDouble() * 360f, 0.35f + (float)_rng.NextDouble() * 0.35f, 0.3f);
+                    }
+                    carry = 0;
+                }
+            }
             // bushes
             const float bc = 9f;
             for (float z = bc / 2; z < S; z += bc)
@@ -763,7 +941,7 @@ namespace WildPartner.EditorTools
                 {
                     float px = x + J(bc), pz = z + J(bc);
                     var region = WorldLayout.RegionAt(px, pz);
-                    float d = region == WorldLayout.Region.Meadow ? .07f : region == WorldLayout.Region.Riverbank ? .25f : region == WorldLayout.Region.Cabin ? .1f : .22f;
+                    float d = region == WorldLayout.Region.Meadow ? .03f : region == WorldLayout.Region.Riverbank ? .25f : region == WorldLayout.Region.Cabin ? .1f : .22f;
                     if (_rng.NextDouble() > d || Blocked(px, pz, 2.5f, 1.5f) || _td.GetSteepness(px / S, pz / S) > 35f) continue;
                     Add(_rng.NextDouble() < 0.6 ? "Bush_A" : "Bush_B", px, pz, (float)_rng.NextDouble() * 360f, 0.7f + (float)_rng.NextDouble() * 0.6f);
                 }
@@ -888,6 +1066,8 @@ namespace WildPartner.EditorTools
                     float dryN = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.55f, 0.72f, Fbm(x * 0.035f + 7, z * 0.035f + 2, 2)));
                     if (!forest) c = Color.Lerp(c, new Color(0.62f, 0.56f, 0.38f), dryN * 0.35f);
                     if (forest) c *= new Color(0.82f, 0.88f, 0.98f);
+                    if (region == WorldLayout.Region.AutumnForest || region == WorldLayout.Region.Lakeshore)   // fallen-leaf patches
+                        c = Color.Lerp(c, new Color(0.66f, 0.47f, 0.32f), Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.45f, 0.7f, Fbm(x * 0.09f + 3, z * 0.09f + 8, 2))) * 0.55f);
                     float river = WorldLayout.RiverDistance(x, z, out _);
                     float lush = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(WorldLayout.RiverHalfWidth + 2, WorldLayout.RiverHalfWidth + 14, river));
                     lush = Mathf.Max(lush, 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(1.05f, 1.3f, WorldLayout.LakeDistance(x, z))));
@@ -923,13 +1103,13 @@ namespace WildPartner.EditorTools
             var mat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_GrassBlades.mat");
             if (!mat) { mat = new Material(Shader.Find("WildPartner/Grass")); AssetDatabase.CreateAsset(mat, $"{AssetSetup.MatDir}/M_GrassBlades.mat"); }
             // colours live here (not only as shader defaults) so re-running the builder applies tweaks
-            mat.SetColor("_BaseColor", new Color(0.27f, 0.46f, 0.14f)); mat.SetColor("_TipColor", new Color(0.55f, 0.76f, 0.24f));
-            mat.SetColor("_DryColor", new Color(0.82f, 0.76f, 0.36f)); mat.SetColor("_ShadowColor", new Color(0.42f, 0.45f, 0.75f));
+            mat.SetColor("_BaseColor", new Color(0.27f, 0.46f, 0.14f)); mat.SetColor("_TipColor", new Color(0.44f, 0.70f, 0.27f));
+            mat.SetColor("_DryColor", new Color(0.72f, 0.72f, 0.36f)); mat.SetColor("_ShadowColor", new Color(0.47f, 0.53f, 0.76f));
             mat.SetVector("_HeightRange", new Vector4(0.15f, 0.35f)); mat.SetVector("_Fade", new Vector4(48, 66));
             EditorUtility.SetDirty(mat);
             gr.material = mat; gr.grassMap = mapTex; gr.groundTint = tintTex;
             var tm = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Terrain.mat");
-            if (tm) { tm.SetTexture("_GroundTint", tintTex); tm.SetFloat("_WorldSize", S); EditorUtility.SetDirty(tm); }
+            if (tm) { tm.SetColor("_ShadowColor", new Color(0.47f, 0.53f, 0.74f)); tm.SetTexture("_GroundTint", tintTex); tm.SetFloat("_WorldSize", S); EditorUtility.SetDirty(tm); }
         }
 
         static Texture2D SaveMap(string name, Color32[] px)
@@ -958,13 +1138,13 @@ namespace WildPartner.EditorTools
             profile = ScriptableObject.CreateInstance<VolumeProfile>();
             AssetDatabase.CreateAsset(profile, path);
             var tm = profile.Add<Tonemapping>(true); tm.mode.Override(TonemappingMode.Neutral);
-            var bloom = profile.Add<Bloom>(true); bloom.threshold.Override(1.0f); bloom.intensity.Override(0.55f); bloom.scatter.Override(0.65f); bloom.tint.Override(new Color(1f, 0.92f, 0.82f));
-            var ca = profile.Add<ColorAdjustments>(true); ca.postExposure.Override(0.15f); ca.contrast.Override(8f); ca.saturation.Override(-4f);
+            var bloom = profile.Add<Bloom>(true); bloom.threshold.Override(0.95f); bloom.intensity.Override(0.45f); bloom.scatter.Override(0.7f); bloom.tint.Override(new Color(1f, 0.92f, 0.82f));
+            var ca = profile.Add<ColorAdjustments>(true); ca.postExposure.Override(0.05f); ca.contrast.Override(18f); ca.saturation.Override(4f);
             var smh = profile.Add<ShadowsMidtonesHighlights>(true);
-            smh.shadows.Override(new Vector4(0.92f, 0.95f, 1.12f, 0f)); smh.highlights.Override(new Vector4(1.05f, 1.0f, 0.92f, 0f));
-            var st = profile.Add<SplitToning>(true); st.shadows.Override(new Color(0.42f, 0.40f, 0.70f)); st.highlights.Override(new Color(1f, 0.82f, 0.60f)); st.balance.Override(-15f);
-            var wb = profile.Add<WhiteBalance>(true); wb.temperature.Override(6f);
-            var vig = profile.Add<Vignette>(true); vig.intensity.Override(0.18f); vig.smoothness.Override(0.5f);
+            smh.shadows.Override(new Vector4(0.9f, 0.93f, 1.15f, -0.04f)); smh.highlights.Override(new Vector4(1.04f, 1.0f, 0.94f, 0.02f));
+            var st = profile.Add<SplitToning>(true); st.shadows.Override(new Color(0.46f, 0.45f, 0.68f)); st.highlights.Override(new Color(1f, 0.93f, 0.84f)); st.balance.Override(10f);   // milder: strong orange highlights turned the blue sky lavender-grey
+            var wb = profile.Add<WhiteBalance>(true); wb.temperature.Override(-2f); wb.tint.Override(-3f);
+            var vig = profile.Add<Vignette>(true); vig.intensity.Override(0.24f); vig.smoothness.Override(0.45f); vig.color.Override(new Color(0.12f, 0.08f, 0.22f));
             foreach (var c in profile.components) AssetDatabase.AddObjectToAsset(c, profile);
             AssetDatabase.SaveAssets();
 
@@ -1019,22 +1199,37 @@ namespace WildPartner.EditorTools
             var vGo = new GameObject("PlayerCam");
             var vcam = vGo.AddComponent<CinemachineCamera>();
             vcam.Follow = target; vcam.LookAt = target;
-            vcam.Lens = new LensSettings { FieldOfView = 55, NearClipPlane = 0.2f, FarClipPlane = 2500f };
+            vcam.Lens = new LensSettings { FieldOfView = 52, NearClipPlane = 0.15f, FarClipPlane = 2500f };
             vcam.Priority = 10;
             var orbit = vGo.AddComponent<CinemachineOrbitalFollow>();
             orbit.OrbitStyle = CinemachineOrbitalFollow.OrbitStyles.Sphere;
-            orbit.Radius = 6.5f;
+            // 画面整改 6: closer and lower than before, the witch about a quarter to a third of the frame height
+            // and a little left of centre, so the view ahead (path, landscape) gets the larger part of the frame
+            orbit.Radius = 4.6f;
             orbit.HorizontalAxis.Value = WorldLayout.PlayerStartYaw;
-            orbit.VerticalAxis.Range = new Vector2(-10, 70);
-            orbit.VerticalAxis.Value = 14f;
-            orbit.RadialAxis.Range = new Vector2(0.6f, 1.8f);
+            orbit.VerticalAxis.Range = new Vector2(-12, 65);
+            orbit.VerticalAxis.Value = 7f;
+            orbit.RadialAxis.Range = new Vector2(0.65f, 1.9f);
             orbit.RadialAxis.Value = 1f;
-            orbit.TrackerSettings.PositionDamping = new Vector3(0.3f, 0.3f, 0.3f);
+            orbit.TrackerSettings.PositionDamping = new Vector3(0.35f, 0.3f, 0.35f);
             var comp = vGo.AddComponent<CinemachineRotationComposer>();
-            comp.Damping = new Vector2(0.2f, 0.2f);
+            comp.Damping = new Vector2(0.25f, 0.2f);
+            var compo = comp.Composition;
+            compo.ScreenPosition = new Vector2(-0.12f, 0.05f);
+            comp.Composition = compo;
+            // smooth pull-in on terrain, rocks, trunks and walls instead of popping; a little lift when blocked
             var deocc = vGo.AddComponent<CinemachineDeoccluder>();
-            deocc.CollideAgainst = 1; // Default layer: terrain, rocks, buildings
-            deocc.MinimumDistanceFromTarget = 0.6f;
+            deocc.CollideAgainst = 1; // Default layer: terrain, rocks, buildings, trunks
+            deocc.MinimumDistanceFromTarget = 0.8f;
+            var avoid = deocc.AvoidObstacles;
+            avoid.Enabled = true;
+            avoid.CameraRadius = 0.35f;
+            avoid.Strategy = CinemachineDeoccluder.ObstacleAvoidance.ResolutionStrategy.PullCameraForward;
+            avoid.SmoothingTime = 0.4f;
+            avoid.Damping = 0.6f;
+            avoid.DampingWhenOccluded = 0.15f;
+            avoid.MinimumOcclusionTime = 0.05f;
+            deocc.AvoidObstacles = avoid;
 
             var pivot = new GameObject("MenuPivot").transform;
             pivot.position = new Vector3(600, 40, 560);

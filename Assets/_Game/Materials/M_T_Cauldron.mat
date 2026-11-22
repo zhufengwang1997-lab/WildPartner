@@ -35,6 +35,8 @@ Material:
     - _Emission: 0
     - _RampSmooth: 0.06
     - _RampSteps: 3
+    - _RimAmbient: 0
+    - _RimPower: 4
     - _ShadowStrength: 0.75
     - _SphereNormal: 0
     - _Translucency: 0
@@ -45,6 +47,6 @@ Material:
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _RimColor: {r: 1, g: 0.95, b: 0.8, a: 0.15}
-    - _ShadowColor: {r: 0.41999996, g: 0.45, b: 0.72, a: 1}
+    - _ShadowColor: {r: 0.47, g: 0.52, b: 0.76, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

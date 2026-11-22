@@ -35,8 +35,7 @@ namespace WildPartner.EditorTools
             var veg = Object.FindFirstObjectByType<VegetationSpawner>();
             veg.Spawn();
             var env = Object.FindFirstObjectByType<EnvController>();
-            RenderSettings.fog = true;
-            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fog = false;
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
             Shader.SetGlobalVector("_WP_Wind", new Vector4(0.8f, 0.6f, 1, 0));
 
@@ -50,12 +49,13 @@ namespace WildPartner.EditorTools
                 new View { name = "03_meadow", pos = G(420, 470, 6), look = G(320, 544, 2), hour = 11f },
                 new View { name = "04_lake", pos = G(640, 700, 10), look = G(812, 826, 0), hour = 17.5f },
                 new View { name = "05_bridge", pos = G(720, 640, 5), look = G(748, 664, 0), hour = 13f },
-                new View { name = "06_forest", pos = G(520, 820, 3), look = G(560, 790, 3), hour = 10f },
+                new View { name = "06_forest", pos = G(545, 748, 1.8f), look = G(522, 805, 2.4f), hour = 15f },
                 new View { name = "07_overview", pos = new Vector3(300, 230, -70), look = new Vector3(300, 30, 320), hour = 12f },
                 new View { name = "08_night", pos = W(WorldLayout.RampTop - WorldLayout.CabinFacing * 2f, 2.2f), look = W(WorldLayout.House, 2.5f), hour = 22f },
                 new View { name = "09_waterfall", pos = G(345, 768, 7), look = G(258, 884, 3), hour = 12f },
                 new View { name = "10_moonflower", pos = G(841, 825, 1.6f), look = G(846, 830, 1.0f), hour = 19.5f },
                 new View { name = "11_stones", pos = G(298, 524, 2.5f), look = G(320, 544, 1.5f), hour = 15f },
+                new View { name = "13_sky", pos = G(420, 470, 4), look = G(320, 544, 45), hour = 16f },
                 new View { name = "12_yard", pos = W(WorldLayout.RampTop - WorldLayout.CabinFacing * 2f, 2.2f), look = W(WorldLayout.House, 2.0f), hour = 15.5f },
             };
             var rt = new RenderTexture(1600, 900, 24, RenderTextureFormat.ARGB32) { antiAliasing = 1 };

@@ -55,6 +55,6 @@ Material:
     - _Variation: 0.25
     - _WorldSize: 600
     m_Colors:
-    - _ShadowColor: {r: 0.41999996, g: 0.45, b: 0.72, a: 1}
+    - _ShadowColor: {r: 0.47, g: 0.53, b: 0.74, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

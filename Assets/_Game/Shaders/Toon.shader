@@ -10,8 +10,10 @@ Shader "WildPartner/Toon"
     {
         [MainTexture] _BaseMap ("Base Map", 2D) = "white" {}
         [MainColor] _BaseColor ("Base Color", Color) = (1, 1, 1, 1)
-        _ShadowColor ("Shadow Tint", Color) = (0.42, 0.45, 0.72, 1)
+        _ShadowColor ("Shadow Tint", Color) = (0.47, 0.52, 0.76, 1)
         _RimColor ("Rim (rgb) strength (a)", Color) = (1, 0.93, 0.8, 0.15)
+        _RimPower ("Rim Power", Range(1, 8)) = 4
+        _RimAmbient ("Rim in Shade (sky light)", Range(0, 2)) = 0
         _RampSteps ("Ramp Steps", Range(1, 5)) = 3
         _RampSmooth ("Ramp Edge Softness", Range(0.001, 0.5)) = 0.06
         _ShadowStrength ("Shadow Strength", Range(0, 1)) = 0.75
@@ -142,8 +144,10 @@ Shader "WildPartner/Toon"
                 col += albedo.rgb * sun * pow(back, 4) * _Translucency * shadow;
 
                 // Rim light, strongest on the lit side.
-                half rim = pow(1 - saturate(dot(n, v)), 4) * _RimColor.a;
-                col += _RimColor.rgb * rim * (0.3 + 0.7 * lit) * sun;
+                // Characters and pets (画面整改 6) also get a soft sky-coloured rim on the shaded side, which
+                // separates them from busy grass and foliage behind them.
+                half rim = pow(1 - saturate(dot(n, v)), _RimPower) * _RimColor.a;
+                col += _RimColor.rgb * rim * ((0.3 + 0.7 * lit) * sun + _RimAmbient * (ambient * 1.4 + 0.12));
 
                 // Point/spot lights (lamps, campfire): simple banded add.
                 #if defined(_ADDITIONAL_LIGHTS)

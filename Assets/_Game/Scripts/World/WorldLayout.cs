@@ -127,7 +127,9 @@ namespace WildPartner.World
 
         public static float PathDistance(float x, float z)
         {
-            var p = new Vector2(x, z);
+            // domain warp: the polylines become gently meandering trails (画面整改 1: no ruler-straight bands)
+            var p = new Vector2(x + (Mathf.PerlinNoise(x * 0.025f + 7.1f, z * 0.025f + 1.3f) - 0.5f) * 7f,
+                                z + (Mathf.PerlinNoise(x * 0.025f + 3.7f, z * 0.025f + 9.2f) - 0.5f) * 7f);
             float best = float.MaxValue;
             foreach (var path in Paths)
                 for (int i = 0; i < path.Length - 1; i++)

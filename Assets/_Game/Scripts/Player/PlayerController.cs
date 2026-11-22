@@ -83,9 +83,9 @@ namespace WildPartner.Player
                 var look = GameInput.Look * SaveSystem.Settings.mouseSensitivity;
                 _orbit.HorizontalAxis.Value += look.x;
                 float inv = SaveSystem.Settings.invertY ? 1 : -1;
-                _orbit.VerticalAxis.Value = Mathf.Clamp(_orbit.VerticalAxis.Value + look.y * inv, -10f, 70f);
+                _orbit.VerticalAxis.Value = Mathf.Clamp(_orbit.VerticalAxis.Value + look.y * inv, -12f, 65f);
                 float z = GameInput.Zoom;
-                if (Mathf.Abs(z) > 0.01f) _orbit.RadialAxis.Value = Mathf.Clamp(_orbit.RadialAxis.Value - z * 0.05f, 0.6f, 1.8f);
+                if (Mathf.Abs(z) > 0.01f) _orbit.RadialAxis.Value = Mathf.Clamp(_orbit.RadialAxis.Value - z * 0.05f, 0.65f, 1.9f);
             }
 
             Vector2 input = Frozen ? Vector2.zero : GameInput.Move;

@@ -30,10 +30,10 @@ Material:
     - _WindStrength: 0.35
     m_Colors:
     - _BaseColor: {r: 0.27, g: 0.46, b: 0.14, a: 1}
-    - _DryColor: {r: 0.82, g: 0.76, b: 0.36, a: 1}
+    - _DryColor: {r: 0.72, g: 0.72, b: 0.36, a: 1}
     - _Fade: {r: 48, g: 66, b: 0, a: 0}
     - _HeightRange: {r: 0.15, g: 0.35, b: 0, a: 0}
-    - _ShadowColor: {r: 0.42, g: 0.45, b: 0.75, a: 1}
-    - _TipColor: {r: 0.55, g: 0.76, b: 0.24, a: 1}
+    - _ShadowColor: {r: 0.47, g: 0.53, b: 0.76, a: 1}
+    - _TipColor: {r: 0.44, g: 0.7, b: 0.27, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

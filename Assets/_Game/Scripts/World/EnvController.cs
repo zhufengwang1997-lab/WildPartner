@@ -53,11 +53,11 @@ namespace WildPartner.World
             K(0,   "#8FA6FF", 0.18f, "#0B1230", "#24305A", "#1C2546", "#202A52"),
             K(4.5f,"#8FA6FF", 0.15f, "#101838", "#2C3866", "#26305A", "#26305A"),
             K(6,   "#FF9A5C", 0.9f,  "#5C7BC8", "#FFB08A", "#D8A0A0", "#7E7FA8"),
-            K(8,   "#FFE2B0", 1.6f,  "#6FA6E8", "#F7D6D8", "#C8D2E8", "#9AB0D0"),
-            K(12,  "#FFF1D6", 2.0f,  "#5E9AE6", "#EEDDE6", "#CFDDF0", "#A4ACD8"),
-            K(16,  "#FFD399", 1.9f,  "#6E9EE0", "#FBD3C2", "#D6D8EC", "#9C98CE"),
-            K(17,  "#FFBE7E", 1.6f,  "#6A92D8", "#FFC6A8", "#DCCFE0", "#968CC4"),
-            K(18,  "#FF8A50", 1.0f,  "#4C5EA8", "#FF9A70", "#C88A90", "#8A7A9E"),
+            K(8,   "#FFE0AA", 1.9f,  "#3F86E6", "#F7D6D0", "#B4C8EA", "#8FA6D0"),
+            K(12,  "#FFF0D2", 2.3f,  "#347CE6", "#E6E2EA", "#B2CAEE", "#94A2D6"),
+            K(16,  "#FFC98A", 2.5f,  "#3B78DC", "#FCD2B8", "#B8C6EA", "#8A88CC"),
+            K(17,  "#FFB070", 2.2f,  "#4270CE", "#FFC09A", "#C4BCDC", "#8680C0"),
+            K(18,  "#FF8A50", 1.3f,  "#4C5EA8", "#FF9A70", "#B88A98", "#7E709C"),
             K(19.5f,"#9AA8FF",0.25f, "#1E2650", "#5A4C80", "#3A3A66", "#3A3E70"),
             K(24,  "#8FA6FF", 0.18f, "#0B1230", "#24305A", "#1C2546", "#202A52"),
         };
@@ -70,10 +70,17 @@ namespace WildPartner.World
             return new Key { h = h, sun = s, sunI = i, zen = zz, hor = hh, fog = f, amb = a };
         }
 
+        static readonly int FogColId = Shader.PropertyToID("_WP_FogColor");
+        static readonly int FogSunId = Shader.PropertyToID("_WP_FogSunColor");
+        static readonly int FogParamsId = Shader.PropertyToID("_WP_FogParams");
+        static readonly int FogParams2Id = Shader.PropertyToID("_WP_FogParams2");
+        /// <summary>Height-fog density multiplier (settings / quality); 0 turns the haze off.</summary>
+        public static float FogAmount = 1f;
+
         void Awake()
         {
             Instance = this;
-            RenderSettings.fog = true;
+            RenderSettings.fog = false;   // the HeightFog renderer feature does aerial perspective (画面整改 4)
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.ambientMode = AmbientMode.Trilight;
         }
@@ -118,12 +125,20 @@ namespace WildPartner.World
                 sun.shadowStrength = night ? 0.6f : 0.9f;
             }
 
-            RenderSettings.ambientSkyColor = amb * (1 - 0.2f * rain);
-            RenderSettings.ambientEquatorColor = Color.Lerp(amb, fog, 0.5f) * 0.9f;
-            RenderSettings.ambientGroundColor = Color.Lerp(amb, new Color(0.42f, 0.36f, 0.62f), 0.35f) * 0.5f;   // blue-purple shadow fill
+            // lower fill than before: lit faces pop, shade stays blue-purple instead of grey (画面整改 4)
+            RenderSettings.ambientSkyColor = amb * 0.85f * (1 - 0.2f * rain);
+            RenderSettings.ambientEquatorColor = Color.Lerp(amb, fog, 0.4f) * 0.75f;
+            RenderSettings.ambientGroundColor = Color.Lerp(amb, new Color(0.40f, 0.34f, 0.62f), 0.45f) * 0.45f;
+            RenderSettings.fog = false;
             RenderSettings.fogColor = fog;
-            RenderSettings.fogStartDistance = Mathf.Lerp(140f, 40f, rain);   // light aerial haze only (PRD-补充 §3)
-            RenderSettings.fogEndDistance = Mathf.Lerp(1100f, 380f, rain) * (night ? 0.8f : 1f);
+
+            // height fog: thick in the valley, thin above it; warm towards the sun, cool blue elsewhere
+            Color fogSun = Color.Lerp(sunCol, Color.white, 0.25f) * Mathf.Clamp01(sunI / 1.5f);
+            Shader.SetGlobalColor(FogColId, Color.Lerp(fog, hor, 0.25f));
+            Shader.SetGlobalColor(FogSunId, new Color(fogSun.r, fogSun.g, fogSun.b, night ? 0f : 0.75f * (1 - rain)));
+            float density = (night ? 0.0032f : 0.0045f) * (1 + rain * 2.2f) * FogAmount;
+            Shader.SetGlobalVector(FogParamsId, new Vector4(density, 0.04f, 26f, Mathf.Lerp(0.82f, 0.95f, rain)));
+            Shader.SetGlobalVector(FogParams2Id, new Vector4(Mathf.Lerp(30f, 8f, rain), 0.85f, 0, 0));
 
             Shader.SetGlobalColor(ZenithId, zen);
             Shader.SetGlobalColor(HorizonId, hor);
