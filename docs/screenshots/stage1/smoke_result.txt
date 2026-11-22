@@ -1,0 +1,20 @@
+WildPartner smoke test 2026-11-22 16:33:05 commit=a6fb1c2-dirty gpu=Apple M5 Max api=Metal
+PASS 启动后进入主菜单
+PASS 新游戏：进入游戏，已收集 0
+PASS 月影兔：条件（白天）满足后出现
+PASS 月影兔：按住捕捉成功并成为伙伴
+PASS 白色神鹿：条件（全天）满足后出现
+PASS 白色神鹿：按住捕捉成功并成为伙伴
+PASS 月影蝶：条件（夜晚）满足后出现
+PASS 月影蝶：按住捕捉成功并成为伙伴
+PASS 赤墨锦鲤：条件（雨天）满足后出现
+PASS 赤墨锦鲤：按住捕捉成功并成为伙伴
+PASS 林鸮：条件（全天）满足后出现
+PASS 林鸮：按住捕捉成功并成为伙伴
+PASS 图鉴集齐 5/5
+PASS 打开图鉴
+PASS 回到篝火触发结局
+PASS 结局后返回主菜单
+PASS 继续游戏：存档恢复（已收集 5/5）
+PASS 继续游戏：伙伴全部恢复跟随
+RESULT PASS
