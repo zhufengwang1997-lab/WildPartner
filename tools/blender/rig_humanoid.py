@@ -239,24 +239,27 @@ def ground_offset():
         d += [pb.head.z - h0, pb.tail.z - t0]
     return min(d)
 
-def make_action(name, frames, fn, plant=True, lift=None):
-    """fn(p) -> (rot, loc) for loop phase p in [0,1). With plant=True the pelvis height is solved per
+def make_action(name, frames, fn, plant=True, lift=None, loop=True):
+    """fn(p) -> (rot, loc) for phase p. loop=True: p in [0,1), last key = first (seamless cycle);
+    loop=False: one-shot clip, p runs 0..1 inclusive. With plant=True the pelvis height is solved per
     frame so the lowest foot touches the ground (the up/down bob then comes from the legs, as in mocap),
-    circularly smoothed; lift(p) adds height on top (run flight phase)."""
+    then low-pass filtered; lift(p) adds height on top (run flight phase)."""
     act = bpy.data.actions.new(name)
     rig.animation_data_create(); rig.animation_data.action = act
-    poses = [fn(f / frames) for f in range(frames)]
-    off = [0.0] * frames
+    n = frames if loop else frames + 1
+    poses = [fn(f / frames) for f in range(n)]
+    off = [0.0] * n
     if plant:
         for f, (r, l) in enumerate(poses):
             pose(r, l); off[f] = ground_offset()
-    h = [-off[f] + (lift(f / frames) if lift else 0.0) for f in range(frames)]
-    for _ in range(2 if plant else 0):   # circular low-pass: no kinks where the supporting foot changes
-        h = [(h[f - 2] + 2 * h[f - 1] + 3 * h[f] + 2 * h[(f + 1) % frames] + h[(f + 2) % frames]) / 9 for f in range(frames)]
+    h = [-off[f] + (lift(f / frames) if lift else 0.0) for f in range(n)]
+    idx = (lambda i: i % n) if loop else (lambda i: min(max(i, 0), n - 1))
+    for _ in range(2 if plant else 0):   # low-pass: no kinks where the supporting foot changes
+        h = [(h[idx(f - 2)] + 2 * h[idx(f - 1)] + 3 * h[f] + 2 * h[idx(f + 1)] + h[idx(f + 2)]) / 9 for f in range(n)]
     for f in range(frames + 1):
-        r, l = poses[f % frames]
+        r, l = poses[f % n]
         l = dict(l); hz = Vector(l.get("Hips", Vector()))
-        hz.z += h[f % frames]
+        hz.z += h[f % n]
         l["Hips"] = hz
         pose(r, l); key(f)
     act.use_fake_user = True
@@ -348,6 +351,80 @@ def idle(p):
         rot[f"Hand.{sfx}"] = [("x", -10 - 2 * sway), ("z", 8 * side)]
     return rot, {"Hips": Vector((-0.022 * HEIGHT - 0.004 * HEIGHT * dr, 0, 0.0012 * HEIGHT * br))}
 
+
+def track(pts, t):
+    """Catmull-Rom through (time, value) keys on [0,1] with clamped ends (one-shot clips)."""
+    if t <= pts[0][0]: return pts[0][1]
+    if t >= pts[-1][0]: return pts[-1][1]
+    for i in range(len(pts) - 1):
+        (x1, v1), (x2, v2) = pts[i], pts[i + 1]
+        if x1 <= t <= x2:
+            v0 = pts[i - 1][1] if i > 0 else v1
+            v3 = pts[i + 2][1] if i + 2 < len(pts) else v2
+            u = (t - x1) / (x2 - x1)
+            return 0.5 * (2 * v1 + (-v0 + v2) * u + (2 * v0 - 5 * v1 + 4 * v2 - v3) * u * u + (-v0 + 3 * v1 - 3 * v2 + v3) * u ** 3)
+
+def keyed(spec, t, loc=None):
+    """spec: {bone: {axis: [(t, deg), ...]}} -> pose. Arms rotate y (raise/lower), then x (swing), then z.
+    Conventions (match gait): legs x = -hipflex / +kneeflex / -dorsiflex; spine x + = lean forward;
+    UpperArm y*side + = lower toward the body, x - = swing forward; ForeArm x - = bend."""
+    rot = {}
+    for b, ch in spec.items():
+        order = ("y", "x", "z") if b.startswith("UpperArm") else ("x", "y", "z")
+        rot[b] = [(a, track(ch[a], t)) for a in order if a in ch]
+    return rot, {"Hips": Vector(loc(t)) if loc else Vector()}
+
+def sides(spec_lr):
+    """Expand {'Thigh': ({...L...}, {...R...})} and mirror arm y/z signs for the right side."""
+    out = {}
+    for b, (l, r) in spec_lr.items():
+        out[b + ".L"] = l
+        out[b + ".R"] = {a: [(t, -v) if (b in ("UpperArm", "Hand") and a in ("y", "z")) else (t, v) for t, v in pts]
+                         for a, pts in r.items()}
+    return out
+
+def jump_up(t):
+    """0.47 s: push-off extension (legs straight, toes pointed, arms swing up) -> tuck at the apex."""
+    leg = lambda hip, knee, ank: {"Thigh": {"x": [(tt, -v) for tt, v in hip]}, "Shin": {"x": knee}, "Foot": {"x": [(tt, -v) for tt, v in ank]}}
+    L = leg([(0, 8), (0.25, -4), (0.6, 40), (1, 46)], [(0, 22), (0.25, 2), (0.6, 70), (1, 78)], [(0, 6), (0.25, -30), (0.6, -14), (1, -10)])
+    R = leg([(0, 2), (0.25, -8), (0.6, 22), (1, 30)], [(0, 14), (0.25, 4), (0.6, 46), (1, 60)], [(0, 4), (0.25, -32), (0.6, -18), (1, -12)])
+    arm = {"y": [(0, 18), (0.3, -8), (0.7, -22), (1, -24)], "x": [(0, 10), (0.3, -55), (0.7, -30), (1, -22)], "z": [(0, 0), (1, 6)]}
+    spec = sides({"Thigh": (L["Thigh"], R["Thigh"]), "Shin": (L["Shin"], R["Shin"]), "Foot": (L["Foot"], R["Foot"]),
+                  "UpperArm": (arm, arm), "ForeArm": ({"x": [(0, -20), (0.3, -10), (1, -35)]},) * 2,
+                  "Hand": ({"x": [(0, -8), (1, -14)], "z": [(0, 6), (1, 10)]},) * 2})
+    spec.update({"Hips": {"x": [(0, 10), (0.25, -2), (1, 6)]}, "Spine": {"x": [(0, 6), (0.25, -4), (1, 4)]},
+                 "Chest": {"x": [(0, 4), (0.25, -6), (1, 3)]}, "Neck": {"x": [(0, -6), (0.25, 2), (1, -2)]},
+                 "Head": {"x": [(0, -4), (0.25, 4), (1, -2)]}})
+    return keyed(spec, t)
+
+def fall(p):
+    """Air loop: tucked legs slowly cycling, arms out for balance, hair-light flutter (all loop harmonics)."""
+    s, c = math.sin(TAU * p), math.cos(TAU * p)
+    rot = {"Hips": [("x", 6 + 1.5 * s)], "Spine": [("x", 4 + 1.0 * s)], "Chest": [("x", 3 - 1.0 * c)],
+           "Neck": [("x", -3)], "Head": [("x", -3 + 1.5 * c), ("z", 2 * s)],
+           "Thigh.L": [("x", -(40 + 6 * s))], "Shin.L": [("x", 66 + 8 * s)], "Foot.L": [("x", 10)],
+           "Thigh.R": [("x", -(26 - 6 * s))], "Shin.R": [("x", 50 - 8 * s)], "Foot.R": [("x", 12)]}
+    for sfx, side, ph in (("L", 1, 0.0), ("R", -1, 1.3)):
+        w = math.sin(TAU * p + ph)
+        rot[f"UpperArm.{sfx}"] = [("y", (-24 + 4 * w) * side), ("x", -20 + 6 * w), ("z", 6 * side)]
+        rot[f"ForeArm.{sfx}"] = [("x", -32 - 6 * w)]
+        rot[f"Hand.{sfx}"] = [("x", -14 - 4 * w), ("z", 10 * side)]
+    return rot, {"Hips": Vector()}
+
+def land(t):
+    """0.4 s: legs reach for the ground -> absorb into a crouch (pelvis drops via foot planting) -> stand."""
+    leg = lambda hip, knee, ank: ({"x": [(tt, -v) for tt, v in hip]}, {"x": knee}, {"x": [(tt, -v) for tt, v in ank]})
+    Lt, Ls, Lf = leg([(0, 26), (0.22, 48), (0.55, 24), (1, 2)], [(0, 40), (0.22, 92), (0.55, 44), (1, 4)], [(0, -6), (0.22, 30), (0.55, 16), (1, 2)])
+    Rt, Rs, Rf = leg([(0, 16), (0.22, 44), (0.55, 20), (1, 0)], [(0, 30), (0.22, 86), (0.55, 40), (1, 3)], [(0, -8), (0.22, 30), (0.55, 16), (1, 2)])
+    arm = {"y": [(0, -22), (0.22, -6), (0.6, 12), (1, 20)], "x": [(0, -24), (0.22, -34), (0.6, -8), (1, 0)], "z": [(0, 6), (1, 0)]}
+    spec = sides({"Thigh": (Lt, Rt), "Shin": (Ls, Rs), "Foot": (Lf, Rf), "UpperArm": (arm, arm),
+                  "ForeArm": ({"x": [(0, -32), (0.22, -40), (1, -12)]},) * 2,
+                  "Hand": ({"x": [(0, -14), (1, -8)], "z": [(0, 10), (1, 6)]},) * 2})
+    spec.update({"Hips": {"x": [(0, 6), (0.22, 16), (0.6, 6), (1, 1)]}, "Spine": {"x": [(0, 4), (0.22, 12), (0.6, 4), (1, 0)]},
+                 "Chest": {"x": [(0, 3), (0.22, 8), (0.6, 2), (1, 0)]}, "Neck": {"x": [(0, -3), (0.22, -10), (1, 0)]},
+                 "Head": {"x": [(0, -3), (0.22, -8), (1, 0)]}})
+    return keyed(spec, t)
+
 acts = {
     "Idle": make_action("Idle", 150, idle),
     "Walk": make_action("Walk", 26, lambda p: gait(p, WALK, arm_amp=17, arm_lag=0.04, elbow=12, elbow_amp=14, arm_in=20,
@@ -355,6 +432,9 @@ acts = {
     "Run":  make_action("Run", 20, lambda p: gait(p, RUN, arm_amp=30, arm_lag=0.03, elbow=62, elbow_amp=26, arm_in=15,
                                                    lean=11, sway=0.008, pel_yaw=9, pel_roll=3, chest_counter=1.2, head_amp=2.0),
                         lift=lambda p: 0.025 * HEIGHT * max(0.0, math.sin(TAU * 2 * (p - 0.27))) ** 1.5),
+    "JumpUp": make_action("JumpUp", 14, jump_up, plant=False, loop=False),
+    "Fall": make_action("Fall", 24, fall, plant=False),
+    "Land": make_action("Land", 12, land, loop=False),
 }
 # ground speed of each clip at 1x = speed of the planted foot sliding back (in-place loop); Unity's
 # blend-tree thresholds use these so the feet do not skate (written next to the FBX as JSON)
@@ -366,7 +446,7 @@ def clip_speed(act):
         hd = PB["Foot.L"].head; ys.append(hd.y); zs.append(hd.z - FOOT_REST["L"][0])
     v = sorted((ys[f + 1] - ys[f]) * FPS for f in range(n) if zs[f] < 0.015 and zs[f + 1] < 0.015)
     return round(v[len(v) // 2], 3) if v else 0.0
-SPEEDS = {k: clip_speed(a) for k, a in acts.items() if k != "Idle"}
+SPEEDS = {k: clip_speed(acts[k]) for k in ("Walk", "Run")}
 print("SPEEDS " + json.dumps(SPEEDS))
 rig.animation_data.action = acts["Idle"]
 bpy.ops.object.mode_set(mode="OBJECT")

@@ -5,7 +5,7 @@ using WildPartner.Core;
 namespace WildPartner.Player
 {
     /// <summary>
-    /// Third-person movement (WASD / left stick; Shift run, Ctrl sneak) relative to the camera, plus the
+    /// Third-person movement (WASD / left stick; Shift run, Ctrl sneak, Space jump) relative to the camera, plus the
     /// Cinemachine orbit driven from <see cref="GameInput"/>. Exposes <see cref="Noise"/> — how far away
     /// creatures can notice the player — which sneaking reduces.
     /// </summary>
@@ -17,10 +17,21 @@ namespace WildPartner.Player
         public float walkSpeed = 1.6f, runSpeed = 4.0f, sneakSpeed = 1.0f;
         public float turnSpeed = 720f;
         public float gravity = -20f;
+        [Tooltip("Jump apex height (m). Short coyote time / input buffer make the jump forgiving on slopes.")]
+        public float jumpHeight = 0.9f;
+        const float CoyoteTime = 0.12f, JumpBuffer = 0.12f;
         public CinemachineCamera vcam;
         public Transform visual;
         Animator _animator;
         static readonly int SpeedId = Animator.StringToHash("Speed");
+        static readonly int JumpId = Animator.StringToHash("Jump");
+        static readonly int GroundedId = Animator.StringToHash("Grounded");
+        static readonly int AirTimeId = Animator.StringToHash("AirTime");
+        float _sinceGrounded, _sinceJumpPressed = 99f, _airTime;
+        bool _jumping;
+        /// <summary>True while airborne (jumping or falling).</summary>
+        public bool Airborne => _airTime > 0.15f || _jumping;
+        public event System.Action Jumped, Landed;
         [Tooltip("Ground speed of the Run clip at 1x (measured in Blender, Rigged/<Name>_speeds.json); faster movement speeds the animator up")]
         public float animRunSpeed = 3.2f;
 
@@ -97,17 +108,38 @@ namespace WildPartner.Player
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, rot, turnSpeed * Time.deltaTime);
             }
 
-            _vy = _cc.isGrounded ? -2f : _vy + gravity * Time.deltaTime;
-            _cc.Move((transform.forward * Speed + Vector3.up * _vy) * Time.deltaTime);
+            // jump: buffered press + coyote time; vertical speed for the requested apex height
+            float dt = Time.deltaTime;
+            bool grounded = _cc.isGrounded;
+            _sinceGrounded = grounded ? 0f : _sinceGrounded + dt;
+            _sinceJumpPressed = (!Frozen && GameInput.JumpPressed) ? 0f : _sinceJumpPressed + dt;
+            if (_sinceJumpPressed <= JumpBuffer && _sinceGrounded <= CoyoteTime && !_jumping)
+            {
+                _vy = Mathf.Sqrt(2f * -gravity * jumpHeight);
+                _jumping = true; _sinceJumpPressed = 99f; _sinceGrounded = 99f;
+                if (_animator) _animator.SetTrigger(JumpId);
+                Jumped?.Invoke();
+            }
+            else if (grounded && _vy <= 0f)
+            {
+                if (_jumping || _airTime > 0.3f) { Landed?.Invoke(); Footstep?.Invoke(); }
+                _jumping = false; _vy = -2f;
+            }
+            else _vy += gravity * dt;
+            _airTime = grounded && _vy <= 0f ? 0f : _airTime + dt;
+            _cc.Move((transform.forward * Speed + Vector3.up * _vy) * dt);
 
             if (_animator)
             {
                 // blend tree: Idle 0 / Walk 1.64 / Run 3.2 m/s at 1x; faster ground speed plays the run faster
                 _animator.SetFloat(SpeedId, Mathf.Min(Speed, animRunSpeed), 0.08f, Time.deltaTime);
-                _animator.speed = Mathf.Max(1f, Speed / animRunSpeed);
+                bool air = _jumping || _airTime > 0.25f;   // short drops (stairs, bumps) stay on Locomotion
+                _animator.SetBool(GroundedId, !air);
+                _animator.SetFloat(AirTimeId, _airTime);
+                _animator.speed = air ? 1f : Mathf.Max(1f, Speed / animRunSpeed);
             }
 
-            Noise = Speed < 0.2f ? (Sneaking ? 0.35f : 0.55f) : Sneaking ? 0.45f : Running ? 1.6f : 1f;
+            Noise = _jumping ? 1.2f : Speed < 0.2f ? (Sneaking ? 0.35f : 0.55f) : Sneaking ? 0.45f : Running ? 1.6f : 1f;
 
             // Footsteps for audio + procedural animation phase
             float prev = _stepPhase;

@@ -93,7 +93,7 @@ namespace WildPartner.Core
             SetState(FlowState.Playing);
             Hints?.Invoke(new[]
             {
-                "WASD 移动，鼠标转动视角，Shift 奔跑",
+                "WASD 移动，鼠标转动视角，Shift 奔跑，空格跳跃",
                 "按住 Ctrl 潜行：动物不容易发现你",
                 "靠近动物后按住 E 捕捉；Tab 打开图鉴查看线索",
                 $"猫已经在你身边了。再找到另外 {Total - CaughtCount} 种伙伴，然后回到木屋前的篝火",

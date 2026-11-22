@@ -65,6 +65,26 @@ namespace WildPartner.Core
             Step(flow.State == GameFlow.FlowState.Playing && flow.CaughtCount == starters, $"新游戏：进入游戏，已收集 {starters}（默认宠物）");
             yield return Shot("02_newgame");
 
+            // Space = jump: rises ~jumpHeight, plays the jump animation, lands again
+            {
+                yield return new WaitForSeconds(0.5f);
+                float y0 = player.transform.position.y, top = y0, tj = 0;
+                bool sawAir = false, sawJumpAnim = false, shotTaken = false;
+                var anim = player.GetComponentInChildren<Animator>();
+                GameInput.SimJump = true; yield return null; GameInput.SimJump = false;
+                while (tj < 2.5f)
+                {
+                    tj += Time.deltaTime; top = Mathf.Max(top, player.transform.position.y);
+                    sawAir |= player.Airborne;
+                    if (anim) sawJumpAnim |= anim.GetCurrentAnimatorStateInfo(0).IsName("JumpUp") || anim.GetCurrentAnimatorStateInfo(0).IsName("Fall");
+                    if (sawAir && !player.Airborne && tj > 0.3f) break;
+                    if (!shotTaken && player.transform.position.y - y0 > player.jumpHeight * 0.8f) { shotTaken = true; yield return Shot("02b_jump"); }
+                    yield return null;
+                }
+                Step(top - y0 > player.jumpHeight * 0.7f && !player.Airborne && (anim == null || sawJumpAnim),
+                     $"空格跳跃：起跳高度 {top - y0:0.00} m，落地，{(anim ? (sawJumpAnim ? "播放了跳跃动画" : "没有跳跃动画") : "无骨骼动画")}");
+            }
+
             var env = EnvController.Instance;
             var weather = Weather.Instance;
             var creatures = FindObjectsByType<Creature>(FindObjectsInactive.Include, FindObjectsSortMode.None);

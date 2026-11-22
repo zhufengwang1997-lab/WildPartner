@@ -310,6 +310,38 @@ namespace WildPartner.EditorTools
             return File.Exists(p) ? JsonUtility.FromJson<Speeds>(File.ReadAllText(p)) : new Speeds();
         }
 
+        /// <summary>Jump: Locomotion -(Jump)-> JumpUp -> Fall (loop) -(Grounded)-> Land -> Locomotion.
+        /// Walking off a ledge goes straight to Fall. Skipped when the model has no jump clips.</summary>
+        static void AddJump(UnityEditor.Animations.AnimatorController ctrl, UnityEditor.Animations.AnimatorStateMachine sm,
+                            UnityEditor.Animations.AnimatorState loco, System.Func<string, AnimationClip> clip)
+        {
+            AnimationClip up = clip("JumpUp"), fall = clip("Fall"), land = clip("Land");
+            if (!up || !fall || !land) return;
+            ctrl.AddParameter("Jump", AnimatorControllerParameterType.Trigger);
+            ctrl.AddParameter("Grounded", AnimatorControllerParameterType.Bool);
+            ctrl.AddParameter("AirTime", AnimatorControllerParameterType.Float);
+            var ps = ctrl.parameters; foreach (var p in ps) if (p.name == "Grounded") p.defaultBool = true; ctrl.parameters = ps;
+            var sUp = sm.AddState("JumpUp"); sUp.motion = up;
+            var sFall = sm.AddState("Fall"); sFall.motion = fall;
+            var sLand = sm.AddState("Land"); sLand.motion = land;
+            UnityEditor.Animations.AnimatorStateTransition T(UnityEditor.Animations.AnimatorState a, UnityEditor.Animations.AnimatorState b, float dur, float exit = -1)
+            {
+                var t = a.AddTransition(b);
+                t.duration = dur; t.hasFixedDuration = true;
+                t.hasExitTime = exit >= 0; if (exit >= 0) t.exitTime = exit;
+                return t;
+            }
+            var t1 = T(loco, sUp, 0.06f); t1.AddCondition(UnityEditor.Animations.AnimatorConditionMode.If, 0, "Jump");
+            var t2 = T(loco, sFall, 0.2f); t2.AddCondition(UnityEditor.Animations.AnimatorConditionMode.IfNot, 0, "Grounded");
+            T(sUp, sFall, 0.15f, 0.92f);
+            var t3 = T(sUp, sLand, 0.06f); t3.AddCondition(UnityEditor.Animations.AnimatorConditionMode.If, 0, "Grounded");
+            t3.AddCondition(UnityEditor.Animations.AnimatorConditionMode.Greater, 0.3f, "AirTime");
+            var t4 = T(sFall, sLand, 0.06f); t4.AddCondition(UnityEditor.Animations.AnimatorConditionMode.If, 0, "Grounded");
+            var t5 = T(sLand, loco, 0.18f, 0.65f);
+            var t6 = T(sLand, loco, 0.15f); t6.AddCondition(UnityEditor.Animations.AnimatorConditionMode.Greater, 2.0f, "Speed");   // landing on the run
+            var t7 = T(sLand, sUp, 0.05f); t7.AddCondition(UnityEditor.Animations.AnimatorConditionMode.If, 0, "Jump");          // bunny hop
+        }
+
         static UnityEditor.Animations.AnimatorController LocomotionController(string model, string fbx)
         {
             Directory.CreateDirectory(AnimDir);
@@ -334,6 +366,7 @@ namespace WildPartner.EditorTools
             tree.AddChild(Clip("Walk"), sp.Walk);   // thresholds = the clips' own ground speeds -> no foot skating
             tree.AddChild(Clip("Run"), sp.Run);
             sm.defaultState = state;
+            AddJump(ctrl, sm, state, Clip);
             EditorUtility.SetDirty(ctrl);
             return ctrl;
         }
