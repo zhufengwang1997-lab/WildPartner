@@ -20,6 +20,7 @@ Shader "WildPartner/Toon"
         _SphereNormal ("Sphere Normal Blend (foliage)", Range(0, 1)) = 0
         _Translucency ("Back-light Translucency", Range(0, 1)) = 0
         _Emission ("Emission (x base colour)", Range(0, 8)) = 0
+        _EmissionTint ("Emission Tint", Color) = (1, 1, 1, 1)
         _UpNormal ("Up Normal (grass)", Range(0, 1)) = 0
         [Toggle(_WIND)] _Wind ("Wind", Float) = 0
         _WindStrength ("Wind Strength (m)", Range(0, 1)) = 0.15
@@ -127,7 +128,7 @@ Shader "WildPartner/Toon"
                 #endif
                 NearFade(i.positionCS);
 
-                half3 n = normalize(i.normalWS) * ((facing || _UpNormal > 0.5) ? 1 : -1);
+                half3 n = SafeNormalize(i.normalWS) * ((facing || _UpNormal > 0.5) ? 1 : -1);   // 1123e-1: a zero normal must not become NaN
                 float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS);
                 Light main = GetMainLight(shadowCoord);
                 half ndl = dot(n, main.direction) * 0.5 + 0.5;            // half-lambert
@@ -172,7 +173,7 @@ Shader "WildPartner/Toon"
                 LIGHT_LOOP_END
                 #endif
 
-                col += albedo.rgb * _Emission;
+                col += albedo.rgb * _Emission * _EmissionTint.rgb;
                 col = MixFog(col, i.fogFactor);
                 return half4(col, 1);
             }
@@ -326,7 +327,7 @@ Shader "WildPartner/Toon"
                 LODFadeCrossFade(i.positionCS);
                 #endif
                 NearFade(i.positionCS);
-                return half4(normalize(i.normalWS), 0);
+                return half4(SafeNormalize(i.normalWS), 0);
             }
             ENDHLSL
         }

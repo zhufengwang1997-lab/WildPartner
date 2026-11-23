@@ -51,7 +51,7 @@ namespace WildPartner.EditorTools
             for (int s = -1; s <= 1; s += 2)
             {
                 var r = Box(root, s < 0 ? "RoofFront" : "RoofBack", P(0, RoomH + rise / 2 + 0.08f, s * run / 2), new Vector3(RoomW + 0.4f, 0.14f, len), roofMat);
-                r.transform.rotation = Quaternion.Euler(s * -slope, 0, 0);
+                r.transform.rotation = Quaternion.Euler(s * slope, 0, 0);   // 1123e-1: high at the ridge, low over the walls (was inverted: sky showed above the front wall)
             }
             // timber frame: tie beams, ridge beam, corner posts, wall plates
             for (int i = 0; i < 4; i++)
@@ -197,8 +197,13 @@ namespace WildPartner.EditorTools
             {
                 if (x1 - x0 < 0.003f) return;
                 int i = vs.Count;
-                vs.Add(new Vector3(x0, y0, z)); vs.Add(new Vector3(x1, y0, z)); vs.Add(new Vector3(x0, y1, z)); vs.Add(new Vector3(x1, y1, z));
-                ts.AddRange(new[] { i, i + 2, i + 1, i + 1, i + 2, i + 3, i, i + 1, i + 2, i + 1, i + 3, i + 2 });   // both sides
+                // 1123e-1: each side gets its own four vertices. Sharing them made RecalculateNormals sum the two
+                // opposite face normals to zero -> NaN in the shader -> bloom spread it into a white glow on the door.
+                for (int side = 0; side < 2; side++)
+                {
+                    vs.Add(new Vector3(x0, y0, z)); vs.Add(new Vector3(x1, y0, z)); vs.Add(new Vector3(x0, y1, z)); vs.Add(new Vector3(x1, y1, z));
+                }
+                ts.AddRange(new[] { i, i + 2, i + 1, i + 1, i + 2, i + 3, i + 4, i + 5, i + 6, i + 5, i + 7, i + 6 });
             }
             int filled = 0;
             for (int b = 0; b < Bands; b++)

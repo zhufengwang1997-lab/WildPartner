@@ -24,6 +24,7 @@ CBUFFER_START(UnityPerMaterial)
     half   _WindFrequency;
     half   _Translucency;
     half   _Emission;
+    half4  _EmissionTint;   // 1123e-3: the moon butterfly's wings glow blue-violet at night
     half   _UpNormal;
 CBUFFER_END
 
