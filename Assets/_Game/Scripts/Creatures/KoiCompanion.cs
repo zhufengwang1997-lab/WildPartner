@@ -157,7 +157,8 @@ namespace WildPartner.Creatures
         {
             var pt = player.transform;
             Vector3 hip = _hips ? _hips.position : pt.position + Vector3.up * 0.95f;
-            Vector3 anchor = hip + pt.right * 0.19f + pt.forward * 0.03f - Vector3.up * 0.02f;
+            // 0.28 m out (was 0.19): at 0.19 it hung inside the skirt's flare and only its glow showed through
+            Vector3 anchor = hip + pt.right * 0.28f + pt.forward * 0.06f - Vector3.up * 0.02f;
             float dt = Mathf.Max(Time.deltaTime, 1e-4f);
             if (!_hasAnchor) { _lastAnchor = anchor; _hasAnchor = true; }
             Vector3 accel = (anchor - _lastAnchor) / dt; _lastAnchor = anchor;

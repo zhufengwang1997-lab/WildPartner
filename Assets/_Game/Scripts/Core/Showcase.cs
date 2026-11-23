@@ -274,9 +274,34 @@ namespace WildPartner.Core
             flow.Pets.SetActive("ink_koi");
             var meadow = new Vector2(WorldLayout.StoneCircle.x + 14f, WorldLayout.StoneCircle.y - 8f);
             player.Teleport(new Vector3(meadow.x, Creature.GroundHeight(meadow.x, meadow.y) + 0.2f, meadow.y), 0);
+            // 1123e-2 leftover: the bottle (15 cm, at her RIGHT hip, half inside the skirt's flare) was a speck in
+            // the orbit shot from her left. For this one still the camera leaves Cinemachine and is aimed at the
+            // bottle from ~1 m to her right-front; the near-camera dither is eased off so she does not fade.
             player.SetCameraOrbit(95f, 8f); player.SetCameraDistance(0.7f);
             yield return new WaitForSeconds(1.5f);
-            Still("2_koi_bottle_close");
+            var koi = FindAnyObjectByType<KoiCompanion>();
+            var cam = Camera.main; var brain = cam.GetComponent<Unity.Cinemachine.CinemachineBrain>();
+            var fade0 = EnvController.NearFade;
+            if (koi && koi.BottleShown && brain)
+            {
+                brain.enabled = false; EnvController.NearFade = new Vector2(0.05f, 0.15f);
+                var pt = player.transform;
+                for (int i = 0; i < 20; i++)   // a few frames: the bottle swings, keep it centred
+                {
+                    var bc = koi.BottleCentre;
+                    var at = bc + (pt.right * 0.85f + pt.forward * 0.55f).normalized * 1.0f + Vector3.up * 0.18f;
+                    cam.transform.SetPositionAndRotation(at, Quaternion.LookRotation(bc + Vector3.up * 0.12f - at));
+                    yield return null;
+                }
+                var vp = cam.WorldToViewportPoint(koi.BottleCentre);
+                Debug.Log($"[Showcase] koi bottle at viewport {vp} (distance {vp.z:0.00} m)");
+                Still("2_koi_bottle_close");
+                yield return new WaitForSeconds(0.3f);   // the still is taken at the end of a frame
+                EnvController.NearFade = fade0; brain.enabled = true;
+                if (player.vcam) player.vcam.PreviousStateIsValid = false;
+            }
+            else { Debug.Log("[Showcase] koi bottle not shown"); Still("2_koi_bottle_close"); }
+            yield return new WaitForSeconds(0.5f);
             GameInput.SimMove = new Vector2(0, 0.45f);
             yield return Record("clip_2_koi_bottle_walk", 4f, 2f, "2_koi_bottle_walk");
             GameInput.SimMove = Vector2.zero;
