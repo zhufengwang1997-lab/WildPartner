@@ -149,12 +149,12 @@
   - 设置菜单"抗锯齿：关 / TAA / STP"，F3 调试面板也能切（F4 循环），存档保存，命令行 `-aa=` 可指定。默认 STP（原生分辨率，100% 渲染比例）；TAA 带锐化 0.4。
   - 门口镜头切换（进出木屋）时重置 TAA/STP 历史（`CameraCut` → `ResetHistory`）；画质档位变化后重新应用。
   - F3 面板：帧率/帧时间、显示与渲染分辨率、"超分：未启用"、画质档位、图形 API、抗锯齿按钮、GPU 名称。
-  - 验证：冒烟测试三种模式都生效到相机和管线；关垂直同步后 GPU 帧时间（1600×900，草地）：关 4.67 ms、TAA 5.54 ms、STP 5.67 ms。截图 `Logs/smoke/61–63_aa_*`。
+  - 验证：冒烟测试三种模式都生效到相机和管线；关垂直同步后 FrameTimingManager 的 GPU 时间（1600×900，草地）：关 4.67、TAA 5.54、STP 5.67 ms。这个值在 Metal 上包含多帧排队，只能比相对高低（UpscaleBench 里发现它约为实际帧时间的 2 倍）。截图 `Logs/smoke/61–63_aa_*`。
   - 修了一个打包问题：四档 URP 资源原来都没选 STP，打包时 STP 的着色器被剥离，运行时切 STP 每帧报错、黑屏。现在四档都存成 STP。冒烟测试新增"全程没有错误日志"，顺带发现并修了宠物离开 NavMesh 时每帧报错的老问题。
   - 草叶 mipmap 覆盖率：检查过，项目里没有镂空贴图植被（草是几何草叶，最窄约 1.3 像素），不存在这个问题。
   - **未验证**：镜头切换重置历史只在代码里接上，没做鬼影对比截图；1070 Ti 未测。
 - [x] 画质分级扩展：`WildPartnerTier` 给四档加草地距离、LOD 偏移、SSAO、湖面反射分辨率、默认抗锯齿（`docs/画质分级.md`）。冒烟逐档切换验证参数生效。
-- [x] 特效开销清单：`tools/fxcost.sh` 四个机位逐项关闭实测（`docs/特效开销清单.md`）。M5 Max 1080p：SSAO 2.8–3.8 ms、草地 0.7–1.4 ms 是主要开销，其余低于测量噪声。Windows 未测。
+- [x] 特效开销清单：`tools/fxcost.sh` 四个机位逐项关闭实测（`docs/特效开销清单.md`）。M5 Max 1080p：SSAO（2.8–3.8）和草地（0.7–1.4）是主要开销，其余低于测量噪声；毫秒数是 Metal 上 FrameTimingManager 的相对值。Windows 未测。
 - [x] 超分中间件 `Packages/com.zfw.upscaling`：
   - 接口 `IUpscaler` / `UpscalerQuality` / `UpscalerInputs` 按说明书 FR-UP-01；选择器（DLSS → MetalFX → STP → FSR1 → RenderScale，档位映射，玩家选择存盘，`-upscaler=` / `-quality=` 覆盖）。
   - 三个后端都用 URP 内置能力：STP（时间性）、FSR 1（EASU + RCAS）、渲染缩放 + 双线性。`RecordPass` 对这三个是空的（URP 自己记录放大 Pass），偏离说明写在 DECISIONS 和接入规范。
@@ -163,4 +163,15 @@
   - GpuCaps schema 2（dlss / fsr / metalfx），MineEmbers 打标签 v0.3.0。
   - 验证：EditMode 测试 7/7（选择器、档位映射、Halton 与相位数、mip 偏移公式、Initialize 是唯一尺寸来源、不引用厂商 SDK）；冒烟：三后端 × 质量/性能渲染尺寸与 Initialize 一致、连续切换 50 次无报错、窗口改尺寸后重新计算。
   - **没做**：DLSS、MetalFX（仅设计）；FSR 2/3。Windows 上未验证。
-- [ ] UpscaleBench：六个固定场景 × 14 种配置（含 2 倍超采样参考图、TC-05 关运动向量对照），`tools/bench.sh` 一条命令出截图、`quality_eval.py`（FLIP / SSIM / PSNR）和 `bench_report.py` 报告。Python 测试 5/5。BENCH_RESULT
+- [x] UpscaleBench：六个固定场景 × 15 种配置（含 2 倍超采样参考图、重复拍一次的参考图 ref2、TC-05 关运动向量对照），`tools/bench.sh` 一条命令出截图、`quality_eval.py`（FLIP / SSIM / PSNR）和 `bench_report.py` 报告。Python 测试 5/5。
+  - 结果（M5 Max，2560×1440，已验证）：`docs/超分评估报告-mac-20261123.md`，原始数据 `bench_results/mac-20261123/`。
+    - 画质：STP 质量档 FLIP 0.111，FSR 1 质量档 0.140，渲染缩放质量档 0.140；STP 比另两个在 6/6 个场景误差更小，各后端都是质量档 < 平衡档 < 性能档。噪声底（参考图拍两次）0.074。
+    - NFR-01（质量档帧率比原生 +40%）：STP_Quality 对 native_stp +34%，FSR1_Quality 对 native_taa +33%，**未达标**；RenderScale_Quality +42% 达标。M5 Max 上这款游戏接近 CPU 瓶颈（不抗锯齿原生 172 FPS），降分辨率省下的 GPU 时间有限。
+    - TC-05：关掉物体运动向量后 SC-01 FLIP 0.120 → 0.152（+26%），已验证。
+    - TC-06：当前后端不读 Reactive Mask，关遮罩不会有差异，未做对照（预期如此）。
+    - 默认建议（按规则算出）：STP 平衡档。游戏自动档位仍按说明书（高档 → 质量档）。
+    - SC-05 切镜头：切后第 20 帧截图无可见残影；切后最初几帧没有单独检查。
+    - 超分 Pass 耗时、显存：发布版拿不到（显示「—」），未测。GPU ms 在 Metal 上只能看相对值，帧率用实际帧时间。
+  - 修过的测量问题：第一次跑时草的风动时间在配置之间没对齐，FLIP 主要在量风的相位；现在每个配置开始时重置风动时钟，并加 ref2 量噪声底。
+- [ ] GRD（GPU 驻留绘制）：`-grd=` / `-occlusion=` 参数、设置菜单两项、F3 面板开关和 Draw Calls / Batches / SetPass 读数、`tools/grd.sh` 开关对比脚本都做了。**未达成**：在 Mac（Metal）上打开后，所有用 Toon 着色器的物体（树、灌木、木屋）都不绘制；默认改为关闭，Draw Call 对比没有可信数据（见 `docs/GRD评估报告.md`）。
+- [x] PerfRunner 0.3.0（MineEmbers 标签 v0.3.1）：记录 `-upscaler=` / `-quality=`，新增 `upscale_ms` 列；包不引用超分代码，由游戏填钩子。

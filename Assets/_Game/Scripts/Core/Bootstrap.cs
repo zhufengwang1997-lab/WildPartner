@@ -41,6 +41,10 @@ namespace WildPartner.Core
             Rendering.AntiAliasing.LoadSaved();
             Rendering.UpscalerSettings.Init();
             Rendering.UpscalerInputsPass.Init();
+            Rendering.GrdSettings.Init();
+            Zfw.PerfRunner.PerfRunner.UpscalerInfo = () => Zfw.Upscaling.UpscalerHost.Active == null ? "off"
+                : $"{Zfw.Upscaling.UpscalerHost.Active.Name}/{Zfw.Upscaling.UpscalerHost.Quality} {Zfw.Upscaling.UpscalerHost.RenderSize.x}x{Zfw.Upscaling.UpscalerHost.RenderSize.y}";
+            Zfw.PerfRunner.PerfRunner.UpscaleMs = Rendering.UpscaleBench.UpscaleMs;
             QualityTiers.TierChanged += ReapplyAA;
             Player.PlayerController.CameraCut += Rendering.AntiAliasing.ResetHistory;
             if (!FindFirstObjectByType<Rendering.DebugOverlay>()) new GameObject("DebugOverlay").AddComponent<Rendering.DebugOverlay>();
@@ -54,7 +58,7 @@ namespace WildPartner.Core
             Player.PlayerController.CameraCut -= Rendering.AntiAliasing.ResetHistory;
         }
 
-        static void ReapplyAA(Tier _) { Rendering.AntiAliasing.Apply(); Rendering.WildPartnerTier.Apply(); }
+        static void ReapplyAA(Tier _) { Rendering.AntiAliasing.Apply(); Rendering.WildPartnerTier.Apply(); Rendering.GrdSettings.Apply(); }
 
         void ApplyPost(Tier _)
         {

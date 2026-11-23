@@ -202,13 +202,13 @@
       "hash": "e275945622017e62eba1cd71102d79721767555a"
     },
     "com.zfw.perfrunner": {
-      "version": "https://github.com/zhufengwang1997-lab/MineEmbers.git?path=Packages/com.zfw.perfrunner#v0.2.0",
+      "version": "https://github.com/zhufengwang1997-lab/MineEmbers.git?path=Packages/com.zfw.perfrunner#v0.3.1",
       "depth": 0,
       "source": "git",
       "dependencies": {
-        "com.zfw.gpucaps": "0.2.0"
+        "com.zfw.gpucaps": "0.3.0"
       },
-      "hash": "77c110fb4ea3a3337eeea6b2f4700a8525a136c8"
+      "hash": "a6a792da453c6231da36dca158bc202dfef9a72f"
     },
     "com.zfw.qualitytiers": {
       "version": "https://github.com/zhufengwang1997-lab/MineEmbers.git?path=Packages/com.zfw.qualitytiers#v0.2.0",
