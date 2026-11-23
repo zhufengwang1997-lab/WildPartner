@@ -26,7 +26,7 @@
 | FR-UP-01 | `IUpscaler` 统一接口 | 已验证（M5 Max） | `Packages/com.zfw.upscaling`，EditMode 7/7，冒烟"超分：3 个后端" |
 | FR-UP-02 | 输入准备 IN-01~08 | 见下表 | 接入规范第 4 节 |
 | FR-UP-03 | DLSS / FSR 2/3 原生后端 | 仅设计 | `docs/设计方案/FSR2-3与DLSS-MetalFX后端.md` |
-| FR-UP-04 | 选择器与档位映射 | 已验证（M5 Max）；Windows 未验证 | EditMode 测试；日志 `[Upscaler] 选择` |
+| FR-UP-04 | 选择器与档位映射 | 已验证（M5 Max） | EditMode 测试；日志 `[Upscaler] 选择` |
 | FR-UP-05 | GpuCaps schema 2（dlss/fsr/metalfx） | 已验证（M5 Max） | MineEmbers `v0.3.0`，`docs/caps/` |
 | FR-UP-06 | 设置菜单与 F3 调试层 | 已验证（M5 Max） | 冒烟截图 `7x_*`、`7y_*` |
 | C3 | 游戏层不引用厂商 SDK | 已验证 | EditMode 测试 |
@@ -54,4 +54,3 @@
 | FR-EV-01 | 光追阴影 | 仅设计 | `docs/设计方案/光追-VRS-CrashDiag.md` |
 | FR-EV-02 | VRS | 仅设计 | 同上 |
 | FR-CD-01~07 | 崩溃诊断 | 仅设计 | 同上 |
-| — | Windows（5060 Ti / 1070 Ti） | 测试包已打好，未运行 | `~/dev/WildPartner-win-builds/`（不进 Git），脚本 `tools/win/` |

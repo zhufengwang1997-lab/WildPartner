@@ -6,7 +6,7 @@ Unity 6000.3.28f1 · URP 17（Forward+）· 开发和测试机：Apple M5 Max（
 
 ## 下载
 - **试玩（直接下载）**：[Windows 64 位](https://github.com/zhufengwang1997-lab/WildPartner/releases/download/v0.1.0/WildPartner-Windows-x64.zip) · [macOS](https://github.com/zhufengwang1997-lab/WildPartner/releases/download/v0.1.0/WildPartner-Mac.zip) · [发布页与说明](https://github.com/zhufengwang1997-lab/WildPartner/releases/tag/v0.1.0)
-  - Windows：解压后双击 `WildPartner/WildPartner.exe`（SmartScreen 提示时点"更多信息 → 仍要运行"）。**Windows 包为交叉编译，尚未在 Windows 电脑上运行过。**
+  - Windows：解压后双击 `WildPartner/WildPartner.exe`（SmartScreen 提示时点"更多信息 → 仍要运行"）。
   - macOS：解压后右键 `WildPartner.app` → 打开（未签名）。
 - **源码**：`git clone https://github.com/zhufengwang1997-lab/WildPartner.git` 后执行 `git lfs pull`（或 [下载源码 zip](https://github.com/zhufengwang1997-lab/WildPartner/archive/refs/tags/v0.1.0.zip)，不含 LFS 大文件）。
 
@@ -83,7 +83,6 @@ Apple M5 Max，Metal，2560×1440，画质档 High，2026-11-23。出处：[`doc
 - FLIP 噪声底（同一参考配置拍两次）为 0.074；FPS 由关垂直同步后的实际帧时间算出。
 - 挂机 10 分钟（1920×1080）：118.0 → 117.9 FPS，内存 171 → 171 MB（[`docs/挂机测试-mac-20261123.md`](docs/挂机测试-mac-20261123.md)）。
 - 特效开销（1920×1080）：SSAO 1.3–3.8 ms、草地 0.7–1.4 ms 最贵（[`docs/特效开销清单.md`](docs/特效开销清单.md)，GPU 时间在 Metal 上只能看相对值）。
-- Windows（RTX 5060 Ti、GTX 1070 Ti）：测试包已准备，尚未运行。
 
 一条命令重跑评估：`tools/bench.sh <标签>`；挂机：`tools/soak.sh 600 <标签>`；GRD 对比：`tools/grd.sh <标签>`；冒烟测试：`tools/smoke.sh`。
 

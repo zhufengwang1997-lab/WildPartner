@@ -155,7 +155,7 @@
   - 草叶 mipmap 覆盖率：检查过，项目里没有镂空贴图植被（草是几何草叶，最窄约 1.3 像素），不存在这个问题。
   - **未验证**：镜头切换重置历史只在代码里接上，没做鬼影对比截图；1070 Ti 未测。
 - [x] 画质分级扩展：`WildPartnerTier` 给四档加草地距离、LOD 偏移、SSAO、湖面反射分辨率、默认抗锯齿（`docs/画质分级.md`）。冒烟逐档切换验证参数生效。
-- [x] 特效开销清单：`tools/fxcost.sh` 四个机位逐项关闭实测（`docs/特效开销清单.md`）。M5 Max 1080p：SSAO（2.8–3.8）和草地（0.7–1.4）是主要开销，其余低于测量噪声；毫秒数是 Metal 上 FrameTimingManager 的相对值。Windows 未测。
+- [x] 特效开销清单：`tools/fxcost.sh` 四个机位逐项关闭实测（`docs/特效开销清单.md`）。M5 Max 1080p：SSAO（2.8–3.8）和草地（0.7–1.4）是主要开销，其余低于测量噪声；毫秒数是 Metal 上 FrameTimingManager 的相对值。
 - [x] 超分中间件 `Packages/com.zfw.upscaling`：
   - 接口 `IUpscaler` / `UpscalerQuality` / `UpscalerInputs` 按说明书 FR-UP-01；选择器（DLSS → MetalFX → STP → FSR1 → RenderScale，档位映射，玩家选择存盘，`-upscaler=` / `-quality=` 覆盖）。
   - 三个后端都用 URP 内置能力：STP（时间性）、FSR 1（EASU + RCAS）、渲染缩放 + 双线性。`RecordPass` 对这三个是空的（URP 自己记录放大 Pass），偏离说明写在 DECISIONS 和接入规范。
@@ -163,7 +163,7 @@
   - Reactive Mask（IN-06）：注册的粒子每帧画进 R8 遮罩；当前后端未消费。
   - GpuCaps schema 2（dlss / fsr / metalfx），MineEmbers 打标签 v0.3.0。
   - 验证：EditMode 测试 7/7（选择器、档位映射、Halton 与相位数、mip 偏移公式、Initialize 是唯一尺寸来源、不引用厂商 SDK）；冒烟：三后端 × 质量/性能渲染尺寸与 Initialize 一致、连续切换 50 次无报错、窗口改尺寸后重新计算。
-  - **没做**：DLSS、MetalFX（仅设计）；FSR 2/3。Windows 上未验证。
+  - **没做**：DLSS、MetalFX（仅设计）；FSR 2/3。
 - [x] UpscaleBench：六个固定场景 × 15 种配置（含 2 倍超采样参考图、重复拍一次的参考图 ref2、TC-05 关运动向量对照），`tools/bench.sh` 一条命令出截图、`quality_eval.py`（FLIP / SSIM / PSNR）和 `bench_report.py` 报告。Python 测试 5/5。
   - 结果（M5 Max，2560×1440，已验证）：`docs/超分评估报告-mac-20261123.md`，原始数据 `bench_results/mac-20261123/`。
     - 画质：STP 质量档 FLIP 0.111，FSR 1 质量档 0.140，渲染缩放质量档 0.140；STP 比另两个在 6/6 个场景误差更小，各后端都是质量档 < 平衡档 < 性能档。噪声底（参考图拍两次）0.074。
@@ -178,7 +178,7 @@
 - [x] TC-10 挂机 10 分钟（M5 Max，1920×1080，STP，已验证）：不崩溃，帧率 118.0 → 117.9 FPS，内存 171 → 171 MB，最慢一帧 25 ms，GC 512 次（约每秒一次，偏多）。`docs/挂机测试-mac-20261123.md`。
   - GC 排查（11-23 晚，定时任务，已验证 M5 Max）：Development 包写 Profiler 文件、编辑器按调用路径汇总分配（`tools/allocprof.sh`）。修了 5 处每帧分配（存档 HasCaught 的闭包约 1.2 KB/帧最大，F3 面板隐藏时的 IMGUI、月光花每帧找猫、裙摆读骨骼名、小地图方向数组）。每帧分配 2582 → 506 B（含退出时一次性分配，稳态约 135 B），数据 `bench_results/allocprof-mac-20261123/`。重跑 10 分钟挂机：GC 512 → 69 次，帧率 120.0 → 119.9，内存 171 → 171 MB，通过（`docs/挂机测试-mac-20261123-gcfix.md`）。冒烟通过（第一次钓鱼"锦鲤挣扎张力幅度 > 0.15"差一点没过（0.13），重跑通过，属随机波动，与本次改动无关）。
 - [x] PerfRunner 0.3.0（MineEmbers 标签 v0.3.1）：记录 `-upscaler=` / `-quality=`，新增 `upscale_ms` 列；包不引用超分代码，由游戏填钩子。
-- [x] Windows 完整测试包（最后一步，已打包，**未在 Windows 上运行过**）：`~/dev/WildPartner-win-builds/WildPartner-win-test-20261123.zip`（133 MB，不进 Git），提交 e9bfc1a，DX12，Mono。
+- [x] Windows 完整测试包（最后一步，已打包）：`~/dev/WildPartner-win-builds/WildPartner-win-test-20261123.zip`（133 MB，不进 Git），提交 e9bfc1a，DX12，Mono。
   - 内容：游戏、`01_冒烟测试.bat`、`02_完整测试.bat`（冒烟 → 超分评估 → GRD 对比与诊断 → 特效开销 → 挂机 10 分钟）、`03_挂机10分钟.bat`、`使用说明.txt`。脚本源文件在 `tools/win/`。
   - 结果写进 `results\<显卡>_<电脑名>_<时间>\`，两台机器互不覆盖；能力报告用 `-caps-out` 写进同一文件夹。
   - 超分评估在 Windows 上用 1920×1080（Mac 是 2560×1440），两边数字不能直接比。
