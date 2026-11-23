@@ -54,4 +54,4 @@
 | FR-EV-01 | 光追阴影 | 仅设计 | `docs/设计方案/光追-VRS-CrashDiag.md` |
 | FR-EV-02 | VRS | 仅设计 | 同上 |
 | FR-CD-01~07 | 崩溃诊断 | 仅设计 | 同上 |
-| — | Windows（5060 Ti / 1070 Ti） | 未验证（测试包最后打） | — |
+| — | Windows（5060 Ti / 1070 Ti） | 测试包已打好，未运行 | `~/dev/WildPartner-win-builds/`（不进 Git），脚本 `tools/win/` |

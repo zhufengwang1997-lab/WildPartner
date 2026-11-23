@@ -19,7 +19,6 @@ mkdir "%OUT%\fxcost" 2>nul
 echo [5/5] 挂机 10 分钟（TC-10）...
 mkdir "%OUT%\soak" 2>nul
 "%EXE%" %COMMON% -soak=600 -demoout="%OUT%\soak" -screen-width 1920 -screen-height 1080 -logFile "%OUT%\soak\player.log"
-copy "%USERPROFILE%\AppData\LocalLow\zfw\WildPartner\*.json" "%OUT%\" >nul 2>&1
 echo.
 echo 全部完成。请把这个文件夹整个拷回 U 盘：
 echo %OUT%
