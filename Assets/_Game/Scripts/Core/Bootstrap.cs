@@ -27,6 +27,10 @@ namespace WildPartner.Core
         {
             var commit = Resources.Load<TextAsset>("build_commit");
             if (commit) BuildCommit = commit.text.Trim();
+            // 11-24: the menu flyover camera (scene priority 20) was live on the first frame, so the brain blended
+            // from high above the valley down into the cabin through the terrain. Switch it off before the brain
+            // ever sees it: the game opens directly on the witch in bed.
+            if (menuCamera) menuCamera.gameObject.SetActive(false);
             string[] args = Environment.GetCommandLineArgs();
             QualityTiers.LoadCompat();
             string tierArg = Array.Find(args, a => a.StartsWith("-tier=", StringComparison.Ordinal));
