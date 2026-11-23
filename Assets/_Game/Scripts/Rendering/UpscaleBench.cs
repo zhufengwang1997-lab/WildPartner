@@ -41,6 +41,8 @@ namespace WildPartner.Rendering
             var l = new List<Config>
             {
                 new Config { id = "ref", backend = UpscalerSettings.Off, quality = UpscalerQuality.NativeAA, aa = AAMode.Off, refScale = 2f },
+                // same settings as "ref", captured again: FLIP(ref2, ref) = the noise floor (whatever the bench cannot hold still)
+                new Config { id = "ref2", backend = UpscalerSettings.Off, quality = UpscalerQuality.NativeAA, aa = AAMode.Off, refScale = 2f },
                 new Config { id = "native_off", backend = UpscalerSettings.Off, quality = UpscalerQuality.NativeAA, aa = AAMode.Off },
                 new Config { id = "native_taa", backend = UpscalerSettings.Off, quality = UpscalerQuality.NativeAA, aa = AAMode.TAA },
                 new Config { id = "native_stp", backend = UpscalerSettings.Off, quality = UpscalerQuality.NativeAA, aa = AAMode.STP },
@@ -60,6 +62,21 @@ namespace WildPartner.Rendering
         readonly StringBuilder _csv = new StringBuilder();
         ProfilerRecorder _gfxMem;
         static readonly string[] UpscaleSamplers = { "StpSetup", "StpPreTaa", "StpTaa", "RG_FinalSetup", "RG_FinalFSRScale", "RG_FinalBlit" };
+
+        /// <summary>GPU ms of URP's upscale passes in the last frame; NaN where the build has no sampler GPU timings
+        /// (release players report 0). Shared with PerfRunner's upscale_ms column.</summary>
+        public static float UpscaleMs()
+        {
+            float sum = 0; bool any = false;
+            foreach (var n in UpscaleSamplers)
+            {
+                var r = UnityEngine.Profiling.Recorder.Get(n);
+                if (!r.isValid) continue;
+                if (!r.enabled) r.enabled = true;
+                sum += r.gpuElapsedNanoseconds / 1e6f; any = true;
+            }
+            return any && sum > 0 ? sum : float.NaN;
+        }
 
         static string Arg(string key)
         {
@@ -136,6 +153,7 @@ namespace WildPartner.Rendering
             var player = PlayerController.Instance; var env = EnvController.Instance;
             var s = new SceneDriver(scene, player, env);
             s.Setup();
+            if (env) env.ResetWindClock();   // grass pose must match across configs, else FLIP measures wind phase
             AntiAliasing.ResetHistory();
             string img = $"{scene}_{cfg.id}.png";
             for (int f = 1; f <= CaptureFrame; f++)

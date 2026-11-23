@@ -173,6 +173,9 @@ namespace WildPartner.World
             else if (sun) sun.shadows = LightShadows.Soft;
         }
 
+        /// <summary>Benchmarks: restart the wind clock so every capture sees the same grass pose.</summary>
+        public void ResetWindClock() { _windTime = 0f; _windTimePrev = 0f; }
+
         void LateUpdate()
         {
             // Wind for the Toon shader. Previous time is stored so the motion-vector pass can

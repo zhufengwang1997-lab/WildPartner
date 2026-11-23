@@ -31,3 +31,6 @@ out/
 Assets/Resources/build_commit.txt*
 Builds/
 *.blend1
+
+# FLIP heat maps are derived (Tools~/quality_eval.py --heatmaps regenerates them from the captures)
+bench_results/*/flip/

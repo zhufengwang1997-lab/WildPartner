@@ -15,6 +15,7 @@ out = ["# 特效开销清单", "",
        f"实测，不是估计。机器：{meta.get('gpu')}（{meta.get('api')}），分辨率 {meta.get('res')}，画质档 {meta.get('tier')}，抗锯齿 {meta.get('aa')}。",
        "方法：`tools/fxcost.sh` 在 Mac 包里跑 `EffectCostBench`：四个固定机位，每个先测基线，再每次只关一项、测完恢复；"
        "关垂直同步，用 FrameTimingManager 的 GPU 帧时间（1.5 秒，去掉最慢 10%）。开销 = 基线 − 关掉后。"
+       " 注意：Metal 上 FrameTimingManager 的 GPU 时间包含多帧并行的排队（约为实际帧时间的 2 倍），所以表里的毫秒数只适合比较各项的相对大小，不是绝对耗时。"
        + ("" if valid else " **部分数据没有拿到 GPU 计时，改用了整帧时间。**"),
        "测量噪声约 ±0.2 ms（同一项在不同机位会出现小的负值，例如室内看不到草时关草反而 −0.8 ms，那是噪声和异步调度，不是真开销）；绝对值小于 0.2 ms 的项视为测不出差别。", "",
        "| 效果 | " + " | ".join(views) + " |", "|---|" + "---|" * len(views)]

@@ -1,0 +1,326 @@
+Mono path[0] = '/Users/guangzhi/dev/WildPartner/Builds/Mac/WildPartner.app/Contents/Resources/Data/Managed'
+Mono config path = '/Users/guangzhi/dev/WildPartner/Builds/Mac/WildPartner.app/Contents/MonoBleedingEdge/etc'
+Input System module state changed to: Initialized.
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+Initialize engine version: 6000.3.28f1 (8f082d2fe476)
+[Subsystems] Discovering subsystems at path /Users/guangzhi/dev/WildPartner/Builds/Mac/WildPartner.app/Contents/Resources/Data/UnitySubsystems
+GfxDevice: creating device client; kGfxThreadingModeThreaded
+ preferred device: Apple M5 Max (high power)
+Metal devices available: 1
+0: Apple M5 Max (high power)
+Using device Apple M5 Max (high power)
+Initializing Metal device caps: Apple M5 Max
+Mac GPU Family: 2
+Apple GPU Family: 9
+MSL Version: 3.0
+Has Float MSAA: 1
+Has Float Filtering: 1
+ReadWrite Texture Tier: 2
+Begin MonoManager ReloadAssembly
+- Loaded All Assemblies, in  0.047 seconds
+- Finished resetting the current domain, in  0.001 seconds
+[Physics::Module] Selected backend.
+[Physics::Module] Name: PhysX
+[Physics::Module] Id: 0xf2b8ea05
+[Physics::Module] SDK Version: 4.1.2
+[Physics::Module] Integration Version: 1.0.0
+[Physics::Module] Threading Mode: Multi-Threaded
+UnloadTime: 0.296875 ms
+[GpuCaps] Metal | Apple M5 Max | driver 26.4.1 | 38338 MB | bindless=supported (ArgumentBuffersTier2) rt=supported (hardware (Apple9)) vrs=supported (RasterizationRateMap) mesh=supported (MTLGPUFamilyMetal3) sm=Metal 4 / Apple10 (source=native)
+[GpuCaps] report -> /Users/guangzhi/Library/Application Support/zfw/WildPartner/caps_AppleM5Max_Metal.json
+[QualityTiers] tier=High mode=Auto pipeline=URP_High disabled=[]
+[Tier] High: grass 1, lodBias 1.3, SSAO on, water probe 128, default AA STP
+[AA] anti-aliasing -> STP
+[Upscaling] STP Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Upscaler] 选择：STP / 质量（自动），渲染 1707x960，显示 2560x1440
+[Boot] WildPartner commit=95709c6-dirty tier=High (Auto) api=Metal gpu=Apple M5 Max
+[Vegetation] spawned 4159 instances in 12 ms
+[Fish] school 0 at (140.4, 271.6) surface 31.52 bed 30.44 loop 23.0 m, 8 fish
+[Fish] school 1 at (182.3, 254.8) surface 29.78 bed 28.85 loop 19.7 m, 7 fish
+[Fish] school 2 at (210.8, 240.1) surface 28.58 bed 27.33 loop 27.2 m, 10 fish
+[Fish] school 3 at (233.2, 246.7) surface 27.56 bed 26.58 loop 18.9 m, 8 fish
+[Fish] school 4 at (264.0, 211.4) surface 26.61 bed 25.23 loop 26.4 m, 9 fish
+[Fish] school 5 at (264.6, 189.0) surface 26.25 bed 24.96 loop 25.0 m, 7 fish
+[Fish] school 6 at (258.5, 165.2) surface 25.84 bed 24.91 loop 24.5 m, 8 fish
+[Fish] school 7 at (239.3, 145.2) surface 25.35 bed 23.98 loop 27.3 m, 9 fish
+[Fish] school 8 at (311.7, 322.0) surface 27.15 bed 26.54 loop 18.2 m, 12 fish
+[Fish] school 9 at (260.1, 328.0) surface 27.15 bed 25.94 loop 17.9 m, 10 fish
+[Fish] 10 schools, 88 fish
+[RiverDrift] 5 calm stretches, 150 floating flecks
+[Ambient] 74 butterfly groups (152), 6 ducks, 3 bird flocks (12)
+Only custom filters can be played. Please add a custom filter or an audioclip to the audiosource (Systems).
+Only custom filters can be played. Please add a custom filter or an audioclip to the audiosource (Systems).
+Only custom filters can be played. Please add a custom filter or an audioclip to the audiosource (Systems).
+Only custom filters can be played. Please add a custom filter or an audioclip to the audiosource (Systems).
+Only custom filters can be played. Please add a custom filter or an audioclip to the audiosource (Systems).
+[Audio] 音乐: rms 0.0399 peak 0.168
+[Audio] 风: rms 0.0142 peak 0.061
+[Audio] 雨: rms 0.0161 peak 0.146
+[Audio] 壁炉: rms 0.0159 peak 0.098
+[Audio] 瀑布（近处）: rms 0.0297 peak 0.117
+[Audio] 脚步（草地走路）: rms 0.0081 peak 0.031
+[Audio] 脚步（草地跑步）: rms 0.0122 peak 0.046
+[Audio] 脚步（木地板走路）: rms 0.0081 peak 0.025
+[Audio] 脚步（土路走路）: rms 0.0088 peak 0.038
+[Audio] 脚步（浅水走路）: rms 0.0080 peak 0.048
+[Audio] 猫叫: rms 0.0261 peak 0.065
+[Audio] 呼噜: rms 0.0206 peak 0.084
+[Audio] 捕捉成功: rms 0.0343 peak 0.126
+[Audio] 开门: rms 0.0252 peak 0.125
+[Flow] new game
+[Cabin] woke up in bed (WakeUp clip)
+[Bench] 6 scenes x 15 configs -> /Users/guangzhi/dev/WildPartner/bench_results/mac-20261123
+[AA] anti-aliasing -> Off
+[Bench] SC-01 ref: 5120x2880 GPU 23.04 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> Off
+[Bench] SC-01 ref2: 5120x2880 GPU 31.66 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> Off
+[Bench] SC-01 native_off: 2560x1440 GPU 15.30 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Bench] SC-01 native_taa: 2560x1440 GPU 16.58 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> STP
+[Bench] SC-01 native_stp: 2560x1440 GPU 18.36 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-01 STP_Quality: 1707x960 GPU 13.48 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Cat] leading towards moon_rabbit (42 m)
+[Bench] SC-01 STP_Balanced: 1506x847 GPU 12.63 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Cat] pointing + meow
+[Bench] SC-01 STP_Performance: 1280x720 GPU 10.41 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-01 FSR1_Quality: 1707x960 GPU 11.34 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-01 FSR1_Balanced: 1506x847 GPU 10.18 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-01 FSR1_Performance: 1280x720 GPU 8.80 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-01 RenderScale_Quality: 1707x960 GPU 10.26 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-01 RenderScale_Balanced: 1506x847 GPU 9.06 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-01 RenderScale_Performance: 1280x720 GPU 7.93 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-01 STP_Quality_noMV: 1707x960 GPU 11.61 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> Off
+[Bench] SC-02 ref: 5120x2880 GPU 26.49 ms upscale 0.000 ms mem -1 MB temporal 0.0173
+[AA] anti-aliasing -> Off
+[Bench] SC-02 ref2: 5120x2880 GPU 42.49 ms upscale 0.000 ms mem -1 MB temporal 0.0173
+[AA] anti-aliasing -> Off
+[Bench] SC-02 native_off: 2560x1440 GPU 13.69 ms upscale 0.000 ms mem -1 MB temporal 0.0133
+[AA] anti-aliasing -> TAA
+[Bench] SC-02 native_taa: 2560x1440 GPU 12.99 ms upscale 0.000 ms mem -1 MB temporal 0.0067
+[AA] anti-aliasing -> STP
+[Bench] SC-02 native_stp: 2560x1440 GPU 18.23 ms upscale 0.000 ms mem -1 MB temporal 0.0059
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-02 STP_Quality: 1707x960 GPU 9.10 ms upscale 0.000 ms mem -1 MB temporal 0.0061
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-02 STP_Balanced: 1506x847 GPU 7.91 ms upscale 0.000 ms mem -1 MB temporal 0.0064
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-02 STP_Performance: 1280x720 GPU 8.24 ms upscale 0.000 ms mem -1 MB temporal 0.0061
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-02 FSR1_Quality: 1707x960 GPU 8.59 ms upscale 0.000 ms mem -1 MB temporal 0.0075
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-02 FSR1_Balanced: 1506x847 GPU 8.05 ms upscale 0.000 ms mem -1 MB temporal 0.0074
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-02 FSR1_Performance: 1280x720 GPU 7.64 ms upscale 0.000 ms mem -1 MB temporal 0.0073
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-02 RenderScale_Quality: 1707x960 GPU 8.19 ms upscale 0.000 ms mem -1 MB temporal 0.0065
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-02 RenderScale_Balanced: 1506x847 GPU 7.38 ms upscale 0.000 ms mem -1 MB temporal 0.0065
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-02 RenderScale_Performance: 1280x720 GPU 6.98 ms upscale 0.000 ms mem -1 MB temporal 0.0066
+[AA] anti-aliasing -> Off
+[Bench] SC-03 ref: 5120x2880 GPU 30.94 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> Off
+[Bench] SC-03 ref2: 5120x2880 GPU 30.35 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> Off
+[Bench] SC-03 native_off: 2560x1440 GPU 12.96 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Bench] SC-03 native_taa: 2560x1440 GPU 13.58 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> STP
+[Bench] SC-03 native_stp: 2560x1440 GPU 14.70 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-03 STP_Quality: 1707x960 GPU 10.05 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-03 STP_Balanced: 1506x847 GPU 9.38 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-03 STP_Performance: 1280x720 GPU 8.36 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-03 FSR1_Quality: 1707x960 GPU 9.69 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-03 FSR1_Balanced: 1506x847 GPU 8.90 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-03 FSR1_Performance: 1280x720 GPU 7.81 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-03 RenderScale_Quality: 1707x960 GPU 8.87 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-03 RenderScale_Balanced: 1506x847 GPU 7.80 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-03 RenderScale_Performance: 1280x720 GPU 7.02 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> Off
+[Bench] SC-04 ref: 5120x2880 GPU 31.70 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> Off
+[Bench] SC-04 ref2: 5120x2880 GPU 31.55 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> Off
+[Bench] SC-04 native_off: 2560x1440 GPU 14.57 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Bench] SC-04 native_taa: 2560x1440 GPU 15.62 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> STP
+[Bench] SC-04 native_stp: 2560x1440 GPU 16.69 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-04 STP_Quality: 1707x960 GPU 12.07 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-04 STP_Balanced: 1506x847 GPU 11.27 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-04 STP_Performance: 1280x720 GPU 10.80 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-04 FSR1_Quality: 1707x960 GPU 11.83 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-04 FSR1_Balanced: 1506x847 GPU 10.76 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-04 FSR1_Performance: 1280x720 GPU 10.53 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-04 RenderScale_Quality: 1707x960 GPU 11.03 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-04 RenderScale_Balanced: 1506x847 GPU 10.21 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-04 RenderScale_Performance: 1280x720 GPU 9.83 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> Off
+[Bench] SC-05 ref: 5120x2880 GPU 22.26 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> Off
+[Bench] SC-05 ref2: 5120x2880 GPU 28.51 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> Off
+[Bench] SC-05 native_off: 2560x1440 GPU 13.02 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Bench] SC-05 native_taa: 2560x1440 GPU 12.03 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> STP
+[Bench] SC-05 native_stp: 2560x1440 GPU 16.84 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-05 STP_Quality: 1707x960 GPU 10.70 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-05 STP_Balanced: 1506x847 GPU 9.44 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-05 STP_Performance: 1280x720 GPU 8.34 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-05 FSR1_Quality: 1707x960 GPU 10.38 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-05 FSR1_Balanced: 1506x847 GPU 8.39 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-05 FSR1_Performance: 1280x720 GPU 8.21 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-05 RenderScale_Quality: 1707x960 GPU 8.89 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-05 RenderScale_Balanced: 1506x847 GPU 8.48 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-05 RenderScale_Performance: 1280x720 GPU 7.55 ms upscale 0.000 ms mem -1 MB temporal -1.0000
+[AA] anti-aliasing -> Off
+[Bench] SC-06 ref: 5120x2880 GPU 20.93 ms upscale 0.000 ms mem -1 MB temporal 0.0049
+[AA] anti-aliasing -> Off
+[Bench] SC-06 ref2: 5120x2880 GPU 20.80 ms upscale 0.000 ms mem -1 MB temporal 0.0049
+[AA] anti-aliasing -> Off
+[Bench] SC-06 native_off: 2560x1440 GPU 10.62 ms upscale 0.000 ms mem -1 MB temporal 0.0032
+[AA] anti-aliasing -> TAA
+[Bench] SC-06 native_taa: 2560x1440 GPU 10.46 ms upscale 0.000 ms mem -1 MB temporal 0.0020
+[AA] anti-aliasing -> STP
+[Bench] SC-06 native_stp: 2560x1440 GPU 10.71 ms upscale 0.000 ms mem -1 MB temporal 0.0014
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-06 STP_Quality: 1707x960 GPU 7.89 ms upscale 0.000 ms mem -1 MB temporal 0.0014
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-06 STP_Balanced: 1506x847 GPU 7.36 ms upscale 0.000 ms mem -1 MB temporal 0.0016
+[AA] anti-aliasing -> TAA
+[Upscaling] STP Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-06 STP_Performance: 1280x720 GPU 5.68 ms upscale 0.000 ms mem -1 MB temporal 0.0014
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-06 FSR1_Quality: 1707x960 GPU 7.28 ms upscale 0.000 ms mem -1 MB temporal 0.0027
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-06 FSR1_Balanced: 1506x847 GPU 6.69 ms upscale 0.000 ms mem -1 MB temporal 0.0027
+[AA] anti-aliasing -> TAA
+[Upscaling] FSR1 Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-06 FSR1_Performance: 1280x720 GPU 6.16 ms upscale 0.000 ms mem -1 MB temporal 0.0027
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Bench] SC-06 RenderScale_Quality: 1707x960 GPU 6.71 ms upscale 0.000 ms mem -1 MB temporal 0.0022
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Balanced: display 2560x1440 -> render 1506x847, mip bias -1.77
+[Bench] SC-06 RenderScale_Balanced: 1506x847 GPU 6.24 ms upscale 0.000 ms mem -1 MB temporal 0.0022
+[AA] anti-aliasing -> TAA
+[Upscaling] RenderScale Performance: display 2560x1440 -> render 1280x720, mip bias -2.00
+[Bench] SC-06 RenderScale_Performance: 1280x720 GPU 5.54 ms upscale 0.000 ms mem -1 MB temporal 0.0023
+[Upscaling] STP Quality: display 2560x1440 -> render 1707x960, mip bias -1.58
+[Upscaler] 选择：STP / 质量（自动），渲染 1707x960，显示 2560x1440
+[Bench] done -> /Users/guangzhi/dev/WildPartner/bench_results/mac-20261123
+Thread 0x16e067000 may have been prematurely finalized
+[Physics::Module] Cleanup current backend.
+[Physics::Module] Id: 0xf2b8ea05
+Input System module state changed to: ShutdownInProgress.
+Input System polling thread exited.
+Input System module state changed to: Shutdown.
+Thread 0x16c897000 may have been prematurely finalized
+Thread 0x16c923000 may have been prematurely finalized
+Thread 0x16cac7000 may have been prematurely finalized
+Thread 0x16cbdf000 may have been prematurely finalized
+Thread 0x16cc6b000 may have been prematurely finalized
+Thread 0x16cd83000 may have been prematurely finalized
+Thread 0x16ce9b000 may have been prematurely finalized
+Thread 0x16cfb3000 may have been prematurely finalized
+Thread 0x16ccf7000 may have been prematurely finalized
+Thread 0x16d03f000 may have been prematurely finalized
+Thread 0x16d0cb000 may have been prematurely finalized
+Thread 0x16d157000 may have been prematurely finalized
+Thread 0x16cf27000 may have been prematurely finalized
+Thread 0x16ca3b000 may have been prematurely finalized
+Thread 0x16cb53000 may have been prematurely finalized
+Thread 0x16ce0f000 may have been prematurely finalized
+Thread 0x16c9af000 may have been prematurely finalized

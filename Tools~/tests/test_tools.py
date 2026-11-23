@@ -46,6 +46,7 @@ class BenchReportTests(unittest.TestCase):
             for sc in ("SC-01", "SC-02"):
                 f.write(f"{sc},ref,Off,NativeAA,Off,200,100,100,50,9,1,9,0,500,,a\n")
                 f.write(f"{sc},native_taa,Off,NativeAA,TAA,100,50,100,50,5,1,5,0,400,0.01,a\n")
+                f.write(f"{sc},native_stp,Off,NativeAA,STP,100,50,100,50,6,1,6,0,400,0.01,a\n")
                 f.write(f"{sc},STP_Quality,STP,Quality,TAA,67,33,100,50,4,1,4,0.3,380,0.012,a\n")
                 f.write(f"{sc},FSR1_Performance,FSR1,Performance,TAA,50,25,100,50,3,1,3,0.2,360,0.03,a\n")
         with open(os.path.join(d, "quality.csv"), "w") as f:
@@ -58,7 +59,8 @@ class BenchReportTests(unittest.TestCase):
         meta, rows = br.read_bench(os.path.join(d, "bench.csv"))
         self.assertEqual(meta["gpu"], "TestGPU")
         s = br.summarise(rows, br.read_quality(os.path.join(d, "quality.csv")))
-        self.assertAlmostEqual(s["STP_Quality"]["fps"], 250.0)
+        self.assertAlmostEqual(s["STP_Quality"]["fps"], 250.0)   # frame_ms 4
+        n = dict((u, g) for u, _, g, _ in br.nfr01(s)); self.assertAlmostEqual(n["STP_Quality"], 0.5, places=5)   # 6 ms -> 4 ms = +50 %
         self.assertAlmostEqual(s["native_taa"]["temporal"], 0.01)
         rec, why = br.recommend(s)
         self.assertEqual(rec, "STP_Quality")          # within 110 % of native FLIP and faster; FSR1 Performance is too blurry
