@@ -28,6 +28,7 @@ namespace WildPartner.World
         System.Random _rng = new System.Random(WorldLayout.Seed);
 
         void Awake() { Instance = this; _timer = 70f; }
+        void Start() { if (rain) Rendering.ReactiveMaskSources.Register(rain.GetComponent<ParticleSystemRenderer>()); }   // IN-06
         void OnDestroy() { if (Instance == this) Instance = null; }
 
         public void Set(bool raining, bool instant = false)
