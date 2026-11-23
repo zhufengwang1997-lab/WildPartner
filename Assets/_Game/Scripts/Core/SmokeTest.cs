@@ -80,8 +80,10 @@ namespace WildPartner.Core
 
             yield return new WaitForSeconds(2f);
             var flow = GameFlow.Instance;
-            Step(flow && flow.State == GameFlow.FlowState.MainMenu, "启动后进入主菜单");
-            yield return Shot("01_menu");
+            // 11-24: no menu flyover at launch; the game opens straight in the cabin with the witch waking in bed
+            Step(flow && flow.State == GameFlow.FlowState.Playing && EnvController.Indoors,
+                $"启动后直接在木屋床上醒来（状态 {(flow ? flow.State.ToString() : "-")}，室内 {EnvController.Indoors}）");
+            yield return Shot("01_open_in_bed");
 
             flow.NewGame();
             yield return new WaitForSeconds(2f);

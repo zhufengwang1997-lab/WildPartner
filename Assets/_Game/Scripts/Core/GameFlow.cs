@@ -69,7 +69,15 @@ namespace WildPartner.Core
             Player.PlayerController.Recovered += () => Toast?.Invoke("好像迷路了……回到了刚才走过的地方。");
             Player.PlayerController.TowerTopReached += () => Toast?.Invoke("登上瞭望塔顶！整个山谷尽收眼底——" + TowerView());
             Player.PlayerController.UndertowHit += () => Toast?.Invoke("水流太急，也许需要水中的伙伴帮忙。");
-            if (!Automation) SetState(FlowState.MainMenu);
+            // 11-24: no main-menu flyover at launch (it clipped through terrain); the game opens with the witch
+            // waking in her bed. The main menu is still reachable from pause / the ending, over the game view.
+            if (!Automation) StartCoroutine(OpenInBed());
+        }
+
+        System.Collections.IEnumerator OpenInBed()
+        {
+            yield return null;   // let the cabin, creatures and UI finish their own Start first
+            if (!Automation) NewGame();
         }
 
         void SetState(FlowState s)
@@ -81,7 +89,6 @@ namespace WildPartner.Core
             Cursor.lockState = playing ? CursorLockMode.Locked : CursorLockMode.None;
             Cursor.visible = !playing;
             if (player) player.enabled = s != FlowState.MainMenu;
-            if (s == FlowState.MainMenu && EnvController.Indoors) CabinInterior.SetInside(false);   // the menu flies over the valley
             StateChanged?.Invoke(s);
         }
 

@@ -74,9 +74,9 @@ namespace WildPartner.Core
         void Update()
         {
             var flow = GameFlow.Instance;
-            bool menu = flow != null && flow.State == GameFlow.FlowState.MainMenu;
-            if (menuCamera) menuCamera.Priority = menu ? 20 : 0;
-            if (menu && menuPivot) menuPivot.Rotate(0, menuOrbitSpeed * Time.unscaledDeltaTime, 0, Space.World);
+            // 11-24: the rotating valley flyover behind the main menu is removed (it clipped through terrain);
+            // the menu now sits over the normal game camera.
+            if (menuCamera) menuCamera.Priority = 0;
         }
     }
 }
