@@ -4,6 +4,7 @@ using System.Collections;
 using System.IO;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 using WildPartner.Creatures;
 using WildPartner.Player;
 using WildPartner.World;
@@ -23,6 +24,15 @@ namespace WildPartner.Core
         string _out;
         int _fails;
         StreamWriter _log;
+        // every exception the player logs during the run (a render-graph exception every frame once gave black
+        // screenshots while all checks still passed)
+        static int _exceptions; static string _firstException;
+        static void OnLog(string msg, string stack, LogType type)
+        {
+            if (type != LogType.Exception && type != LogType.Error) return;
+            if (msg.StartsWith("[Smoke]", StringComparison.Ordinal)) return;
+            if (System.Threading.Interlocked.Increment(ref _exceptions) == 1) _firstException = msg.Split('\n')[0];
+        }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot()
@@ -61,6 +71,7 @@ namespace WildPartner.Core
 
         IEnumerator Start()
         {
+            Application.logMessageReceivedThreaded += OnLog;
             string arg = Environment.GetCommandLineArgs().FirstOrDefault(a => a.StartsWith("-smokeout=", StringComparison.Ordinal));
             _out = arg != null ? arg.Substring(10) : Path.Combine(Application.persistentDataPath, "smoke");
             Directory.CreateDirectory(_out);
@@ -156,6 +167,15 @@ namespace WildPartner.Core
                 Step(CabinInterior.Inside && Vector3.Distance(player.transform.position, cabin.insideSpot) < 1.5f &&
                      catC && Vector3.Distance(catC.transform.position, player.transform.position) < 4f, "进门：门口按 E 开门，进到室内，猫跟进来");
                 yield return Shot("02c_inside");
+                // 1123e-1: a mesh whose normals sum to zero shades as NaN and bloom blows it up (the "glowing" door)
+                int badN = 0, meshes = 0;
+                foreach (var mf in cabin.GetComponentsInChildren<MeshFilter>())
+                {
+                    var m = mf.sharedMesh; if (!m || !m.isReadable) continue;
+                    meshes++;
+                    foreach (var nv in m.normals) if (!(nv.sqrMagnitude > 0.25f)) { badN++; break; }
+                }
+                Step(meshes > 0 && badN == 0, $"室内：{meshes} 个可读网格的法线都有效（{badN} 个含零或 NaN 法线；门板不再发白）");
                 // bed: sleep switches day/night and saves
                 float h0 = EnvController.Instance.timeOfDay;
                 player.Teleport(cabin.bedStand, 0);
@@ -287,6 +307,8 @@ namespace WildPartner.Core
                     if (!caught) { Debug.Log($"[Smoke] {def.id} attempt {attempt} failed (state {c.Current}), retrying"); yield return new WaitForSeconds(1.5f); }
                 }
                 GameInput.SimSneak = false;
+                // a group of rabbits: the capture takes the nearest one, not necessarily the one we walked up to
+                if (caught) c = creatures.FirstOrDefault(x => x.defId == def.id && x.Current == Creature.State.Companion) ?? c;
                 Step(caught && c.Current == Creature.State.Companion, def.fishable ? $"{def.name}：钓上来并成为伙伴" : $"{def.name}：按住捕捉成功并成为伙伴");
                 if (def.rideable && caught)
                     yield return RideCheck(player, c, shot++);
@@ -302,6 +324,10 @@ namespace WildPartner.Core
             yield return FlowCheck(player, flow);
             yield return BoundsCheck(player);
             yield return PetCheck(player, flow);
+            yield return ButterflyGlowCheck(player, flow);
+            yield return AudioMixCheck(player, flow);
+            yield return AntiAliasCheck(player, flow);
+            yield return UpscaleCheck(player);
             yield return SwimCheck(player, flow);
             yield return ClimbCheck(player);
             yield return AmbientCheck(player);
@@ -371,6 +397,7 @@ namespace WildPartner.Core
                  "继续游戏：伙伴全部恢复跟随（每种一只，同种其余的留在野外）");
             yield return Shot($"{shot++:00}_continue");
 
+            Step(_exceptions == 0, _exceptions == 0 ? "全程没有异常或错误日志（含渲染管线）" : $"全程有 {_exceptions} 条异常/错误日志，第一条：{_firstException}");
             _log.WriteLine(_fails == 0 ? "RESULT PASS" : $"RESULT FAIL ({_fails})");
             _log.Close();
             Debug.Log($"[Smoke] done, fails={_fails}, out={_out}");
@@ -652,6 +679,210 @@ namespace WildPartner.Core
             Step(player.Recoveries == rec + 1 && q.y > Creature.GroundHeight(q.x, q.z) - 0.3f, $"掉出地形后自动回到安全地点（{q.x:0} , {q.z:0}）");
         }
 
+        /// <summary>超分阶段 step 1: anti-aliasing Off / TAA / STP switch actually reaches the camera and the pipeline.</summary>
+        /// <summary>
+        /// 超分中间件: every backend x quality renders at the size Initialize returned (IN-01 / FR-UP-01), 50 quick
+        /// switches without errors (TC-02), a window resize re-initialises (TC-03), GPU time per combination.
+        /// </summary>
+        IEnumerator UpscaleCheck(PlayerController player)
+        {
+            var env = EnvController.Instance;
+            env.timeOfDay = 16.5f; env.Apply();
+            var meadow = new Vector2(WorldLayout.StoneCircle.x + 14f, WorldLayout.StoneCircle.y - 8f);
+            player.Teleport(new Vector3(meadow.x, Creature.GroundHeight(meadow.x, meadow.y) + 0.2f, meadow.y), 30);
+            player.SetCameraOrbit(30f, 8f); player.SetCameraDistance(1f);
+            yield return new WaitForSeconds(1f);
+            var s = SaveSystem.Settings; string sb = s.upscaler, sq = s.upscalerQuality;
+            var backends = Zfw.Upscaling.UpscalerSelector.Available(Zfw.GpuCaps.GpuCaps.Current).ToList();
+            var rep = new List<string>(); bool sizeOk = true;
+            foreach (var b in backends)
+                foreach (var q in new[] { "Quality", "Performance" })
+                {
+                    WildPartner.Rendering.UpscalerSettings.Set(b, q);
+                    yield return new WaitForSeconds(0.6f);
+                    var host = Zfw.Upscaling.UpscalerHost.RenderSize;
+                    var asset = WildPartner.Rendering.AntiAliasing.Asset;
+                    int urpW = Mathf.RoundToInt(Screen.width * asset.renderScale);
+                    bool ok = Mathf.Abs(urpW - host.x) <= 1 && Zfw.Upscaling.UpscalerHost.Active != null && Zfw.Upscaling.UpscalerHost.Active.Name == b;
+                    sizeOk &= ok;
+                    var res = default(WildPartner.Rendering.GpuTimer.Result);
+                    yield return WildPartner.Rendering.GpuTimer.Measure(1.5f, r => res = r);
+                    rep.Add($"{b}/{q} {host.x}x{host.y} {res}");
+                    yield return Shot($"7x_up_{b.ToLower()}_{q.ToLower()}");
+                }
+            Step(sizeOk && backends.Count >= 3, $"超分：{backends.Count} 个后端 x 质量/性能，URP 渲染尺寸 = Initialize 返回值（{string.Join("；", rep)}，显示 {Screen.width}x{Screen.height}）");
+
+            // TC-02: 50 switches in a row, then nothing logged
+            int before = _exceptions;
+            var all = new List<string>(backends) { WildPartner.Rendering.UpscalerSettings.Off };
+            var qs = new[] { "NativeAA", "Quality", "Balanced", "Performance" };
+            for (int i = 0; i < 50; i++)
+            {
+                WildPartner.Rendering.UpscalerSettings.Set(all[i % all.Count], qs[(i / all.Count) % qs.Length]);
+                yield return null; yield return null;
+            }
+            yield return new WaitForSeconds(0.5f);
+            Step(_exceptions == before, $"超分：连续切换后端和档位 50 次，没有报错（{_exceptions - before} 条）");
+
+            // TC-03: window size change -> the render size is recomputed
+            WildPartner.Rendering.UpscalerSettings.Set(backends[0], "Balanced");
+            yield return new WaitForSeconds(0.3f);
+            int w0 = Screen.width, h0 = Screen.height; var r0 = Zfw.Upscaling.UpscalerHost.RenderSize; int n0 = Zfw.Upscaling.UpscalerHost.Reinitialisations;
+            Screen.SetResolution(1280, 720, FullScreenMode.Windowed);
+            float t = 0; while ((Screen.width != 1280) && t < 3f) { t += Time.unscaledDeltaTime; yield return null; }
+            yield return new WaitForSeconds(0.3f);
+            var r1 = Zfw.Upscaling.UpscalerHost.RenderSize;
+            bool resized = Screen.width == 1280 && r1 == Zfw.Upscaling.UpscalerMath.RenderSize(new Vector2Int(1280, 720), Zfw.Upscaling.UpscalerQuality.Balanced) && Zfw.Upscaling.UpscalerHost.Reinitialisations > n0;
+            Screen.SetResolution(w0, h0, FullScreenMode.Windowed);
+            t = 0; while (Screen.width != w0 && t < 3f) { t += Time.unscaledDeltaTime; yield return null; }
+            yield return new WaitForSeconds(0.3f);
+            Step(resized && Zfw.Upscaling.UpscalerHost.RenderSize == r0, $"超分：窗口 {w0}x{h0} → 1280x720 → 还原，渲染尺寸 {r0.x}x{r0.y} → {r1.x}x{r1.y} → {Zfw.Upscaling.UpscalerHost.RenderSize.x}x{Zfw.Upscaling.UpscalerHost.RenderSize.y}，每次重新初始化");
+
+            // IN-03 / IN-06: the input views and the reactive mask pass
+            {
+                int ex0 = _exceptions, f0 = WildPartner.Rendering.UpscalerInputsPass.FramesWithMask;
+                env.timeOfDay = 13f; env.Apply(); Weather.Instance.Set(true, true);         // rain = reactive particles on screen
+                yield return new WaitForSeconds(1.5f);
+                WildPartner.Rendering.UpscalerInputsPass.View = WildPartner.Rendering.InputView.MotionVectors;
+                GameInput.SimMove = new Vector2(0, 1); yield return new WaitForSeconds(0.6f);
+                yield return Shot("7y_view_motion_vectors");
+                GameInput.SimMove = Vector2.zero;
+                WildPartner.Rendering.UpscalerInputsPass.View = WildPartner.Rendering.InputView.ReactiveMask;
+                yield return new WaitForSeconds(0.4f);
+                yield return Shot("7y_view_reactive_mask");
+                WildPartner.Rendering.UpscalerInputsPass.View = WildPartner.Rendering.InputView.None;
+                Weather.Instance.Set(false, true);
+                int frames = WildPartner.Rendering.UpscalerInputsPass.FramesWithMask - f0;
+                Step(frames > 30 && WildPartner.Rendering.UpscalerInputsPass.LastSourceCount > 0 && _exceptions == ex0,
+                     $"超分输入：Reactive Mask 每帧生成（{frames} 帧，{WildPartner.Rendering.UpscalerInputsPass.LastSourceCount} 个来源），运动向量和遮罩视图可切换（截图 7y_*），无报错");
+            }
+            WildPartner.Rendering.UpscalerSettings.Set(sb, sq);
+            yield return new WaitForSeconds(0.3f);
+        }
+
+        IEnumerator AntiAliasCheck(PlayerController player, GameFlow flow)
+        {
+            // the anti-aliasing switch alone: upscaling off for this part (native resolution)
+            string upB = SaveSystem.Settings.upscaler, upQ = SaveSystem.Settings.upscalerQuality;
+            WildPartner.Rendering.UpscalerSettings.Set(WildPartner.Rendering.UpscalerSettings.Off, "");
+            var env = EnvController.Instance;
+            env.timeOfDay = 16.5f; env.Apply(); Weather.Instance.Set(false, true);
+            var meadow = new Vector2(WorldLayout.StoneCircle.x + 14f, WorldLayout.StoneCircle.y - 8f);
+            player.Teleport(new Vector3(meadow.x, Creature.GroundHeight(meadow.x, meadow.y) + 0.2f, meadow.y), 30);
+            player.SetCameraOrbit(30f, 8f); player.SetCameraDistance(1f);
+            yield return new WaitForSeconds(1.5f);
+            var cam = Camera.main;
+            var data = cam ? cam.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>() : null;
+            var saved = WildPartner.Rendering.AntiAliasing.Mode;
+            var report = new List<string>(); bool ok = data != null;
+            foreach (var m in new[] { WildPartner.Rendering.AAMode.Off, WildPartner.Rendering.AAMode.TAA, WildPartner.Rendering.AAMode.STP })
+            {
+                if (!WildPartner.Rendering.AntiAliasing.Supported(m)) { report.Add($"{m} 不支持"); continue; }
+                WildPartner.Rendering.AntiAliasing.Set(m, save: false);
+                yield return new WaitForSeconds(1.2f);
+                var res = default(WildPartner.Rendering.GpuTimer.Result);
+                yield return WildPartner.Rendering.GpuTimer.Measure(2f, r => res = r);
+                var asset = WildPartner.Rendering.AntiAliasing.Asset;
+                bool right = m switch
+                {
+                    WildPartner.Rendering.AAMode.Off => data.antialiasing == UnityEngine.Rendering.Universal.AntialiasingMode.None && asset.upscalingFilter != UnityEngine.Rendering.Universal.UpscalingFilterSelection.STP,
+                    WildPartner.Rendering.AAMode.TAA => data.antialiasing == UnityEngine.Rendering.Universal.AntialiasingMode.TemporalAntiAliasing && asset.upscalingFilter != UnityEngine.Rendering.Universal.UpscalingFilterSelection.STP,
+                    _ => asset.upscalingFilter == UnityEngine.Rendering.Universal.UpscalingFilterSelection.STP && asset.msaaSampleCount == 1,
+                };
+                ok &= right && data.renderPostProcessing && !cam.allowMSAA;
+                report.Add($"{WildPartner.Rendering.AntiAliasing.Label(m)} {res}");
+                yield return Shot($"6{(int)m + 1}_aa_{m.ToString().ToLower()}");
+            }
+            WildPartner.Rendering.AntiAliasing.Set(saved, save: false);
+            Step(ok, $"抗锯齿开关：关 / TAA / STP 都生效到相机和管线（{string.Join("，", report)}，同一草地机位，关垂直同步 2 秒平均，{Screen.width}x{Screen.height}）");
+            // 画质分级扩展: each tier pushes its own grass / LOD / SSAO / water probe values into the game
+            {
+                var was = Zfw.QualityTiers.QualityTiers.Current; var wasMode = Zfw.QualityTiers.QualityTiers.Mode;
+                var rep = new List<string>(); bool tok = true;
+                foreach (Zfw.QualityTiers.Tier tier in Enum.GetValues(typeof(Zfw.QualityTiers.Tier)))
+                {
+                    Zfw.QualityTiers.QualityTiers.Set(tier, manual: true);
+                    yield return null; yield return null;
+                    var w = WildPartner.Rendering.WildPartnerTier.Current;
+                    var ao = WildPartner.Rendering.WildPartnerTier.Features().FirstOrDefault(f => f && f.name.Contains("AmbientOcclusion"));
+                    bool good = Mathf.Approximately(GrassRenderer.Quality, w.grassQuality) && Mathf.Approximately(QualitySettings.lodBias, w.lodBias)
+                                && (ao == null || ao.isActive == w.ssao) && WaterProbe.Resolution == w.waterProbeResolution
+                                && Camera.main.GetUniversalAdditionalCameraData().antialiasing == (WildPartner.Rendering.AntiAliasing.Mode == WildPartner.Rendering.AAMode.Off ? UnityEngine.Rendering.Universal.AntialiasingMode.None : UnityEngine.Rendering.Universal.AntialiasingMode.TemporalAntiAliasing);
+                    tok &= good;
+                    rep.Add($"{tier}：草 {w.grassQuality}、LOD {w.lodBias}、SSAO {(w.ssao ? "开" : "关")}、反射 {w.waterProbeResolution}");
+                }
+                Zfw.QualityTiers.QualityTiers.Set(was, manual: wasMode == Zfw.QualityTiers.SelectionMode.Manual);
+                yield return null;
+                Step(tok, $"画质分级扩展：切换四档后游戏参数随之生效（{string.Join("；", rep)}），抗锯齿设置跟着新管线走");
+            }
+            WildPartner.Rendering.UpscalerSettings.Set(upB, upQ);
+            {
+            }
+        }
+
+        /// <summary>1123e-4: music > ambience > footsteps; no effect louder than the music; settings rows exist.</summary>
+        IEnumerator AudioMixCheck(PlayerController player, GameFlow flow)
+        {
+            var pa = WildPartner.Audio.ProceduralAudio.Instance;
+            if (!pa) { Step(false, "混音：找不到 ProceduralAudio"); yield break; }
+            pa.BuildLoudnessReport();
+            var L = WildPartner.Audio.ProceduralAudio.LoudnessReport;
+            float R(string k) => L.TryGetValue(k, out var v) ? v.x : 0f;
+            float P(string k) => L.TryGetValue(k, out var v) ? v.y : 0f;
+            float music = R("音乐");
+            float amb = Mathf.Max(R("风"), R("雨"), R("瀑布（近处）"));
+            float ambMin = Mathf.Min(R("风"), R("雨"));
+            string[] steps = { "脚步（草地走路）", "脚步（木地板走路）", "脚步（土路走路）", "脚步（浅水走路）" };
+            float stepMax = steps.Max(R);
+            bool order = music > 0 && music > amb && ambMin > stepMax && R("脚步（草地跑步）") > R("脚步（草地走路）");
+            string[] fx = { "猫叫", "呼噜", "捕捉成功", "开门", "脚步（草地跑步）" };
+            bool noneOver = fx.All(k => R(k) <= music && P(k) <= P("音乐") * 1.05f);
+            Step(order && noneOver, "混音层次：音乐 " + R("音乐").ToString("0.000") + " > 环境声（风 " + R("风").ToString("0.000") + "、雨 " + R("雨").ToString("0.000") + "、瀑布 " + R("瀑布（近处）").ToString("0.000") + "）> 脚步（走 " + stepMax.ToString("0.000") + "、跑 " + R("脚步（草地跑步）").ToString("0.000") + "）；猫叫 " + R("猫叫").ToString("0.000") + "、呼噜 " + R("呼噜").ToString("0.000") + " 都不超过音乐");
+            var labels = WildPartner.UI.SettingsRegistry.Rows.Select(r => r.label).ToList();
+            bool rows = new[] { "主音量", "音乐", "音效", "环境声" }.All(labels.Contains);
+            float savedM = SaveSystem.Settings.musicVolume;
+            SaveSystem.Settings.musicVolume = 0.3f; SaveSystem.SaveSettings();
+            var reread = SaveSystem.LoadSettings();   // straight from settings.json
+            bool persisted = reread != null && Mathf.Abs(reread.musicVolume - 0.3f) < 0.01f;
+            SaveSystem.Settings.musicVolume = savedM; SaveSystem.SaveSettings();
+            Step(rows && persisted, $"设置菜单有主音量 / 音乐 / 音效 / 环境声四项，改动写进设置存档（{(persisted ? "读回一致" : "读回不一致")}）");
+            yield return null;
+        }
+
+        /// <summary>1123e-3: the moon butterfly glows and scatters stardust only at night; less in the rain.</summary>
+        IEnumerator ButterflyGlowCheck(PlayerController player, GameFlow flow)
+        {
+            var env = EnvController.Instance;
+            flow.Pets.SetActive("moon_butterfly");
+            var bf = FindObjectsByType<Creature>(FindObjectsSortMode.None).FirstOrDefault(c => c.defId == "moon_butterfly" && c.Current == Creature.State.Companion);
+            var bg = bf ? bf.GetComponent<ButterflyGlow>() : null;
+            if (!bg) { Step(false, "月影蝶发光：找不到伙伴月影蝶"); yield break; }
+            float saved = env.timeOfDay;
+            IEnumerator At(float hour, bool rain, float wait)
+            {
+                env.timeOfDay = hour; Weather.Instance.Set(rain, true); env.Apply();
+                yield return new WaitForSeconds(wait);
+            }
+            yield return At(12f, false, 3.5f);
+            float day = bg.Glow; int dayDust = bg.DustAlive;
+            yield return Shot("59_butterfly_day");
+            yield return At(18.5f, false, 3.5f);
+            float dusk = bg.Glow;
+            yield return At(22f, false, 3.5f);
+            float night = bg.Glow; int nightDust = bg.DustAlive;
+            yield return Shot("60_butterfly_night");
+            yield return At(22f, true, 3.5f);
+            float rainy = bg.Glow;
+            var dr = bg.Dust ? bg.Dust.GetComponent<ParticleSystemRenderer>() : null;
+            bool reactive = dr && WildPartner.Rendering.ReactiveMaskSources.All.Contains(dr) && dr.motionVectorGenerationMode == MotionVectorGenerationMode.ForceNoMotion;
+            Step(day < 0.02f && dayDust == 0 && dusk > 0.15f && dusk < 0.85f && night > 0.95f && nightDust > 5 && rainy > 0.25f && rainy < 0.6f && reactive,
+                 $"月影蝶只在夜晚发光：白天 {day:0.00}（星尘 {dayDust}）→ 黄昏 {dusk:0.00} → 夜晚 {night:0.00}（星尘 {nightDust} 粒）；雨夜 {rainy:0.00}；星尘无运动向量、已写入 Reactive Mask（{reactive}）");
+            Weather.Instance.Set(false, true);
+            env.timeOfDay = saved; env.Apply();
+            flow.Pets.SetActive("cat");
+            yield return null;
+        }
+
         /// <summary>1123c-B2: one pet out at a time, J cycles, each ability only with its pet.</summary>
         IEnumerator PetCheck(PlayerController player, GameFlow flow)
         {
@@ -686,8 +917,37 @@ namespace WildPartner.Core
             }
             Step(tops[1] > tops[0] * 1.5f, $"月影兔在身边时跳得更高：{tops[1]:0.00} m（猫 {tops[0]:0.00} m）");
 
-            // koi: walk on the lake, then switching away puts her on the shore
+            // 1123e-2: the koi lives in a water bottle at her hip on land, jumps into the water near it
             flow.Pets.SetActive("ink_koi");
+            yield return new WaitForSeconds(0.8f);
+            var koiPet = KoiCompanion.Instance;
+            var koiC = all.FirstOrDefault(c => c.defId == "ink_koi" && c.Current == Creature.State.Companion);
+            bool inBottle = koiPet && koiC && koiPet.BottleShown && koiPet.Current == KoiCompanion.Mode.Bottle
+                            && Vector3.Distance(koiC.transform.position, koiPet.BottleCentre) < 0.08f;
+            float hipD = koiPet ? Vector3.Distance(koiPet.Bottle.position, player.transform.position + Vector3.up * 0.75f) : 99f;
+            GameInput.SimMove = new Vector2(0, 1); yield return new WaitForSeconds(1.2f); GameInput.SimMove = Vector2.zero;
+            bool stillIn = koiPet && koiPet.Current == KoiCompanion.Mode.Bottle && Vector3.Distance(koiC.transform.position, koiPet.BottleCentre) < 0.08f;
+            yield return Shot("57_koi_bottle");
+            Step(inBottle && stillIn && hipD < 0.6f, $"锦鲤在陆地上住在腰间的水瓶里（瓶离腰 {hipD:0.00} m，走动时仍在瓶中）");
+            var spot = FishingSpot.All.FirstOrDefault(f => f.label == "木桥边") ?? FishingSpot.All.FirstOrDefault();
+            if (spot)
+            {
+                player.Teleport(spot.stand, spot.yaw);
+                float tw = 0; while (tw < 4f && koiPet.Current != KoiCompanion.Mode.Water) { tw += Time.deltaTime; yield return null; }
+                yield return new WaitForSeconds(1.0f);
+                var kp = koiC.transform.position;
+                WorldLayout.WaterSurface(kp.x, kp.z, out float klv);
+                bool swims = koiPet.Current == KoiCompanion.Mode.Water && kp.y < klv && Vector3.Distance(kp, player.transform.position) < 4.5f;
+                yield return Shot("58_koi_in_water");
+                var away = spot.stand - Quaternion.Euler(0, spot.yaw, 0) * Vector3.forward * 12f;
+                player.Teleport(new Vector3(away.x, Creature.GroundHeight(away.x, away.z) + 0.2f, away.z), spot.yaw + 180f);
+                tw = 0; while (tw < 4f && koiPet.Current != KoiCompanion.Mode.Bottle) { tw += Time.deltaTime; yield return null; }
+                bool back = koiPet.Current == KoiCompanion.Mode.Bottle;
+                Step(swims && back, $"靠近水边锦鲤跃入水中游动（在水面下 {klv - kp.y:0.00} m，离她 {Vector3.Distance(kp, spot.stand):0.0} m），离开水边跃回瓶中（{(back ? "已回瓶" : "没回瓶")}，跃出水面 {KoiCompanion.Leaps} 次）");
+            }
+            else Step(false, "锦鲤入水：没有钓鱼点可用来找水边");
+
+            // koi: walk on the lake, then switching away puts her on the shore
             var lake = WorldLayout.LakeCentre + new Vector2(-WorldLayout.LakeRadii.x * 0.6f, 0);
             player.Teleport(new Vector3(lake.x, WorldLayout.LakeLevel + 0.6f, lake.y), 90);
             yield return new WaitForSeconds(0.6f);
@@ -696,9 +956,15 @@ namespace WildPartner.Core
             GameInput.SimMove = Vector2.zero;
             var pw = player.transform.position;
             bool onWater = player.WaterWalking && Mathf.Abs(pw.y - (WorldLayout.LakeLevel + 0.15f)) < 0.4f;
+            var kw = all.First(c => c.defId == "ink_koi" && c.Current == Creature.State.Companion).transform.position;
+            var flat = new Vector2(kw.x - pw.x, kw.z - pw.z).magnitude;
+            bool underFeet = KoiCompanion.Instance && KoiCompanion.Instance.Current == KoiCompanion.Mode.Water && flat < 1.0f && kw.y < pw.y;
+            int ripples = KoiCompanion.Ripples;
             yield return Shot("41_koi_water_walk");
+            Step(underFeet && ripples > 0, $"踏水时锦鲤在脚下游动（水平距离 {flat:0.00} m），每步泛起淡红涟漪（{ripples} 圈）");
             GameInput.SimSwitchPet = true; yield return null; GameInput.SimSwitchPet = false;
             yield return new WaitForSeconds(0.6f);
+            Step(KoiCompanion.Instance && !KoiCompanion.Instance.BottleShown, "切走锦鲤后腰间水瓶消失");
             var pa = player.transform.position;
             bool ashore = !player.WaterWalking && !(WorldLayout.WaterSurface(pa.x, pa.z, out float wl) && wl > Creature.GroundHeight(pa.x, pa.z) + 0.05f);
             Step(onWater && ashore, $"锦鲤在身边时踏水而行（脚下高度 {pw.y - WorldLayout.LakeLevel - 0.15f:+0.00;-0.00} m）；在水面按 J 先回到岸上（{(ashore ? "已上岸" : "仍在水里")}）");

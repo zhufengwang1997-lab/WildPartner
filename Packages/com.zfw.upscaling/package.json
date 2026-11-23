@@ -1,0 +1,10 @@
+{
+  "name": "com.zfw.upscaling",
+  "version": "0.1.0",
+  "displayName": "Zfw Upscaling",
+  "description": "Unified upscaler interface (IUpscaler), selector and URP built-in backends (RenderScale / FSR1 / STP). Project 3 of the graphics-platform portfolio.",
+  "unity": "6000.3",
+  "dependencies": {
+    "com.unity.render-pipelines.universal": "17.3.0"
+  }
+}

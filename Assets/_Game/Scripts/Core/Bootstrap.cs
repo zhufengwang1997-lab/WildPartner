@@ -35,10 +35,26 @@ namespace WildPartner.Core
             else QualityTiers.Set(Tier.High, manual: false);
             QualityTiers.TierChanged += ApplyPost;
             ApplyPost(QualityTiers.Current);
+            // 超分阶段 step 1: temporal anti-aliasing (saved choice, -aa= on the command line); a tier switch swaps the
+            // URP asset, so re-apply; every camera cut drops the temporal history (IN-08)
+            Rendering.WildPartnerTier.Apply();
+            Rendering.AntiAliasing.LoadSaved();
+            Rendering.UpscalerSettings.Init();
+            Rendering.UpscalerInputsPass.Init();
+            QualityTiers.TierChanged += ReapplyAA;
+            Player.PlayerController.CameraCut += Rendering.AntiAliasing.ResetHistory;
+            if (!FindFirstObjectByType<Rendering.DebugOverlay>()) new GameObject("DebugOverlay").AddComponent<Rendering.DebugOverlay>();
             Debug.Log($"[Boot] WildPartner commit={BuildCommit} tier={QualityTiers.Current} ({QualityTiers.Mode}) api={SystemInfo.graphicsDeviceType} gpu={SystemInfo.graphicsDeviceName}");
         }
 
-        void OnDestroy() => QualityTiers.TierChanged -= ApplyPost;
+        void OnDestroy()
+        {
+            QualityTiers.TierChanged -= ApplyPost;
+            QualityTiers.TierChanged -= ReapplyAA;
+            Player.PlayerController.CameraCut -= Rendering.AntiAliasing.ResetHistory;
+        }
+
+        static void ReapplyAA(Tier _) { Rendering.AntiAliasing.Apply(); Rendering.WildPartnerTier.Apply(); }
 
         void ApplyPost(Tier _)
         {

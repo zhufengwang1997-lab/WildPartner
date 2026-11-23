@@ -195,11 +195,11 @@
       }
     },
     "com.zfw.gpucaps": {
-      "version": "https://github.com/zhufengwang1997-lab/MineEmbers.git?path=Packages/com.zfw.gpucaps#v0.2.0",
+      "version": "https://github.com/zhufengwang1997-lab/MineEmbers.git?path=Packages/com.zfw.gpucaps#v0.3.0",
       "depth": 0,
       "source": "git",
       "dependencies": {},
-      "hash": "77c110fb4ea3a3337eeea6b2f4700a8525a136c8"
+      "hash": "e275945622017e62eba1cd71102d79721767555a"
     },
     "com.zfw.perfrunner": {
       "version": "https://github.com/zhufengwang1997-lab/MineEmbers.git?path=Packages/com.zfw.perfrunner#v0.2.0",
@@ -219,6 +219,14 @@
         "com.unity.render-pipelines.universal": "17.3.0"
       },
       "hash": "77c110fb4ea3a3337eeea6b2f4700a8525a136c8"
+    },
+    "com.zfw.upscaling": {
+      "version": "file:com.zfw.upscaling",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.render-pipelines.universal": "17.3.0"
+      }
     },
     "com.unity.modules.accessibility": {
       "version": "1.0.0",

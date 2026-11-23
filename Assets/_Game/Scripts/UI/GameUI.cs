@@ -287,10 +287,62 @@ namespace WildPartner.UI
             });
             SettingsRegistry.Add(new SettingRow
             {
-                label = "音量",
+                label = "主音量",
                 value = () => Mathf.RoundToInt(SaveSystem.Settings.masterVolume * 100) + "%",
                 step = d => { SaveSystem.Settings.masterVolume = Mathf.Clamp01(SaveSystem.Settings.masterVolume + d * 0.1f); AudioListener.volume = SaveSystem.Settings.masterVolume; SaveSystem.SaveSettings(); },
             });
+            // 1123e-4: music / sound effects / ambience, each 0-100 %, saved with the settings
+            void VolumeRow(string label, System.Func<float> get, System.Action<float> set)
+            {
+                SettingsRegistry.Add(new SettingRow
+                {
+                    label = label,
+                    value = () => Mathf.RoundToInt(get() * 100) + "%",
+                    step = d => { set(Mathf.Round(Mathf.Clamp01(get() + d * 0.1f) * 10f) / 10f); SaveSystem.SaveSettings(); },
+                });
+            }
+            // 超分阶段 step 1: anti-aliasing Off / TAA / STP (also on the F3 overlay)
+            SettingsRegistry.Add(new SettingRow
+            {
+                label = "抗锯齿",
+                value = () => Rendering.AntiAliasing.Label(Rendering.AntiAliasing.Mode),
+                step = d =>
+                {
+                    int n = System.Enum.GetValues(typeof(Rendering.AAMode)).Length;
+                    var m = (Rendering.AAMode)(((int)Rendering.AntiAliasing.Mode + (d > 0 ? 1 : n - 1)) % n);
+                    if (!Rendering.AntiAliasing.Supported(m)) m = (Rendering.AAMode)(((int)m + (d > 0 ? 1 : n - 1)) % n);
+                    Rendering.AntiAliasing.Set(m);
+                },
+            });
+            SettingsRegistry.Add(new SettingRow
+            {
+                label = "超分方案",
+                value = () => string.IsNullOrEmpty(SaveSystem.Settings.upscaler) ? $"自动（{Rendering.UpscalerSettings.Label(Rendering.UpscalerSettings.Backend)}）" : Rendering.UpscalerSettings.Label(SaveSystem.Settings.upscaler),
+                step = d =>
+                {
+                    var opts = new System.Collections.Generic.List<string> { "" };
+                    opts.AddRange(Zfw.Upscaling.UpscalerSelector.Available(Zfw.GpuCaps.GpuCaps.Current));
+                    opts.Add(Rendering.UpscalerSettings.Off);
+                    int i = Mathf.Max(0, opts.IndexOf(SaveSystem.Settings.upscaler ?? ""));
+                    i = (i + (d > 0 ? 1 : opts.Count - 1)) % opts.Count;
+                    Rendering.UpscalerSettings.Set(opts[i], SaveSystem.Settings.upscalerQuality);
+                },
+            });
+            SettingsRegistry.Add(new SettingRow
+            {
+                label = "超分档位",
+                value = () => string.IsNullOrEmpty(SaveSystem.Settings.upscalerQuality) ? $"自动（{Rendering.UpscalerSettings.QualityLabel(Rendering.UpscalerSettings.Quality)}）" : Rendering.UpscalerSettings.QualityLabel(Rendering.UpscalerSettings.Quality),
+                step = d =>
+                {
+                    var opts = new[] { "", "NativeAA", "Quality", "Balanced", "Performance" };
+                    int i = Mathf.Max(0, System.Array.IndexOf(opts, SaveSystem.Settings.upscalerQuality ?? ""));
+                    i = (i + (d > 0 ? 1 : opts.Length - 1)) % opts.Length;
+                    Rendering.UpscalerSettings.Set(SaveSystem.Settings.upscaler, opts[i]);
+                },
+            });
+            VolumeRow("音乐", () => SaveSystem.Settings.musicVolume, v => SaveSystem.Settings.musicVolume = v);
+            VolumeRow("音效", () => SaveSystem.Settings.sfxVolume, v => SaveSystem.Settings.sfxVolume = v);
+            VolumeRow("环境声", () => SaveSystem.Settings.ambienceVolume, v => SaveSystem.Settings.ambienceVolume = v);
             AudioListener.volume = SaveSystem.Settings.masterVolume;
         }
 

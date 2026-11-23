@@ -43,8 +43,11 @@
     "com.unity.test-framework": "1.6.0",
     "com.unity.timeline": "1.8.13",
     "com.unity.ugui": "2.0.0",
-    "com.zfw.gpucaps": "https://github.com/zhufengwang1997-lab/MineEmbers.git?path=Packages/com.zfw.gpucaps#v0.2.0",
+    "com.zfw.gpucaps": "https://github.com/zhufengwang1997-lab/MineEmbers.git?path=Packages/com.zfw.gpucaps#v0.3.0",
     "com.zfw.perfrunner": "https://github.com/zhufengwang1997-lab/MineEmbers.git?path=Packages/com.zfw.perfrunner#v0.2.0",
     "com.zfw.qualitytiers": "https://github.com/zhufengwang1997-lab/MineEmbers.git?path=Packages/com.zfw.qualitytiers#v0.2.0"
-  }
+  },
+  "testables": [
+    "com.zfw.upscaling"
+  ]
 }

@@ -46,6 +46,10 @@ namespace WildPartner.Core
         public bool debugOverlay;
         public float mouseSensitivity = 1f;
         public float masterVolume = 0.8f;
+        public float musicVolume = 1f;      // 1123e-4: per-category volumes
+        public float sfxVolume = 1f;
+        public float ambienceVolume = 1f;
+        public string antiAliasing = "";   // 超分阶段: Off / TAA / STP
         public bool invertY;
     }
 
@@ -94,7 +98,7 @@ namespace WildPartner.Core
             if (File.Exists(SavePath)) File.Delete(SavePath);
         }
 
-        static SettingsData LoadSettings()
+        public static SettingsData LoadSettings()
         {
             try
             {
