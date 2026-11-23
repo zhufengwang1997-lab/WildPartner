@@ -17,3 +17,10 @@
 | 雨声（`rain_loop`） | amb_rain_loop_1 | Kresiek The Furry | https://opengameart.org/content/amb-rain-loop-1 | CC0 |
 
 处理方式见 `tools/audio/process_sfx.py`（滤波、变调、截短、淡出、雨声接缝交叉淡化）。雨中树叶滴答声、风声、捕捉音效、猫叫和背景音乐仍是运行时合成。
+
+**2026-11-23（试玩反馈 1123e-4）**：
+- 脚步声重新处理，没有加新素材。脚本是 `tools/audio/soften_steps.py`，源文件是上表处理后的 CC0 片段，存放在 `Art/Audio/src/`。
+  - 处理方式：低通约 2.2 kHz，起音放慢到 18 ms 以去掉"咔哒"；叠一层很轻的带通"沙沙"草叶摩擦声，缩短到 0.2 秒；各地面统一响度。
+  - 许可仍是 CC0。
+- 猫叫改成低沉温柔的短"喵"，新增猫蹭腿时的呼噜声。这两种都是运行时合成（`ProceduralAudio.MakeMeow` / `MakePurr`），不是录音。
+  - 还没找到合适的 CC0 真实猫叫录音；下载新素材需要用户确认。

@@ -15,17 +15,21 @@ namespace WildPartner.World
         [Tooltip("Plays the waterfall sound from here")] public bool sound;
         [Range(0, 1)] public float volume = 0.9f;
         static AudioClip _roar;
+        public static AudioClip Roar => _roar;
+        /// <summary>1123e-4: roar level next to the falls, under the music (ambience layer).</summary>
+        public const float Level = 0.2f;
         Renderer _r;
+        AudioSource _src;
 
-        void OnEnable() { _r = GetComponent<Renderer>(); if (_r && !All.Contains(_r)) All.Add(_r); }
-        void OnDisable() { if (_r) All.Remove(_r); }
+        void OnEnable() { _r = GetComponent<Renderer>(); if (_r && !All.Contains(_r)) All.Add(_r); Rendering.ReactiveMaskSources.Register(_r); }
+        void OnDisable() { if (_r) { All.Remove(_r); Rendering.ReactiveMaskSources.Unregister(_r); } }
 
         void Start()
         {
             if (!sound) return;
-            var s = gameObject.AddComponent<AudioSource>();
+            var s = _src = gameObject.AddComponent<AudioSource>();
             s.clip = _roar ? _roar : (_roar = MakeRoar());
-            s.loop = true; s.volume = volume; s.spatialBlend = 1f; s.dopplerLevel = 0f;
+            s.loop = true; s.volume = volume * Level; s.spatialBlend = 1f; s.dopplerLevel = 0f;
             s.rolloffMode = AudioRolloffMode.Custom; s.minDistance = 3f; s.maxDistance = 70f;
             // loudness: full within ~4 m, -12 dB at 20 m, silent by 70 m
             s.SetCustomCurve(AudioSourceCurveType.CustomRolloff, new AnimationCurve(
@@ -33,6 +37,8 @@ namespace WildPartner.World
             s.time = Random.value * 5f;
             s.Play();
         }
+
+        void Update() { if (_src) _src.volume = volume * Level * Audio.AudioMix.Ambience; }
 
         /// <summary>Brown noise rumble + a hissing top, slowly breathing; 8 s seamless loop.</summary>
         static AudioClip MakeRoar()
