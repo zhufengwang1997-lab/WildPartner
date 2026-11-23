@@ -59,13 +59,13 @@ flowchart LR
 
 | 模块 | 状态 |
 |---|---|
-| 统一超分接口 + STP / FSR 1 / 渲染缩放三个后端 + 选择器 | 已验证（M5 Max）；Windows 未验证 |
+| 统一超分接口 + STP / FSR 1 / 渲染缩放三个后端 + 选择器 | 已验证（M5 Max） |
 | 输入准备 IN-01~08（运动向量含风动草、Reactive Mask、切镜头清历史等） | 已验证（M5 Max）；Reactive Mask 当前后端不消费 |
 | 时间性抗锯齿（关 / TAA / STP）、画质分级扩展、特效开销实测 | 已验证（M5 Max） |
 | UpscaleBench 自动评估（6 场景 × 15 配置，FLIP / SSIM / PSNR / 帧率） | 已验证（M5 Max） |
 | TC-10 挂机（10 分钟） | 已验证（M5 Max） |
 | GPU Resident Drawer | **未达成**：Mac 上打开后 GRD 绘制的物体不显示，默认关闭（[`docs/GRD评估报告.md`](docs/GRD评估报告.md)） |
-| DLSS、MetalFX、FSR 2/3、光追阴影、VRS、GPU 崩溃诊断 | 仅设计（`docs/设计方案/`） |
+| DLSS、MetalFX、FSR 2/3、光追阴影、VRS、GPU 崩溃诊断 | 仅设计：[FSR 2/3 与 DLSS / MetalFX 后端](docs/设计方案/FSR2-3与DLSS-MetalFX后端.md)、[光追阴影 / VRS / GPU 崩溃诊断](docs/设计方案/光追-VRS-CrashDiag.md) |
 
 ## 实测数据摘要
 Apple M5 Max，Metal，2560×1440，画质档 High，2026-11-23。出处：[`docs/超分评估报告-mac-20261123.md`](docs/超分评估报告-mac-20261123.md)，原始数据 `bench_results/mac-20261123/`。
