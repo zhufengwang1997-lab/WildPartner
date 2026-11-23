@@ -1,0 +1,127 @@
+Mono path[0] = '/Users/guangzhi/dev/WildPartner/Builds/Mac/WildPartner.app/Contents/Resources/Data/Managed'
+Mono config path = '/Users/guangzhi/dev/WildPartner/Builds/Mac/WildPartner.app/Contents/MonoBleedingEdge/etc'
+Input System module state changed to: Initialized.
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+Initialize engine version: 6000.3.28f1 (8f082d2fe476)
+[Subsystems] Discovering subsystems at path /Users/guangzhi/dev/WildPartner/Builds/Mac/WildPartner.app/Contents/Resources/Data/UnitySubsystems
+GfxDevice: creating device client; kGfxThreadingModeThreaded
+ preferred device: Apple M5 Max (high power)
+Metal devices available: 1
+0: Apple M5 Max (high power)
+Using device Apple M5 Max (high power)
+Initializing Metal device caps: Apple M5 Max
+Mac GPU Family: 2
+Apple GPU Family: 9
+MSL Version: 3.0
+Has Float MSAA: 1
+Has Float Filtering: 1
+ReadWrite Texture Tier: 2
+Begin MonoManager ReloadAssembly
+- Loaded All Assemblies, in  0.046 seconds
+- Finished resetting the current domain, in  0.001 seconds
+[Physics::Module] Selected backend.
+[Physics::Module] Name: PhysX
+[Physics::Module] Id: 0xf2b8ea05
+[Physics::Module] SDK Version: 4.1.2
+[Physics::Module] Integration Version: 1.0.0
+[Physics::Module] Threading Mode: Multi-Threaded
+UnloadTime: 0.379917 ms
+[GpuCaps] Metal | Apple M5 Max | driver 26.4.1 | 38338 MB | bindless=supported (ArgumentBuffersTier2) rt=supported (hardware (Apple9)) vrs=supported (RasterizationRateMap) mesh=supported (MTLGPUFamilyMetal3) sm=Metal 4 / Apple10 (source=native)
+[GpuCaps] report -> /Users/guangzhi/Library/Application Support/zfw/WildPartner/caps_AppleM5Max_Metal.json
+[QualityTiers] tier=High mode=Auto pipeline=URP_High disabled=[]
+[Tier] High: grass 1, lodBias 1.3, SSAO on, water probe 128, default AA STP
+[AA] anti-aliasing -> STP
+[Upscaling] STP Quality: display 1920x1080 -> render 1280x720, mip bias -1.58
+[Upscaler] 选择：STP / 质量（自动），渲染 1280x720，显示 1920x1080
+[GRD] mode=Disabled occlusion=False (asset URP_High)
+[Boot] WildPartner commit=95709c6-dirty tier=High (Auto) api=Metal gpu=Apple M5 Max
+[Vegetation] spawned 4159 instances in 11 ms
+[Fish] school 0 at (140.4, 271.6) surface 31.52 bed 30.44 loop 23.0 m, 8 fish
+[Fish] school 1 at (182.3, 254.8) surface 29.78 bed 28.85 loop 19.7 m, 7 fish
+[Fish] school 2 at (210.8, 240.1) surface 28.58 bed 27.33 loop 27.2 m, 10 fish
+[Fish] school 3 at (233.2, 246.7) surface 27.56 bed 26.58 loop 18.9 m, 8 fish
+[Fish] school 4 at (264.0, 211.4) surface 26.61 bed 25.23 loop 26.4 m, 9 fish
+[Fish] school 5 at (264.6, 189.0) surface 26.25 bed 24.96 loop 25.0 m, 7 fish
+[Fish] school 6 at (258.5, 165.2) surface 25.84 bed 24.91 loop 24.5 m, 8 fish
+[Fish] school 7 at (239.3, 145.2) surface 25.35 bed 23.98 loop 27.3 m, 9 fish
+[Fish] school 8 at (311.7, 322.0) surface 27.15 bed 26.54 loop 18.2 m, 12 fish
+[Fish] school 9 at (260.1, 328.0) surface 27.15 bed 25.94 loop 17.9 m, 10 fish
+[Fish] 10 schools, 88 fish
+[RiverDrift] 5 calm stretches, 150 floating flecks
+[Ambient] 74 butterfly groups (152), 6 ducks, 3 bird flocks (12)
+Only custom filters can be played. Please add a custom filter or an audioclip to the audiosource (Systems).
+Only custom filters can be played. Please add a custom filter or an audioclip to the audiosource (Systems).
+Only custom filters can be played. Please add a custom filter or an audioclip to the audiosource (Systems).
+Only custom filters can be played. Please add a custom filter or an audioclip to the audiosource (Systems).
+Only custom filters can be played. Please add a custom filter or an audioclip to the audiosource (Systems).
+[Audio] 音乐: rms 0.0399 peak 0.168
+[Audio] 风: rms 0.0142 peak 0.061
+[Audio] 雨: rms 0.0161 peak 0.146
+[Audio] 壁炉: rms 0.0159 peak 0.098
+[Audio] 瀑布（近处）: rms 0.0297 peak 0.117
+[Audio] 脚步（草地走路）: rms 0.0081 peak 0.031
+[Audio] 脚步（草地跑步）: rms 0.0122 peak 0.046
+[Audio] 脚步（木地板走路）: rms 0.0081 peak 0.025
+[Audio] 脚步（土路走路）: rms 0.0088 peak 0.038
+[Audio] 脚步（浅水走路）: rms 0.0080 peak 0.048
+[Audio] 猫叫: rms 0.0261 peak 0.065
+[Audio] 呼噜: rms 0.0206 peak 0.084
+[Audio] 捕捉成功: rms 0.0343 peak 0.126
+[Audio] 开门: rms 0.0252 peak 0.125
+[Flow] new game
+[Cabin] woke up in bed (WakeUp clip)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_butterfly appears at anchor 0 (晴朗的夜晚)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_butterfly leaves (晴朗的夜晚 over)
+[Creature] moon_butterfly appears at anchor 0 (晴朗的夜晚)
+[Creature] moon_butterfly leaves (晴朗的夜晚 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_butterfly appears at anchor 0 (晴朗的夜晚)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_rabbit leaves (白天 over)
+[Creature] moon_butterfly leaves (晴朗的夜晚 over)
+[Soak] done 600 s -> /Users/guangzhi/dev/WildPartner/bench_results/soak-mac-20261123/soak.csv
+Thread 0x17020b000 may have been prematurely finalized
+[Physics::Module] Cleanup current backend.
+[Physics::Module] Id: 0xf2b8ea05
+Input System module state changed to: ShutdownInProgress.
+Input System polling thread exited.
+Input System module state changed to: Shutdown.
+Thread 0x16ea3b000 may have been prematurely finalized
+Thread 0x16eac7000 may have been prematurely finalized
+Thread 0x16ec6b000 may have been prematurely finalized
+Thread 0x16ee0f000 may have been prematurely finalized
+Thread 0x16efb3000 may have been prematurely finalized
+Thread 0x16f03f000 may have been prematurely finalized
+Thread 0x16f0cb000 may have been prematurely finalized
+Thread 0x16f157000 may have been prematurely finalized
+Thread 0x16ebdf000 may have been prematurely finalized
+Thread 0x16f26f000 may have been prematurely finalized
+Thread 0x16f2fb000 may have been prematurely finalized
+Thread 0x16eb53000 may have been prematurely finalized
+Thread 0x16ecf7000 may have been prematurely finalized
+Thread 0x16f1e3000 may have been prematurely finalized
+Thread 0x16ee9b000 may have been prematurely finalized
+Thread 0x16ef27000 may have been prematurely finalized
+Thread 0x16ed83000 may have been prematurely finalized

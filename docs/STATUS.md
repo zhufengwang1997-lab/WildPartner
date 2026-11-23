@@ -47,7 +47,7 @@
 | TC-03 | 改窗口分辨率 | 已验证（M5 Max） | 冒烟 |
 | TC-05 | 关运动向量看重影 | 已验证（M5 Max）：FLIP +26% | 超分评估报告 |
 | TC-06 | 关 Reactive Mask 看拖影 | 未做（当前后端不读遮罩） | — |
-| TC-10 | 挂机（压缩为 10 分钟） | 见 `docs/挂机测试-mac-20261123.md` | `bench_results/soak-mac-20261123/` |
+| TC-10 | 挂机（压缩为 10 分钟） | 已验证（M5 Max）：10 分钟不崩溃，118.0 → 117.9 FPS，内存 171 → 171 MB | `bench_results/soak-mac-20261123/` |
 | FR-RD-01~04 | GRD、遮挡剔除、着色器收敛 | **未达成**：打开后 Toon 物体不绘制，默认关闭 | `docs/GRD评估报告.md` |
 | FR-RD-05 | 不走 GRD 的物体清单 | 已完成 | `docs/GRD评估报告.md` |
 | FR-RD-06 / NFR-03 | GRD 开关对比、Draw Call −50% | 脚本已实现，无可信数据 | `tools/grd.sh` |
