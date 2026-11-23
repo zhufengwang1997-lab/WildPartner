@@ -64,6 +64,36 @@ namespace WildPartner.World
             R(745, 528, 26.2f), R(722, 468, 25.8f), R(684, 425, 25.4f),
             R(660, 405, 25.2f),
         };
+        /// <summary>Flow speed factor at each river point (试玩反馈 1123d-2): fast below each waterfall and where the
+        /// channel narrows near the falls, slowing down towards the lake and almost still where it enters; the outflow
+        /// leaves the lake slowly and quickens a little on its way down to the pond. 1 = the material's base speed.</summary>
+        public static readonly float[] RiverInSpeed = { 1.3f, 1.3f, 1.7f, 1.3f, 1.7f, 1.35f, 1.8f, 1.15f, 0.75f, 0.4f, 0.12f, 0f };
+        public static readonly float[] RiverOutSpeed = { 0f, 0.35f, 0.55f, 0.6f, 0.55f, 0.45f, 0.3f };
+
+        /// <summary>Downstream direction (world xz) and speed factor of the river at (x, z); false when not on a river
+        /// (lake and pond are still). Both polylines are listed downstream: RiverIn falls -> lake, RiverOut lake -> pond.</summary>
+        public static bool RiverFlow(float x, float z, out Vector2 dir, out float speed)
+        {
+            var p = new Vector2(x, z);
+            float best = float.MaxValue; dir = Vector2.zero; speed = 0;
+            void Scan(Vector3[] pts, float[] sp, ref float bestD, ref Vector2 bestDir, ref float bestSp)
+            {
+                for (int i = 0; i < pts.Length - 1; i++)
+                {
+                    var a = new Vector2(pts[i].x, pts[i].y);
+                    var b = new Vector2(pts[i + 1].x, pts[i + 1].y);
+                    var ab = b - a;
+                    float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
+                    float d = Vector2.Distance(p, a + ab * t);
+                    if (d < bestD) { bestD = d; bestDir = ab.normalized; bestSp = Mathf.Lerp(sp[i], sp[i + 1], t); }
+                }
+            }
+            Scan(RiverIn, RiverInSpeed, ref best, ref dir, ref speed);
+            Scan(RiverOut, RiverOutSpeed, ref best, ref dir, ref speed);
+            if (best > RiverHalfWidth + 3f || LakeDistance(x, z) < 0.98f) { speed = 0; return false; }
+            return speed > 0.01f;
+        }
+
         public static readonly Vector2 Pond = M(655, 400);
         public const float PondRadius = 26f * K;
         public const float RiverHalfWidth = 5f;

@@ -62,7 +62,7 @@ Shader "WildPartner/Water"
             TEXTURE2D(_NormalA); SAMPLER(sampler_NormalA);
             TEXTURE2D(_NormalB); SAMPLER(sampler_NormalB);
 
-            struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            struct Attributes { float4 positionOS : POSITION; float2 uv : TEXCOORD0; float2 uv1 : TEXCOORD1; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
@@ -70,6 +70,7 @@ Shader "WildPartner/Water"
                 float2 uv : TEXCOORD1;
                 float4 screenPos : TEXCOORD2;
                 half fog : TEXCOORD3;
+                float flow : TEXCOORD4;   // river: flow speed factor (fast below the falls, still at the lake)
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -92,6 +93,7 @@ Shader "WildPartner/Water"
                 o.positionWS = ws;
                 o.positionCS = TransformWorldToHClip(ws);
                 o.uv = v.uv;
+                o.flow = v.uv1.x;
                 o.screenPos = ComputeScreenPos(o.positionCS);
                 o.fog = ComputeFogFactor(o.positionCS.z);
                 return o;
@@ -108,13 +110,30 @@ Shader "WildPartner/Water"
                 float2 p, flowDir;
                 if (_River > 0.5) { p = float2(i.uv.x * 6.0, i.uv.y * 8.0); flowDir = float2(0, 1); }
                 else { p = i.positionWS.xz; flowDir = normalize(float2(0.8, 0.6)); }
-                float sp = _River > 0.5 ? _FlowSpeed * 2.2 : 0.18;
-                float2 uvA = p / _NormalTileA + flowDir * t * sp / _NormalTileA;
-                float2 uvB = p / _NormalTileB + float2(flowDir.y, -flowDir.x) * 0.25 * t * 0.3 / _NormalTileB + flowDir * t * sp * 1.6 / _NormalTileB;
-                if (_River > 0.5) { uvA.x *= 0.55; uvB.x *= 0.7; }   // stretched along the flow
-                half3 nA = SampleN(TEXTURE2D_ARGS(_NormalA, sampler_NormalA), uvA);
-                half3 nB = SampleN(TEXTURE2D_ARGS(_NormalB, sampler_NormalB), uvB);
-                half3 nB2 = SampleN(TEXTURE2D_ARGS(_NormalB, sampler_NormalB), uvB * 0.61 + 0.37 - flowDir * t * sp * 0.4 / _NormalTileB);
+                // 试玩反馈 1123d-2: the pattern must move downstream, so the sample point moves upstream (p - flow * t);
+                // the river speed varies along the channel, so it uses two flow-map phases that cross-fade (no stretching)
+                float sp = _River > 0.5 ? _FlowSpeed * 2.2 * i.flow : 0.18;
+                float2 side = float2(flowDir.y, -flowDir.x) * 0.25 * t * 0.3 / _NormalTileB;
+                float ph0 = _River > 0.5 ? frac(t * 0.35) : t, ph1 = frac(t * 0.35 + 0.5);
+                float w0 = _River > 0.5 ? 1 - abs(1 - 2 * ph0) : 1;
+                if (_River > 0.5) { ph0 /= 0.35; ph1 /= 0.35; }
+                float2 st = _River > 0.5 ? float2(0.55, 1) : float2(1, 1), stB = _River > 0.5 ? float2(0.7, 1) : float2(1, 1);   // stretched along the flow
+                float2 uvA0 = (p - flowDir * ph0 * sp) / _NormalTileA * st;
+                float2 uvB0 = ((p - flowDir * ph0 * sp * 1.6) / _NormalTileB + side) * stB;
+                half3 nA = SampleN(TEXTURE2D_ARGS(_NormalA, sampler_NormalA), uvA0);
+                half3 nB = SampleN(TEXTURE2D_ARGS(_NormalB, sampler_NormalB), uvB0);
+                half3 nB2 = SampleN(TEXTURE2D_ARGS(_NormalB, sampler_NormalB), uvB0 * 0.61 + 0.37 - flowDir * ph0 * sp * 0.4 / _NormalTileB);
+                if (_River > 0.5)
+                {
+                    float2 uvA1 = (p - flowDir * ph1 * sp) / _NormalTileA * st + 0.43;
+                    float2 uvB1 = ((p - flowDir * ph1 * sp * 1.6) / _NormalTileB + side) * stB + 0.29;
+                    nA = lerp(SampleN(TEXTURE2D_ARGS(_NormalA, sampler_NormalA), uvA1), nA, w0);
+                    nB = lerp(SampleN(TEXTURE2D_ARGS(_NormalB, sampler_NormalB), uvB1), nB, w0);
+                    nB2 = lerp(SampleN(TEXTURE2D_ARGS(_NormalB, sampler_NormalB), uvB1 * 0.61 + 0.37 - flowDir * ph1 * sp * 0.4 / _NormalTileB), nB2, w0);
+                    // still water (lake mouth) keeps a gentle drift instead of freezing
+                    float2 uvS = (p + float2(0.8, 0.6) * t * 0.18) / _NormalTileA;
+                    nA = lerp(SampleN(TEXTURE2D_ARGS(_NormalA, sampler_NormalA), uvS), nA, saturate(i.flow * 4));
+                }
                 float2 slope = (nA.xy * 1.0 + nB.xy * 0.7 + nB2.xy * 0.45) * _NormalStrength;
                 // on the river the texture space is along the ribbon; uv derivatives turn it into world space
                 if (_River > 0.5)
@@ -178,11 +197,16 @@ Shader "WildPartner/Water"
                 col += spec * main.color;
 
                 // ---- flow streaks (river), foam ----
-                float2 flowUV = float2(i.uv.x * 6, i.uv.y * _StreakDensity - t * _FlowSpeed);
-                float streak = smoothstep(0.6, 0.8, vnoise(flowUV * float2(1, 0.25)) * vnoise(flowUV * 2.1 + 3.7)) * _River;
+                float2 f0 = float2(i.uv.x * 6, (i.uv.y - ph0 * sp / 8) * _StreakDensity);
+                float2 f1 = float2(i.uv.x * 6, (i.uv.y - ph1 * sp / 8) * _StreakDensity) + 5.3;
+                float st0 = vnoise(f0 * float2(1, 0.25)) * vnoise(f0 * 2.1 + 3.7), st1 = vnoise(f1 * float2(1, 0.25)) * vnoise(f1 * 2.1 + 3.7);
+                float streak = smoothstep(0.6, 0.8, lerp(st1, st0, w0)) * _River * saturate(i.flow * 2);
                 col += _StreakAmount * streak * saturate(lit);
                 float2 wuv = i.positionWS.xz * 0.15;
-                float fn = vnoise(wuv * 9 + float2(t * 0.25, -t * 0.18));
+                // shore foam: drifts with the wind on the lake, downstream along the river banks
+                float fn = _River > 0.5 ? lerp(vnoise(float2(i.uv.x * 6, i.uv.y * 8) * 1.35 - float2(0, ph1 * 1.35 * sp) + 7.7),
+                                              vnoise(float2(i.uv.x * 6, i.uv.y * 8) * 1.35 - float2(0, ph0 * 1.35 * sp)), w0)
+                                        : vnoise(wuv * 9 + float2(t * 0.25, -t * 0.18));
                 half edgeLine = 1 - smoothstep(0.02, 0.12, vdepth + (fn - 0.5) * 0.06);
                 half band = (1 - smoothstep(0, _FoamWidth, vdepth)) * smoothstep(0.55, 0.75, fn);
                 half foam = saturate(edgeLine + band * 0.7 + ring * 0.25);

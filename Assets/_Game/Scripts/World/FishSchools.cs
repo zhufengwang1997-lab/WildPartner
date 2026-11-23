@@ -197,7 +197,12 @@ namespace WildPartner.World
                 if (sc.root.activeSelf != near) sc.root.SetActive(near);
                 if (!near) continue;
 
-                sc.s += sc.speed * (1f + 0.25f * Mathf.Sin(time * 0.31f + sc.centre.x)) * dt;
+                // 试玩反馈 1123d-2: in the river the current carries them - quick going downstream, slow working back up
+                float cur = 1f;
+                PathAt(sc, sc.s, out var hp, out var hd);
+                if (WorldLayout.RiverFlow(hp.x, hp.z, out var fd, out float fs))
+                    cur = Mathf.Clamp(1f + 0.55f * fs * (hd.x * fd.x + hd.z * fd.y), 0.35f, 1.9f);
+                sc.s += sc.speed * cur * (1f + 0.25f * Mathf.Sin(time * 0.31f + sc.centre.x)) * dt;
                 Vector3 pp = player ? player.transform.position : new Vector3(1e5f, 0, 0);
 
                 // scatter when she comes close (any school fish within 4.5 m, or the school's centre within 6 m)
@@ -258,6 +263,9 @@ namespace WildPartner.World
         }
 
         /// <summary>A small fish, ~0.2 m long, +Z forward: spindle body (6 rings x 6 sides) and a forked tail.</summary>
+        static Mesh _shared;
+        /// <summary>The fish mesh, for the ordinary fish caught on the line (1123d-1).</summary>
+        public static Mesh SharedMesh => _shared ? _shared : (_shared = FishMesh());
         static Mesh FishMesh()
         {
             var v = new List<Vector3>(); var t = new List<int>();
