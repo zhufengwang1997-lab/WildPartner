@@ -98,7 +98,7 @@ namespace WildPartner.Creatures
             Active = id;
             Apply(true);
             var now = Companion(id);
-            if (now) Puff(now.transform.position + Vector3.up * 0.4f);
+            if (now && id != "ink_koi") Puff(now.transform.position + Vector3.up * 0.4f);   // the koi's bottle sparkles on its own (1123e-2)
             if (GameFlow.Instance) GameFlow.Instance.Save.currentPet = id;
             Debug.Log($"[Pet] current pet -> {id}");
             Switched?.Invoke(CreatureDefs.Get(id));

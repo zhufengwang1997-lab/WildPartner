@@ -45,6 +45,30 @@ namespace WildPartner.Creatures
         static readonly int SpeedId = Animator.StringToHash("Speed"), MoodId = Animator.StringToHash("Mood");
 
         NavMeshAgent _agent;
+
+        /// <summary>The agent is usable: enabled and standing on the NavMesh. When it has slipped off (water, a cliff edge, a
+
+        /// teleport) it is snapped back to the nearest mesh point within 3 m first; agent calls off the mesh log errors.</summary>
+
+        bool AgentOn
+
+        {
+
+            get
+
+            {
+
+                if (!_agent || !_agent.enabled) return false;
+
+                if (_agent.isOnNavMesh) return true;
+
+                if (NavMesh.SamplePosition(transform.position, out var hit, 3f, NavMesh.AllAreas)) _agent.Warp(hit.position);
+
+                return _agent.isOnNavMesh;
+
+            }
+
+        }
         ProceduralAnimator _anim;
         Transform _visual;
         Vector3 _target;
@@ -75,6 +99,7 @@ namespace WildPartner.Creatures
                 foreach (var prm in _animator.parameters) if (prm.nameHash == MoodId) _hasMood = true;
             if (_visual) _visualScale = _visual.localScale;
             FindRabbitBones();
+            if (Def != null && Def.id == "moon_butterfly" && !GetComponent<ButterflyGlow>()) gameObject.AddComponent<ButterflyGlow>();   // 1123e-3
         }
 
         public void Init(int anchor, bool startHidden)
@@ -147,7 +172,7 @@ namespace WildPartner.Creatures
             bool visible = s != State.Hidden;
             if (_visual) _visual.gameObject.SetActive(visible);
             foreach (var c in GetComponents<Collider>()) c.enabled = visible;
-            if (_agent && _agent.enabled)
+            if (AgentOn)
             {
                 _agent.isStopped = !visible;
                 _agent.speed = s == State.Flee ? Def.fleeSpeed : s == State.Companion ? 6f : Def.wanderSpeed;
@@ -196,7 +221,7 @@ namespace WildPartner.Creatures
             AlertLevel = 0;
             if (_agent && !_agent.enabled && Def.movement == Movement.Ground) Place(transform.position);
             SetState(State.Companion);
-            if (_agent && _agent.enabled) { _agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance; _agent.avoidancePriority = 40 + slot; _agent.stoppingDistance = 0.8f; }
+            if (AgentOn) { _agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance; _agent.avoidancePriority = 40 + slot; _agent.stoppingDistance = 0.8f; }
             if (_agent && Def.id == "cat") _agent.angularSpeed = 260f;   // gets up and turns after her, never on the spot
         }
 
@@ -275,11 +300,11 @@ namespace WildPartner.Creatures
                 case State.Wander:
                     if (AlertLevel > 0.25f) { SetState(State.Alert); break; }
                     // held by the capture spell: it stops and looks at you instead of strolling out of range
-                    if (CaptureSystem.Target == this) { if (_agent && _agent.enabled) _agent.isStopped = true; if (Def.viewAngle <= 0f || SeesPlayer) FaceTowards(toPlayer); break; }   // a deer held from behind stays put (1123c-B1)
+                    if (CaptureSystem.Target == this) { if (AgentOn) _agent.isStopped = true; if (Def.viewAngle <= 0f || SeesPlayer) FaceTowards(toPlayer); break; }   // a deer held from behind stays put (1123c-B1)
                     Wander();
                     break;
                 case State.Alert:
-                    if (_agent && _agent.enabled) _agent.isStopped = true;
+                    if (AgentOn) _agent.isStopped = true;
                     if (sensed || Def.viewAngle <= 0f) FaceTowards(toPlayer);   // a deer that lost track of her keeps looking where it was
                     if (AlertLevel >= 1f)
                     {
@@ -310,7 +335,7 @@ namespace WildPartner.Creatures
             // rigged grazers stop at the end of a stroll and graze for a while (deer: GrazeDown -> Graze)
             if (_pauseUntil > _stateTime)
             {
-                if (_agent && _agent.enabled) _agent.isStopped = true;
+                if (AgentOn) _agent.isStopped = true;
                 return;
             }
             if (_paused) { _paused = false; NewWanderTarget(); _walkTime = 0f; }
@@ -326,7 +351,7 @@ namespace WildPartner.Creatures
                     _paused = true;
                     _pauseUntil = _stateTime + (Def.walkBurst > 0f ? Random.Range(3.5f, 7f) : Random.Range(4f, 10f));
                     _burstLen = 0f;
-                    if (_agent && _agent.enabled) _agent.isStopped = true;
+                    if (AgentOn) _agent.isStopped = true;
                     return;
                 }
             }
@@ -357,7 +382,7 @@ namespace WildPartner.Creatures
         /// still it relaxes back to Alert at half the meter and she may try again.</summary>
         void UpdateStartled(PlayerController player, Vector3 toPlayer)
         {
-            if (_agent && _agent.enabled) _agent.isStopped = true;
+            if (AgentOn) _agent.isStopped = true;
             FaceTowards(toPlayer);
             if (player.Speed > 0.3f || player.Airborne) { Flee(player.transform.position); return; }
             if (_stateTime > 1.1f)
@@ -404,7 +429,7 @@ namespace WildPartner.Creatures
 
         void MoveTo(Vector3 target, float speed)
         {
-            if (Def.movement == Movement.Ground && _agent && _agent.enabled)
+            if (Def.movement == Movement.Ground && AgentOn)
             {
                 _agent.isStopped = false;
                 _agent.speed = speed;
@@ -490,7 +515,7 @@ namespace WildPartner.Creatures
         void DriveAnimator(PlayerController player)
         {
             float dt = Time.deltaTime;
-            Vector3 v = _agent && _agent.enabled ? _agent.velocity : _velocity;
+            Vector3 v = AgentOn ? _agent.velocity : _velocity;
             float speed = Vector3.ProjectOnPlane(v, Vector3.up).magnitude;
             int mood = Current == State.Wander && _pauseUntil > _stateTime ? 1 : 0;
             if (Def.id == "cat" && Current == State.Companion && player)
@@ -506,7 +531,7 @@ namespace WildPartner.Creatures
                     // walk up to her legs and lean in
                     Vector3 to = -toCat;
                     FaceTowards(to);
-                    if (_agent && _agent.enabled)
+                    if (AgentOn)
                     {
                         _agent.isStopped = to.magnitude < 0.55f;
                         if (to.magnitude >= 0.55f) { _agent.speed = 1.2f; _agent.SetDestination(player.transform.position - to.normalized * 0.45f); }
@@ -583,7 +608,7 @@ namespace WildPartner.Creatures
                 Debug.Log("[Cat] pointing + meow");
                 if (GameFlow.Instance) GameFlow.Instance.ShowToast("喵——小猫好像发现了什么，朝它看的方向找找吧。");
             }
-            if (_agent && _agent.enabled)
+            if (AgentOn)
             {
                 _agent.isStopped = _leadArrived;
                 if (!_leadArrived) { _agent.speed = player.runSpeed; _agent.SetDestination(_leadSpot); }
@@ -615,9 +640,9 @@ namespace WildPartner.Creatures
         {
             float dt = Time.deltaTime;
             _playerStill = player.Speed < 0.1f && !player.Airborne ? _playerStill + dt : 0f;
-            if (_playerStill < 0.35f || _rubTime > 0f || !_agent || !_agent.enabled)
+            if (_playerStill < 0.35f || _rubTime > 0f || !AgentOn)
             {
-                if (_hasSpot && _agent && _agent.enabled) _agent.stoppingDistance = 0.8f;
+                if (_hasSpot && AgentOn) _agent.stoppingDistance = 0.8f;
                 _hasSpot = false; AtSideSpot = false;
                 return false;
             }
@@ -747,7 +772,7 @@ namespace WildPartner.Creatures
             player.Place(off + Vector3.up * 0.1f);
             Place(transform.position);
             foreach (var c in GetComponents<Collider>()) c.enabled = true;
-            if (_agent && _agent.enabled) { _agent.speed = 6f; _agent.stoppingDistance = 0.8f; }
+            if (AgentOn) { _agent.speed = 6f; _agent.stoppingDistance = 0.8f; }
             Debug.Log($"[Ride] dismounted {Def.id}");
         }
 
@@ -755,6 +780,9 @@ namespace WildPartner.Creatures
         /// <summary>False while this collected pet is not the current one (kept out of sight, does nothing).</summary>
         public bool PetShown { get; private set; } = true;
         TrailRenderer _trail;
+        KoiCompanion _koiPet;
+        /// <summary>Set by KoiCompanion so the swim clip follows its motion.</summary>
+        internal Vector3 CompanionVelocity { set => _velocity = value; }
         Light _glow;
 
         public void SetPetShown(bool on)
@@ -778,29 +806,14 @@ namespace WildPartner.Creatures
         /// carries a soft light (1123c-B2).</summary>
         void UpdateButterflyPet(PlayerController player)
         {
-            if (!_trail)
+            // 1123e-3: no light trail any more; ButterflyGlow scatters stardust and lights it at night only
+            if (!_glow)
             {
-                _trail = gameObject.AddComponent<TrailRenderer>();
-                _trail.time = 0.9f; _trail.minVertexDistance = 0.05f;
-                _trail.widthCurve = new AnimationCurve(new Keyframe(0, 0.12f), new Keyframe(1, 0f));
-                var g = new Gradient();
-                g.SetKeys(new[] { new GradientColorKey(new Color(0.85f, 0.6f, 1f), 0), new GradientColorKey(new Color(0.5f, 0.3f, 1f), 1) },
-                          new[] { new GradientAlphaKey(0.9f, 0), new GradientAlphaKey(0f, 1) });
-                _trail.colorGradient = g;
-                var sh = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-                if (sh)
-                {
-                    var m = new Material(sh);
-                    m.SetFloat("_Surface", 1); m.SetFloat("_Blend", 2);
-                    m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha); m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);
-                    m.SetFloat("_ZWrite", 0); m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT"); m.renderQueue = 3000;
-                    _trail.sharedMaterial = m;
-                }
-                _trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 var lg = new GameObject("PetGlow", typeof(Light));
                 lg.transform.SetParent(transform, false);
                 _glow = lg.GetComponent<Light>();
-                _glow.type = LightType.Point; _glow.color = new Color(0.75f, 0.6f, 1f); _glow.range = 9f; _glow.intensity = 2.2f; _glow.shadows = LightShadows.None;
+                _glow.type = LightType.Point; _glow.color = new Color(0.72f, 0.62f, 1f); _glow.range = 7f; _glow.intensity = 0f; _glow.shadows = LightShadows.None;
+                var bg = GetComponent<ButterflyGlow>(); if (bg) bg.petLight = _glow;
             }
             float t = Time.time * 1.6f;
             Vector3 c = player.transform.position + Vector3.up * (1.5f + 0.25f * Mathf.Sin(t * 1.7f));
@@ -808,25 +821,29 @@ namespace WildPartner.Creatures
             transform.position = Vector3.SmoothDamp(transform.position, orbit, ref _velocity, 0.18f, 30f);
             if (Vector3.Distance(transform.position, orbit) > 30f) transform.position = orbit;
             FaceTowards(_velocity.sqrMagnitude > 0.01f ? _velocity : player.transform.forward);
-            var env = EnvController.Instance;
-            bool night = env && (env.timeOfDay >= 19f || env.timeOfDay < 5.5f);
-            _glow.enabled = night || EnvController.Indoors;
         }
 
         void UpdateCompanion(PlayerController player)
         {
             if (!PetShown) { transform.position = player.transform.position + Vector3.down * 50f; return; }   // stowed away
             if (Def.id == "moon_butterfly") { UpdateButterflyPet(player); return; }
+            if (Def.id == "ink_koi")
+            {
+                // 1123e-2: in a water bottle at her hip on land, in the water near her / under her feet otherwise
+                if (!_koiPet) _koiPet = GetComponent<KoiCompanion>() ?? gameObject.AddComponent<KoiCompanion>();
+                _koiPet.Drive(player);
+                return;
+            }
             if (Def.rideable && UpdateRide(player)) return;
             if (_lookTime > 0f)
             {
                 // 1123d-3: the cat stops and stares across the lake at the glowing moonflower
                 _lookTime -= Time.deltaTime;
-                if (_agent && _agent.enabled) _agent.isStopped = true;
+                if (AgentOn) _agent.isStopped = true;
                 FaceTowards(_lookAt - transform.position);
                 _nextMeow -= Time.deltaTime;
                 if (_nextMeow <= 0f) { Meowed?.Invoke(transform.position); _nextMeow = 9f; }
-                if (_lookTime <= 0f && _agent && _agent.enabled) _agent.isStopped = false;
+                if (_lookTime <= 0f && AgentOn) _agent.isStopped = false;
                 return;
             }
             if (Def.id == "cat" && Def.movement == Movement.Ground && UpdateLead(player)) return;
@@ -836,7 +853,7 @@ namespace WildPartner.Creatures
             float side = CompanionSlot % 2 == 0 ? 1 : -1;
             Vector3 offset = Quaternion.Euler(0, side * (ang - 140f) + 180f, 0) * Vector3.forward * (2.2f + CompanionSlot * 0.6f);
             Vector3 slot = player.transform.position + player.transform.rotation * offset;
-            if (Def.movement == Movement.Ground && _agent && _agent.enabled)
+            if (Def.movement == Movement.Ground && AgentOn)
             {
                 float d = Vector3.Distance(transform.position, slot);
                 _agent.isStopped = false;
