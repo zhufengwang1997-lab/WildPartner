@@ -34,7 +34,7 @@ namespace WildPartner.Player
         {
             public Transform[] bones;
             public float tipLength;
-            public bool skirt;
+            public bool skirt, skirtBack;   // skirtBack: the panel MotionDemo reads (cached: Transform.name allocates a string)
             public float k, c, drag, dragV, maxAngle;
             public Vector3[] p, v, prevRest;
             public Quaternion[] bind;
@@ -64,7 +64,7 @@ namespace WildPartner.Player
             foreach (var s in new[] { "F", "B", "L", "R" })
             {
                 var t = Find("Skirt." + s);
-                if (t) list.Add(new Chain { bones = new[] { t }, tipLength = skirtLength, skirt = true, k = skirtStiffness, c = skirtDamping, drag = skirtDrag, dragV = skirtDragVertical, maxAngle = skirtMaxAngle });
+                if (t) list.Add(new Chain { bones = new[] { t }, tipLength = skirtLength, skirt = true, skirtBack = s == "B", k = skirtStiffness, c = skirtDamping, drag = skirtDrag, dragV = skirtDragVertical, maxAngle = skirtMaxAngle });
             }
             _chains = list.ToArray();
             foreach (var ch in _chains)
@@ -197,7 +197,7 @@ namespace WildPartner.Player
                 for (int i = 0; i <= n; i++) ch.prevRest[i] = _rest[i];
                 // debug readout (MotionDemo): how far the simulated tip sits above (+) / below (-) the animated one
                 if (ch == _chains[0]) DebugHairLift = ch.p[n].y - _rest[n].y;
-                else if (ch.skirt && ch.bones[0].name == "Skirt.B") DebugSkirtLift = ch.p[n].y - _rest[n].y;
+                else if (ch.skirtBack) DebugSkirtLift = ch.p[n].y - _rest[n].y;
 
                 // pose the bones along the simulated points, root to tip
                 for (int i = 0; i < n; i++)

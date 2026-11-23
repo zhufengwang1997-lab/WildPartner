@@ -205,9 +205,10 @@ namespace WildPartner.UI
                 _miniIcons[i].anchoredPosition = v;
                 _miniIcons[i].localScale = Vector3.one * (outside ? 0.78f : 1f);
             }
-            Vector2[] dirs = { Vector2.up, Vector2.right, Vector2.down, Vector2.left };
-            for (int k = 0; k < 4; k++) _compass[k].anchoredPosition = Rot(dirs[k]) * (r + 2f);
+            for (int k = 0; k < 4; k++) _compass[k].anchoredPosition = Rot(CompassDirs[k]) * (r + 2f);
         }
+
+        static readonly Vector2[] CompassDirs = { Vector2.up, Vector2.right, Vector2.down, Vector2.left };
 
         // ------------------------------------------------------------------ helpers
         static RectTransform Icon(RectTransform parent, Landmark lm, float size, bool named)

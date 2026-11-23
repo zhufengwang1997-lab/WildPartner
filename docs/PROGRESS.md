@@ -174,7 +174,8 @@
     - 超分 Pass 耗时、显存：发布版拿不到（显示「—」），未测。GPU ms 在 Metal 上只能看相对值，帧率用实际帧时间。
   - 修过的测量问题：第一次跑时草的风动时间在配置之间没对齐，FLIP 主要在量风的相位；现在每个配置开始时重置风动时钟，并加 ref2 量噪声底。
 - [ ] GRD（GPU 驻留绘制）：`-grd=` / `-occlusion=` 参数、设置菜单两项、F3 面板开关和 Draw Calls / Batches / SetPass 读数、`tools/grd.sh` 开关对比脚本都做了。**未达成**：在 Mac（Metal）上打开后，交给 GRD 绘制的物体（树、灌木、木屋，连 URP Lit 方块）都不显示，最小场景也复现，根因未找到；默认改为关闭，Windows 测试包里带了同样的诊断，Draw Call 对比没有可信数据（见 `docs/GRD评估报告.md`）。
-- [x] TC-10 挂机 10 分钟（M5 Max，1920×1080，STP，已验证）：不崩溃，帧率 118.0 → 117.9 FPS，内存 171 → 171 MB，最慢一帧 25 ms，GC 512 次（约每秒一次，偏多，未查）。`docs/挂机测试-mac-20261123.md`。
+- [x] TC-10 挂机 10 分钟（M5 Max，1920×1080，STP，已验证）：不崩溃，帧率 118.0 → 117.9 FPS，内存 171 → 171 MB，最慢一帧 25 ms，GC 512 次（约每秒一次，偏多）。`docs/挂机测试-mac-20261123.md`。
+  - GC 排查（11-23 晚，定时任务，已验证 M5 Max）：Development 包写 Profiler 文件、编辑器按调用路径汇总分配（`tools/allocprof.sh`）。修了 5 处每帧分配（存档 HasCaught 的闭包约 1.2 KB/帧最大，F3 面板隐藏时的 IMGUI、月光花每帧找猫、裙摆读骨骼名、小地图方向数组）。每帧分配 2582 → 506 B（含退出时一次性分配，稳态约 135 B），数据 `bench_results/allocprof-mac-20261123/`。重跑 10 分钟挂机：GC 512 → 69 次，帧率 120.0 → 119.9，内存 171 → 171 MB，通过（`docs/挂机测试-mac-20261123-gcfix.md`）。冒烟通过（第一次钓鱼"锦鲤挣扎张力幅度 > 0.15"差一点没过（0.13），重跑通过，属随机波动，与本次改动无关）。
 - [x] PerfRunner 0.3.0（MineEmbers 标签 v0.3.1）：记录 `-upscaler=` / `-quality=`，新增 `upscale_ms` 列；包不引用超分代码，由游戏填钩子。
 - [x] Windows 完整测试包（最后一步，已打包，**未在 Windows 上运行过**）：`~/dev/WildPartner-win-builds/WildPartner-win-test-20261123.zip`（133 MB，不进 Git），提交 e9bfc1a，DX12，Mono。
   - 内容：游戏、`01_冒烟测试.bat`、`02_完整测试.bat`（冒烟 → 超分评估 → GRD 对比与诊断 → 特效开销 → 挂机 10 分钟）、`03_挂机10分钟.bat`、`使用说明.txt`。脚本源文件在 `tools/win/`。

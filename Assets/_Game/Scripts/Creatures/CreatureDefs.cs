@@ -148,6 +148,10 @@ namespace WildPartner.Creatures
             },
         };
 
-        public static CreatureDef Get(string id) => System.Array.Find(All, d => d.id == id);
+        public static CreatureDef Get(string id)
+        {
+            foreach (var d in All) if (d.id == id) return d;   // no lambda: no closure allocation per call
+            return null;
+        }
     }
 }

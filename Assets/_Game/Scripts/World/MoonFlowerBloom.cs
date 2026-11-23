@@ -150,6 +150,7 @@ namespace WildPartner.World
                     CatCue?.Invoke();
                     Debug.Log("[Moon] the cat looks towards the island and meows");
                 }
+                else _catCooldown = 1f;   // cat not out: look again in a second, not every frame (Pet() searches the scene)
             }
         }
     }

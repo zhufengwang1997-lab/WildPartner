@@ -198,3 +198,13 @@
 - 旧设置字段 `grd` 默认是 true，已经写进了旧的设置文件，所以新开一个字段 `grdEnabled`（默认 false），不用旧的。
 - **PerfRunner 不依赖超分包**：`-upscaler=` / `-quality=` 只记录在 CSV 头和文件名里，真正生效靠游戏自己的选择器读同样的参数；`upscale_ms` 由游戏通过钩子提供。包的版本是 0.3.0，仓库标签是 v0.3.1（v0.3.0 已用于 GpuCaps）。
 - **TC-10 压缩到 10 分钟**（最终指令）：女巫自动随机走跑，每 2 分钟随机切换晴雨，昼夜照常。标准：跑完不崩溃，最后 1 分钟帧率不低于第 1 分钟的 90%。
+
+## 挂机 GC 排查（2026-11-23 晚，定时任务）
+- **用 Profiler 文件找分配来源，不靠猜**：发布版拿不到 "GC Allocated In Frame"。改为打 Development 包，用 `-profiler-enable -profiler-log-file` 把 Profiler 数据写进文件，再在编辑器里用 `HierarchyFrameDataView` 把每个 GC.Alloc 记到它的调用路径上（`ProfileAllocReport.cs`，一条命令 `tools/allocprof.sh`）。只看主线程、最后约 2000 帧；这 2000 帧里含退出过程，所以退出时一次性的分配会被平均进来（URP 资源 OnDisable 约 371 B/帧就是这个，不是每帧的）。
+- 找到的来源和修法（修前 2582 B/帧 → 修后 506 B/帧，扣掉退出那部分稳态约 135 B/帧）：
+  - `SaveData.HasCaught` 用带捕获的 lambda（`caught.Exists(c => c.id == id)`），`CaptureSystem` 每帧对每只动物调一次，约 1.2 KB/帧。改成普通循环。`CreatureDefs.Get` 同样改。
+  - F3 调试面板：只要有一个启用的 `OnGUI`，Unity 每帧都跑一遍 IMGUI，即使面板隐藏也分配约 370 B/帧。把 `OnGUI` 挪到单独的组件上，只在面板显示时启用。
+  - 月光花：猫不在身边时每帧调 `PetSwitcher.Pet`（场景查找 + LINQ），约 300 B/帧。改成找不到就 1 秒后再找。
+  - 头发裙摆：每帧读 `Transform.name`（每次都新建字符串）判断是不是后片裙摆，改成建链时记下来。
+  - 小地图：指南针方向数组每帧新建，改成静态。
+- 剩下约 84 B/帧在 URP 渲染图内部，不改引擎包。

@@ -24,12 +24,19 @@ namespace WildPartner.Rendering
             _setpass = Unity.Profiling.ProfilerRecorder.StartNew(Unity.Profiling.ProfilerCategory.Render, "SetPass Calls Count");
         }
 
-        void OnDisable() { _draws.Dispose(); _batches.Dispose(); _setpass.Dispose(); }
+        void OnDisable() { _draws.Dispose(); _batches.Dispose(); _setpass.Dispose(); if (_gui) _gui.enabled = false; }
+
+        // OnGUI lives on its own component that is only enabled while the panel shows: any enabled OnGUI makes
+        // Unity run an IMGUI pass every frame, which allocated ~370 B per frame even with the panel hidden
+        DebugOverlayGUI _gui;
 
         void Awake()
         {
             DontDestroyOnLoad(gameObject);
             Visible = Core.SaveSystem.Settings.debugOverlay;
+            _gui = gameObject.AddComponent<DebugOverlayGUI>();
+            _gui.owner = this;
+            _gui.enabled = Visible;
         }
 
         void Update()
@@ -40,6 +47,7 @@ namespace WildPartner.Rendering
                 Visible = !Visible;
                 Core.SaveSystem.Settings.debugOverlay = Visible; Core.SaveSystem.SaveSettings();
             }
+            if (_gui.enabled != Visible) _gui.enabled = Visible;
             if (Visible && k != null && k.f4Key.wasPressedThisFrame) Cycle();
             float dt = Mathf.Max(Time.unscaledDeltaTime, 1e-4f);
             _ms = Mathf.Lerp(_ms, dt * 1000f, 0.05f);
@@ -65,7 +73,7 @@ namespace WildPartner.Rendering
 
         static Texture2D Tex(Color c) { var t = new Texture2D(1, 1); t.SetPixel(0, 0, c); t.Apply(); return t; }
 
-        void OnGUI()
+        internal void DrawGUI()
         {
             if (!Visible) return;
             Styles();
@@ -126,5 +134,12 @@ namespace WildPartner.Rendering
             GUILayout.EndArea();
             GUI.matrix = m;
         }
+    }
+
+    /// <summary>Carries DebugOverlay's OnGUI; enabled only while the panel is visible.</summary>
+    public class DebugOverlayGUI : MonoBehaviour
+    {
+        internal DebugOverlay owner;
+        void OnGUI() { if (owner) owner.DrawGUI(); }
     }
 }
