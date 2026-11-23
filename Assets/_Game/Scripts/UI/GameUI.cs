@@ -470,16 +470,29 @@ namespace WildPartner.UI
             if (s && EventSystem.current) EventSystem.current.SetSelectedGameObject(s.gameObject);
         }
 
+        int _objKey = int.MinValue, _clockKey = int.MinValue;
+        Creature _promptFor; bool _promptCapturing;
+
         void Update()
         {
             if (_flow == null) return;
             if (_settings.gameObject.activeSelf && GameInput.PausePressed) { CloseSettings(); return; }
             if (_flow.State != GameFlow.FlowState.Playing) return;
 
-            _objective.text = _flow.Objective;
+            // HUD strings are rebuilt only when what they show changes (TC-10: they used to allocate every frame)
+            int objKey = _flow.AllCaught ? -1 : _flow.CaughtCount;
+            if (objKey != _objKey) { _objKey = objKey; _objective.text = _flow.Objective; }
             var env = EnvController.Instance;
             var w = Weather.Instance;
-            if (env) _clock.text = $"<color=#FFDB8C>{(env.timeOfDay >= 6f && env.timeOfDay < 18.5f ? "☀" : "☾")}</color>  {env.ClockText()}  ·  {(w ? w.Label : "")}";
+            if (env)
+            {
+                int clockKey = Mathf.FloorToInt(env.timeOfDay * 60f) * 2 + (w && w.IsRaining ? 1 : 0);
+                if (clockKey != _clockKey)
+                {
+                    _clockKey = clockKey;
+                    _clock.text = $"<color=#FFDB8C>{(env.timeOfDay >= 6f && env.timeOfDay < 18.5f ? "☀" : "☾")}</color>  {env.ClockText()}  ·  {(w ? w.Label : "")}";
+                }
+            }
 
             if (_petShown != PetSwitcher.Active)
             {
@@ -521,6 +534,7 @@ namespace WildPartner.UI
             _prompt.transform.parent.gameObject.SetActive(show || interact != null);
             if (!show && interact != null)
             {
+                _promptFor = null;
                 _prompt.text = interact;   // cabin door / bed / book (试玩反馈 1123b-3), riding the deer (1123b-8)
                 _progressBg.gameObject.SetActive(false);
                 _alertRoot.gameObject.SetActive(false);
@@ -529,7 +543,11 @@ namespace WildPartner.UI
             {
                 _alertRoot.gameObject.SetActive(true);
                 var c = target ? target : cand;
-                _prompt.text = target ? $"正在捕捉 {c.Def.name}…" : $"按住 E 捕捉 {c.Def.name}";
+                if (c != _promptFor || (target != null) != _promptCapturing)
+                {
+                    _promptFor = c; _promptCapturing = target != null;
+                    _prompt.text = target ? $"正在捕捉 {c.Def.name}…" : $"按住 E 捕捉 {c.Def.name}";
+                }
                 _progressFill.rectTransform.anchorMax = new Vector2(CaptureSystem.Progress, 1);
                 _progressBg.gameObject.SetActive(target != null || CaptureSystem.Progress > 0);
                 _alertFill.rectTransform.anchorMax = new Vector2(c.AlertLevel, 1);

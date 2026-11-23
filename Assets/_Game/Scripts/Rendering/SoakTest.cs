@@ -41,9 +41,11 @@ namespace WildPartner.Rendering
 
             var mem = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "Total Used Memory");
             var gcMem = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Used Memory");
+            var allocRec = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame");
+            long allocSum = 0;
             var csv = new StringBuilder();
             csv.AppendLine($"# gpu={SystemInfo.graphicsDeviceName};api={SystemInfo.graphicsDeviceType};res={Screen.width}x{Screen.height};tier={Zfw.QualityTiers.QualityTiers.Current};upscaler={UpscalerSettings.Label(UpscalerSettings.Backend)};seconds={seconds}");
-            csv.AppendLine("t,fps,worst_ms,gc_count,total_mem_mb,gc_mem_mb,hour,rain");
+            csv.AppendLine("t,fps,worst_ms,gc_count,total_mem_mb,gc_mem_mb,hour,rain,alloc_kb");
             string file = Path.Combine(dir, "soak.csv");
             var player = PlayerController.Instance; var env = EnvController.Instance;
             var rng = new System.Random(1123);
@@ -65,16 +67,18 @@ namespace WildPartner.Rendering
                 GameInput.SimMove = toHome.magnitude > 60f ? new Vector2(toHome.x, toHome.z).normalized : dir2;
                 if (el >= nextWeather) { Weather.Instance.Set(rng.NextDouble() < 0.5, true); nextWeather += 120f; }
                 frames++; worst = Mathf.Max(worst, Time.unscaledDeltaTime * 1000f);
+                if (allocRec.Valid) allocSum += allocRec.LastValue;
                 if (el >= nextRow)
                 {
-                    csv.AppendLine($"{el:0},{frames},{worst:0.0},{GC.CollectionCount(0)},{mem.LastValue / 1048576f:0},{gcMem.LastValue / 1048576f:0},{env.timeOfDay:0.0},{(Weather.Instance.RainAmount > 0.1f ? 1 : 0)}");
+                    csv.AppendLine($"{el:0},{frames},{worst:0.0},{GC.CollectionCount(0)},{mem.LastValue / 1048576f:0},{gcMem.LastValue / 1048576f:0},{env.timeOfDay:0.0},{(Weather.Instance.RainAmount > 0.1f ? 1 : 0)},{(allocRec.Valid ? (allocSum / 1024).ToString() : "")}");
+                    allocSum = 0;
                     frames = 0; worst = 0; nextRow += 1f;
                     if ((int)el % 30 == 0) File.WriteAllText(file, csv.ToString());
                 }
                 yield return null;
             }
             GameInput.SimMove = Vector2.zero; GameInput.SimRun = false;
-            mem.Dispose(); gcMem.Dispose();
+            mem.Dispose(); gcMem.Dispose(); allocRec.Dispose();
             File.WriteAllText(file, csv.ToString());
             Debug.Log($"[Soak] done {seconds:0} s -> {file}");
             yield return new WaitForSeconds(0.3f);

@@ -27,7 +27,8 @@ def main(d, out_md):
          f"| 帧率：第 1 分钟（30–90 s）→ 最后 1 分钟 | {fa:.1f} → {la:.1f} FPS（{drop * 100:+.1f}%） |",
          f"| 最慢一帧（全程） | {max(worst):.1f} ms |",
          f"| 内存：第 1 分钟 → 最后 1 分钟 | {m0:.0f} → {m1:.0f} MB（{m1 - m0:+.0f} MB） |",
-         f"| GC 次数（全程） | {rows[-1]['gc_count']} |", "",
+         f"| GC 次数（全程） | {rows[-1]['gc_count']} |",
+         (f"| 托管内存分配（30 s 后平均） | {sum(float(r['alloc_kb']) for r in rows if int(r['t']) >= 30) / max(1, sum(1 for r in rows if int(r['t']) >= 30)):.1f} KB/s |" if rows and rows[0].get('alloc_kb') else "| 托管内存分配 | 未记录 |"), "",
          f"**结论**：{'通过' if ok else '未通过'}（标准：跑完不崩溃，最后 1 分钟帧率不低于第 1 分钟的 90%）。"]
     try:
         import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
