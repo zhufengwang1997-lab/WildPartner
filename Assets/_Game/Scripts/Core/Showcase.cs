@@ -21,7 +21,7 @@ namespace WildPartner.Core
     public class Showcase : MonoBehaviour
     {
         string _out, _dir;
-        bool _mode1123d;
+        bool _mode1123d, _mode1123e;
         int _frame;
         bool _record;
 
@@ -30,6 +30,7 @@ namespace WildPartner.Core
         {
             var args = Environment.GetCommandLineArgs();
             if (args.Contains("-showcase1123d")) { var s = new GameObject("Showcase").AddComponent<Showcase>(); s._mode1123d = true; return; }
+            if (args.Contains("-showcase1123e")) { var s = new GameObject("Showcase").AddComponent<Showcase>(); s._mode1123e = true; return; }
             if (!args.Contains("-showcase")) return;
             new GameObject("Showcase").AddComponent<Showcase>();
         }
@@ -43,6 +44,7 @@ namespace WildPartner.Core
             var flow = GameFlow.Instance;
             flow.NewGame();
             if (_mode1123d) { yield return Run1123d(); yield break; }
+            if (_mode1123e) { yield return Run1123e(); Application.Quit(); yield break; }
             float t = 0;
             yield return null;
             while (CabinInterior.Busy && t < 10f) { t += Time.deltaTime; yield return null; }
@@ -196,6 +198,150 @@ namespace WildPartner.Core
             Debug.Log($"[Showcase] done -> {_out}");
             yield return new WaitForSecondsRealtime(0.5f);
             Application.Quit();
+        }
+
+        // ---------------------------------------------------------------- 试玩反馈 1123e
+        IEnumerator Run1123e()
+        {
+            float t = 0;
+            yield return null;
+            while (CabinInterior.Busy && t < 10f) { t += Time.deltaTime; yield return null; }
+            var env = EnvController.Instance; var player = PlayerController.Instance;
+            var ci = CabinInterior.Instance;
+            Weather.Instance.Set(false, true);
+
+            // ---- 1: the inside of the door at day, dusk and night ----
+            CabinInterior.SetInside(true);
+            var toDoor = ci.insideDoor - ci.roomCenter; toDoor.y = 0;
+            float yaw = Quaternion.LookRotation(toDoor).eulerAngles.y;
+            var at = ci.roomCenter - toDoor.normalized * 0.8f;
+            player.Teleport(at, yaw);
+            DoorDiagnostics(ci);
+            foreach (var (hour, name) in new[] { (13f, "day"), (18.3f, "dusk"), (22f, "night") })
+            {
+                env.timeOfDay = hour; env.Apply();
+                player.SetCameraOrbit(yaw + 18f, 4f); player.SetCameraDistance(0.75f);
+                yield return new WaitForSeconds(1.2f);
+                Still($"1_door_inside_{name}");
+                yield return new WaitForSeconds(0.3f);
+            }
+            if (!_door1123eOnly) { yield return Run1123eCreatures(env, player, GameFlow.Instance); yield break; }
+            {
+                env.timeOfDay = 22f; env.Apply();
+                yield return new WaitForSeconds(0.5f);
+                var camT = Camera.main.transform;
+                foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+                    if (r.enabled && r.isVisible && r.sharedMaterial && r.sharedMaterial.renderQueue >= 2450)
+                        Debug.Log($"[DoorVis] {r.name} ({r.GetType().Name}) parent {(r.transform.parent ? r.transform.parent.name : "-")} shader {r.sharedMaterial.shader.name} q {r.sharedMaterial.renderQueue} center {r.bounds.center} size {r.bounds.size} dist {Vector3.Distance(camT.position, r.bounds.center):0.0}");
+                Debug.Log($"[DoorVis] camera at {camT.position} fwd {camT.forward}");
+                foreach (var l in FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                    if (Vector3.Distance(l.transform.position, camT.position) < 12f || l.type == LightType.Directional)
+                        Debug.Log($"[DoorLight] {l.name} parent {(l.transform.parent ? l.transform.parent.name : "-")} {l.type} on {l.enabled && l.gameObject.activeInHierarchy} I={l.intensity:0.00} range {l.range:0.0} pos {l.transform.position} col {l.color}");
+                foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+                    if (r.enabled && r.isVisible && Vector3.Distance(r.bounds.center, camT.position) < 6f)
+                        Debug.Log($"[DoorNear] {r.name} parent {(r.transform.parent ? r.transform.parent.name : "-")} shader {(r.sharedMaterial ? r.sharedMaterial.shader.name : "-")} center {r.bounds.center} size {r.bounds.size}");
+                var leafR = ci.insideHinge.GetComponentsInChildren<Renderer>().First(r => r.name == "WoodDoor");
+                var day = FindObjectsByType<Renderer>(FindObjectsSortMode.None).First(r => r.name == "DoorDaylight");
+                day.enabled = false; yield return new WaitForSeconds(0.5f); Still("x_no_daylight_panel"); yield return new WaitForSeconds(0.3f); day.enabled = true;
+                leafR.enabled = false; yield return new WaitForSeconds(0.5f); Still("x_no_leaf"); yield return new WaitForSeconds(0.3f); leafR.enabled = true;
+                var beam = FindObjectsByType<Renderer>(FindObjectsSortMode.None).First(r => r.name == "DoorBacking").sharedMaterial;
+                var keep = leafR.sharedMaterial; leafR.sharedMaterial = beam; yield return new WaitForSeconds(0.5f); Still("x_leaf_beam_mat"); yield return new WaitForSeconds(0.3f); leafR.sharedMaterial = keep;
+                var pr = player.GetComponentsInChildren<Renderer>();
+                foreach (var r in pr) r.enabled = false;
+                yield return new WaitForSeconds(0.5f); Still("x_no_player"); yield return new WaitForSeconds(0.3f);
+                foreach (var r in pr) r.enabled = true;
+                Debug.Log($"[DoorVis] player at {player.transform.position} door {ci.insideDoor} room {ci.roomCenter}");
+                foreach (var v in FindObjectsByType<UnityEngine.Rendering.Volume>(FindObjectsSortMode.None)) v.enabled = false;
+                yield return new WaitForSeconds(0.5f); Still("x_no_post"); yield return new WaitForSeconds(0.3f);
+                yield break;
+            }
+        }
+        bool _door1123eOnly = Environment.GetCommandLineArgs().Contains("-dooronly");
+
+        IEnumerator Run1123eCreatures(EnvController env, PlayerController player, GameFlow flow)
+        {
+            CabinInterior.SetInside(false);
+            var creatures = FindObjectsByType<Creature>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var id in new[] { "ink_koi", "moon_butterfly" })
+            {
+                var c = creatures.FirstOrDefault(k => k.defId == id && k.Current != Creature.State.Companion);
+                if (c) { c.gameObject.SetActive(true); CaptureSystem.Award(c); }
+                yield return null;
+            }
+            env.timeOfDay = 10.5f; env.Apply(); Weather.Instance.Set(false, true);
+
+            // ---- 2a: the koi in its bottle at her hip, walking ----
+            flow.Pets.SetActive("ink_koi");
+            var meadow = new Vector2(WorldLayout.StoneCircle.x + 14f, WorldLayout.StoneCircle.y - 8f);
+            player.Teleport(new Vector3(meadow.x, Creature.GroundHeight(meadow.x, meadow.y) + 0.2f, meadow.y), 0);
+            player.SetCameraOrbit(95f, 8f); player.SetCameraDistance(0.7f);
+            yield return new WaitForSeconds(1.5f);
+            Still("2_koi_bottle_close");
+            GameInput.SimMove = new Vector2(0, 0.45f);
+            yield return Record("clip_2_koi_bottle_walk", 4f, 2f, "2_koi_bottle_walk");
+            GameInput.SimMove = Vector2.zero;
+
+            // ---- 2b: by the water it leaps in, swims; leaving the water it leaps back ----
+            var spot = FishingSpot.All.FirstOrDefault(f => f.label == "木桥边") ?? FishingSpot.All.First();
+            var back = spot.stand - Quaternion.Euler(0, spot.yaw, 0) * Vector3.forward * 6f;
+            player.Teleport(new Vector3(back.x, Creature.GroundHeight(back.x, back.z) + 0.2f, back.z), spot.yaw);
+            player.SetCameraOrbit(spot.yaw + 60f, 14f); player.SetCameraDistance(0.9f);
+            yield return new WaitForSeconds(1f);
+            GameInput.SimMove = new Vector2(0, 0.6f);
+            StartCoroutine(Record("clip_2_koi_into_water", 9f, 4.5f, "2_koi_in_water"));
+            yield return new WaitForSeconds(2.6f);
+            GameInput.SimMove = Vector2.zero;
+            yield return new WaitForSeconds(6.6f);
+
+            // ---- 2c: walking on the lake: the koi under her feet, red rings at each step ----
+            var lake = WorldLayout.LakeCentre + new Vector2(-WorldLayout.LakeRadii.x * 0.6f, 0);
+            player.Teleport(new Vector3(lake.x, WorldLayout.LakeLevel + 0.6f, lake.y), 90);
+            player.SetCameraOrbit(90f + 150f, 26f); player.SetCameraDistance(0.85f);
+            yield return new WaitForSeconds(1f);
+            GameInput.SimMove = new Vector2(0, 0.55f);
+            yield return Record("clip_2_koi_water_walk", 5f, 3f, "2_koi_water_walk");
+            GameInput.SimMove = Vector2.zero;
+
+            // ---- 3: the moon butterfly by day, at dusk and at night (stardust) ----
+            flow.Pets.SetActive("moon_butterfly");
+            player.Teleport(new Vector3(meadow.x, Creature.GroundHeight(meadow.x, meadow.y) + 0.2f, meadow.y), 0);
+            player.SetCameraOrbit(160f, 6f); player.SetCameraDistance(0.55f);
+            foreach (var (hour, name) in new[] { (12f, "day"), (18.6f, "dusk"), (22f, "night") })
+            {
+                env.timeOfDay = hour; env.Apply();
+                yield return new WaitForSeconds(3.2f);
+                Still($"3_butterfly_{name}");
+                yield return new WaitForSeconds(0.3f);
+            }
+            GameInput.SimMove = new Vector2(0, 0.8f);
+            yield return Record("clip_3_butterfly_stardust", 5f, 2.5f, "3_butterfly_stardust");
+            GameInput.SimMove = Vector2.zero;
+            Weather.Instance.Set(true, true);
+            yield return new WaitForSeconds(3.2f);
+            Still("3_butterfly_rainy_night");
+            Weather.Instance.Set(false, true);
+            flow.Pets.SetActive("cat");
+        }
+
+        static void DoorDiagnostics(CabinInterior ci)
+        {
+            if (!ci.insideHinge) { Debug.Log("[Door] no inside hinge"); return; }
+            foreach (var r in ci.insideHinge.GetComponentsInChildren<Renderer>())
+                foreach (var m in r.sharedMaterials)
+                {
+                    if (!m) continue;
+                    string e = m.HasProperty("_Emission") ? m.GetFloat("_Emission").ToString("0.00") : "-";
+                    string c = m.HasProperty("_Cull") ? m.GetFloat("_Cull").ToString("0") : "-";
+                    string col = m.HasProperty("_BaseColor") ? m.GetColor("_BaseColor").ToString() : "-";
+                    string rim = m.HasProperty("_RimColor") ? m.GetColor("_RimColor").ToString() : "-";
+                    Debug.Log($"[Door] {r.name}: mat {m.name} shader {m.shader.name} emission {e} cull {c} base {col} rim {rim} probe {r.reflectionProbeUsage} lightprobe {r.lightProbeUsage} bounds {r.bounds.center}");
+                }
+            foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None))
+                if (l.enabled && l.intensity > 0 && (l.type == LightType.Directional || Vector3.Distance(l.transform.position, ci.insideDoor) < l.range + 1))
+                    Debug.Log($"[Door] light {l.name} {l.type} I={l.intensity:0.00} range {l.range:0.0} dist {Vector3.Distance(l.transform.position, ci.insideDoor):0.0} col {l.color}");
+            foreach (var r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+                if (Vector3.Distance(r.bounds.center, ci.insideDoor) < 1.5f)
+                    Debug.Log($"[Door] near renderer {r.name} mat {(r.sharedMaterial ? r.sharedMaterial.name : "-")} shader {(r.sharedMaterial ? r.sharedMaterial.shader.name : "-")} enabled {r.enabled}");
         }
 
         // ---------------------------------------------------------------- 试玩反馈 1123d clips
