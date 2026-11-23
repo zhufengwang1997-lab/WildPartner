@@ -37,6 +37,7 @@ namespace WildPartner.Creatures
         void Awake() { Instance = this; }
         void OnDestroy() { if (Instance == this) Instance = null; }
 
+        public static Creature Pet(string id) => Companion(id);
         static Creature Companion(string id) =>
             FindObjectsByType<Creature>(FindObjectsSortMode.None).FirstOrDefault(c => c.defId == id && c.Current == Creature.State.Companion);
 
@@ -120,7 +121,7 @@ namespace WildPartner.Creatures
             }
         }
 
-        void Puff(Vector3 at)
+        public void Puff(Vector3 at)
         {
             var go = new GameObject("PetPuff", typeof(ParticleSystem));
             go.transform.position = at;

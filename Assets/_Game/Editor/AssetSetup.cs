@@ -650,6 +650,38 @@ namespace WildPartner.EditorTools
             var t3 = sOver.AddTransition(loco); t3.duration = 0.15f; t3.hasExitTime = true; t3.exitTime = 0.95f;
         }
 
+        /// <summary>1123d-1 fishing: int "Fish" (0 none, 1 cast, 2 wait, 3 hook, 4 reel) picks the state from any state;
+        /// back to locomotion when it returns to 0.</summary>
+        static void AddFishing(UnityEditor.Animations.AnimatorController ctrl, UnityEditor.Animations.AnimatorStateMachine sm,
+                               UnityEditor.Animations.AnimatorState loco, string fbx)
+        {
+            AnimationClip Find(string n) { foreach (var o in AssetDatabase.LoadAllAssetsAtPath(fbx)) if (o is AnimationClip c && c.name == n) return c; return null; }
+            string[] names = { "FishCast", "FishWait", "FishHook", "FishReel" };
+            if (names.Any(n => !Find(n))) { Debug.LogWarning("[Setup] fishing clips missing in " + fbx); return; }
+            foreach (var st in sm.states.ToArray()) if (names.Contains(st.state.name)) sm.RemoveState(st.state);
+            foreach (var pr in ctrl.parameters.ToArray()) if (pr.name == "Fish") ctrl.RemoveParameter(pr);
+            ctrl.AddParameter("Fish", AnimatorControllerParameterType.Int);
+            var Eq = UnityEditor.Animations.AnimatorConditionMode.Equals;
+            for (int i = 0; i < names.Length; i++)
+            {
+                var st = sm.AddState(names[i]); st.motion = Find(names[i]);
+                var a = sm.AddAnyStateTransition(st); a.duration = i == 2 ? 0.06f : 0.18f; a.hasExitTime = false; a.canTransitionToSelf = false;
+                a.AddCondition(Eq, i + 1, "Fish");
+                var back = st.AddTransition(loco); back.duration = 0.25f; back.hasExitTime = false; back.AddCondition(Eq, 0, "Fish");
+            }
+        }
+
+        /// <summary>Batch: add the fishing states to the existing Witch controller.</summary>
+        public static void PatchWitchFishing()
+        {
+            AssetDatabase.Refresh();
+            var ctrl = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>($"{AnimDir}/Witch.controller");
+            var sm = ctrl.layers[0].stateMachine;
+            AddFishing(ctrl, sm, sm.defaultState, $"{Rigged}/Witch.fbx");
+            EditorUtility.SetDirty(ctrl); AssetDatabase.SaveAssets();
+            Debug.Log("[Setup] witch controller states: " + string.Join(", ", sm.states.Select(s => s.state.name)));
+        }
+
         /// <summary>Batch (1123c-C2): refresh just the water materials.</summary>
         public static void WaterOnly()
         {
@@ -699,7 +731,7 @@ namespace WildPartner.EditorTools
             AddMoods(ctrl, sm, state, Clip);
             AddGraze(ctrl, sm, state, Clip);
             AddSneakCapture(ctrl, sm, state, Clip, sp.Sneak);
-            if (model == "Witch") AddSwimClimb(ctrl, sm, state, fbx);
+            if (model == "Witch") { AddSwimClimb(ctrl, sm, state, fbx); AddFishing(ctrl, sm, state, fbx); }
             EditorUtility.SetDirty(ctrl);
             return ctrl;
         }

@@ -115,6 +115,16 @@ namespace WildPartner.Player
         /// <summary>Orbit distance factor (0.65..1.9, 1 = default); the cabin interior starts close.</summary>
         public void SetCameraDistance(float k) { if (_orbit) _orbit.RadialAxis.Value = k; }
 
+        public float CameraRadial => _orbit ? _orbit.RadialAxis.Value : 1f;
+        /// <summary>Ease the orbit camera towards a yaw / pitch / distance (fishing: behind her right shoulder).</summary>
+        public void BlendCameraOrbit(float yaw, float pitch, float radial, float k)
+        {
+            if (!_orbit) return;
+            _orbit.HorizontalAxis.Value = Mathf.LerpAngle(_orbit.HorizontalAxis.Value, yaw, k);
+            _orbit.VerticalAxis.Value = Mathf.Lerp(_orbit.VerticalAxis.Value, pitch, k);
+            _orbit.RadialAxis.Value = Mathf.Lerp(_orbit.RadialAxis.Value, radial, k);
+        }
+
         /// <summary>Point the orbit camera from a given yaw/pitch (cut, no damping).</summary>
         public void SetCameraOrbit(float yaw, float pitch)
         {
@@ -450,6 +460,15 @@ namespace WildPartner.Player
             if (Swimming) _swimLevel = level;
         }
 
+        /// <summary>Current of the river where she is (试玩反馈 1123d-2), downstream at up to `scale` x the local
+        /// flow factor m/s; the lake and the pond are still.</summary>
+        public Vector3 RiverPush { get; private set; }
+        Vector3 RiverCurrent(Vector3 p, float scale)
+        {
+            RiverPush = World.WorldLayout.RiverFlow(p.x, p.z, out var d, out float sp) ? new Vector3(d.x, 0, d.y) * sp * scale : Vector3.zero;
+            return RiverPush;
+        }
+
         /// <summary>Extra horizontal velocity from the current round the lake islands.</summary>
         Vector3 Undertow(Vector3 p)
         {
@@ -673,10 +692,12 @@ namespace WildPartner.Player
                 float targetY = Mathf.Max(_swimLevel - SwimSink + Mathf.Sin(Time.time * 2.6f) * 0.03f, GroundAt(transform.position) + 0.02f);
                 _vy = Mathf.Clamp((targetY - transform.position.y) * 4f, -3f, 1.5f);
                 _jumping = false; _windup = -1f; _airTime = 0f;
-                drift = Undertow(transform.position);
+                drift = Undertow(transform.position) + RiverCurrent(transform.position, 0.5f);
                 _strokeTimer += dt * Mathf.Max(0.35f, Speed / swimSpeed);
                 if (_strokeTimer > 1.2f) { _strokeTimer -= 1.2f; if (Speed > 0.2f) SwimStroke?.Invoke(); }
             }
+            else if (WaterWalking) drift = RiverCurrent(transform.position, 0.2f);   // the koi's footing slides a little downstream
+            else RiverPush = Vector3.zero;
             UpdateWaterFloor();
             _cc.Move((transform.forward * Speed + Vector3.up * _vy + drift) * dt);
             GuardWorld(dt, _cc.isGrounded);

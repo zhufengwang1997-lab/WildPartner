@@ -57,6 +57,16 @@ namespace WildPartner.Audio
             _fire = Loop(MakeCrackle(6f), 0f);
             CabinInterior.DoorOpened += () => _sfx.PlayOneShot(_creak, 0.55f);
             CabinInterior.DoorClosed += () => _sfx.PlayOneShot(_thud, 0.5f);
+            // 1123d-1 fishing: whoosh of the cast, the float's plop, the bite (plop + bell), reel clicks
+            var whoosh = MakeWhoosh(); var tick = MakeTick(); var bell = MakeChime(new[] { 12, 19 }, 0.07f);
+            FishingSystem.CastOut += () => _sfx.PlayOneShot(whoosh, 0.5f);
+            FishingSystem.FloatLanded += () => { if (_water.Length > 0) { _steps.pitch = 1.45f; _steps.PlayOneShot(_water[0], 0.45f); } };
+            FishingSystem.Nibble += () => { if (_water.Length > 0) { _steps.pitch = 1.8f; _steps.PlayOneShot(_water[_water.Length - 1], 0.22f); } };
+            FishingSystem.Bite += () => { _sfx.PlayOneShot(bell, 0.6f); if (_water.Length > 0) { _steps.pitch = 1.1f; _steps.PlayOneShot(_water[0], 0.8f); } };
+            FishingSystem.Hooked += () => _sfx.PlayOneShot(whoosh, 0.35f);
+            FishingSystem.ReelTick += () => _sfx.PlayOneShot(tick, 0.25f);
+            FishingSystem.Lost += _ => _sfx.PlayOneShot(_fail, 0.45f);
+            FishingSystem.Caught += koi => { if (_water.Length > 0) { _steps.pitch = 0.9f; _steps.PlayOneShot(_water[0], 0.8f); } if (!koi) _sfx.PlayOneShot(bell, 0.3f); };
             _meow = MakeMeow();
             Creature.Meowed += p =>
             {
@@ -65,6 +75,28 @@ namespace WildPartner.Audio
                 _sfx.PlayOneShot(_meow, Mathf.Lerp(0.55f, 0.15f, d / 25f));
                 _sfx.pitch = 1f;
             };
+        }
+
+        static AudioClip MakeWhoosh()
+        {
+            const int sr = 44100; int n = (int)(sr * 0.45f);
+            var d = new float[n]; var r = new System.Random(7); float lp = 0;
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)n, env = Mathf.Sin(t * Mathf.PI) * Mathf.Sin(t * Mathf.PI);
+                float k = Mathf.Lerp(0.04f, 0.35f, Mathf.Sin(t * Mathf.PI));   // filter opens and closes: a swish
+                lp += ((float)r.NextDouble() * 2 - 1 - lp) * k;
+                d[i] = lp * env * 0.9f;
+            }
+            var c = AudioClip.Create("Whoosh", n, 1, sr, false); c.SetData(d, 0); return c;
+        }
+
+        static AudioClip MakeTick()
+        {
+            const int sr = 44100; int n = (int)(sr * 0.04f);
+            var d = new float[n];
+            for (int i = 0; i < n; i++) { float t = i / (float)sr; d[i] = Mathf.Sin(t * 2 * Mathf.PI * 2400f) * Mathf.Exp(-t * 180f) * 0.6f; }
+            var c = AudioClip.Create("Tick", n, 1, sr, false); c.SetData(d, 0); return c;
         }
 
         AudioSource Loop(AudioClip c, float vol)

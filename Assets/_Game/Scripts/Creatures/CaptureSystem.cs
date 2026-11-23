@@ -32,6 +32,13 @@ namespace WildPartner.Creatures
             Progress = 0;
         }
 
+        /// <summary>Caught some other way (the koi, by fishing: 1123d-1).</summary>
+        public static void Award(Creature c)
+        {
+            Debug.Log($"[Capture] {c.Def.id} caught (fishing)");
+            Captured?.Invoke(c);
+        }
+
         public static void NotifyFled(Creature c)
         {
             if (Target == c)

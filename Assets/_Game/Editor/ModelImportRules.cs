@@ -84,7 +84,7 @@ namespace WildPartner.EditorTools
         [System.Serializable] public class StepTable { public System.Collections.Generic.List<StepEntry> clips = new System.Collections.Generic.List<StepEntry>(); }
 
         static readonly System.Collections.Generic.HashSet<string> LoopClips = new System.Collections.Generic.HashSet<string>
-        { "Idle", "Walk", "Run", "Sneak", "Ride", "Hop", "Swim", "Flap", "Fall", "Eat", "SitLoop", "LieLoop", "RubLoop", "SitLick", "BellyUp", "Rub", "Graze", "SneakIdle", "Capture", "Point", "Climb" };
+        { "Idle", "Walk", "Run", "Sneak", "Ride", "Hop", "Swim", "Flap", "Fall", "Eat", "SitLoop", "LieLoop", "RubLoop", "SitLick", "BellyUp", "Rub", "Graze", "SneakIdle", "Capture", "Point", "Climb", "FishWait", "FishReel" };
 
         void OnPreprocessTexture()
         {

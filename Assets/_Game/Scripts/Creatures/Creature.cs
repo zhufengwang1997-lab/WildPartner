@@ -56,7 +56,9 @@ namespace WildPartner.Creatures
 
         /// <summary>Wild, calm enough, and its species not collected yet: once one of a species is caught the others
         /// stay wild, still run from her, but show no prompt and cannot be caught (试玩反馈 1123b-6).</summary>
-        public bool CanBeCaptured => (Current == State.Wander || Current == State.Alert) && !SpeciesTaken;
+        public bool CanBeCaptured => (Current == State.Wander || Current == State.Alert) && !SpeciesTaken && !Def.fishable;
+        /// <summary>Moved by someone else for now (the koi on the line, 1123d-1): no senses, no wandering.</summary>
+        public bool Scripted;
         public bool SpeciesTaken => Current != State.Companion && GameFlow.Instance != null && GameFlow.Instance.Save.HasCaught(defId);
         /// <summary>Centre of its home range: its own home for multi-instance species, else the current anchor.</summary>
         public Vector2 Home => Def.homes != null ? Def.homes[Mathf.Clamp(instance, 0, Def.homes.Length - 1)] : Def.anchors[Mathf.Clamp(_anchor, 0, Def.anchors.Length - 1)];
@@ -224,7 +226,7 @@ namespace WildPartner.Creatures
 
         void Update()
         {
-            if (Current == State.Hidden) return;
+            if (Current == State.Hidden || Scripted) return;
             _stateTime += Time.deltaTime;
             _appear = Mathf.MoveTowards(_appear, 1, Time.deltaTime * 1.5f);
             if (_visual && Current != State.Companion) _visual.localScale = _visualScale * Mathf.SmoothStep(0.01f, 1, _appear);
@@ -300,7 +302,11 @@ namespace WildPartner.Creatures
 
         void Wander()
         {
-            if (Def.wanderSpeed <= 0.01f) return; // perched (owl) stays put until disturbed
+            if (Def.wanderSpeed <= 0.01f)   // perched: stays put until disturbed (and settles back on its perch after)
+            {
+                if (Def.movement == Movement.Flying && (transform.position - AnchorPos(_anchor)).sqrMagnitude > 0.004f) MoveTo(AnchorPos(_anchor), 1.2f);
+                return;
+            }
             // rigged grazers stop at the end of a stroll and graze for a while (deer: GrazeDown -> Graze)
             if (_pauseUntil > _stateTime)
             {
@@ -418,7 +424,8 @@ namespace WildPartner.Creatures
             }
             else
             {
-                float g = GroundHeight(p.x, p.z) + (Def.hover > 0 ? Def.hover : (Current == State.Flee ? 4f : 0f));
+                // a perched flyer (moon butterfly) startled off its flower flutters up 2.5 m, then settles back
+                float g = GroundHeight(p.x, p.z) + (Def.hover > 0 ? Def.hover + (Current == State.Flee && Def.wanderSpeed <= 0f ? 2.5f : 0f) : (Current == State.Flee ? 4f : 0f));
                 p.y = Mathf.Lerp(p.y, g, 1 - Mathf.Exp(-4f * Time.deltaTime));
             }
             transform.position = p;
@@ -518,6 +525,8 @@ namespace WildPartner.Creatures
             _animator.SetFloat(SpeedId, param, 0.1f, dt);
             if (_hasMood) _animator.SetInteger(MoodId, mood);
             _animator.speed = mood == 0 ? play : 1f;
+            // 1123d-3: resting on the moonflower it opens and closes its wings slowly
+            if (Def.id == "moon_butterfly" && Current != State.Companion && Current != State.Flee) _animator.speed = 0.22f;
         }
 
         void FaceTowards(Vector3 dir)
@@ -530,6 +539,11 @@ namespace WildPartner.Creatures
         void OnDestroy() => s_all.Remove(this);
         /// <summary>Cat is standing ahead of the witch, pointing at a wild creature (smoke test / UI).</summary>
         public bool IsLeading => _leadArrived;
+        Vector3 _lookAt; float _lookTime;
+        /// <summary>Stop, look at a point for a few seconds and meow once (the cat on a clear night by the lake).</summary>
+        public void LookAndMeow(Vector3 at, float seconds = 3f) { _lookAt = at; _lookTime = seconds; _nextMeow = 0.4f; }
+        public bool LookingAround => _lookTime > 0f;
+        public Vector3 LookTarget => _lookAt;
         public void LeadSoon() => _leadCooldown = 0f;
 
         /// <summary>Cat only (玩法设计 tier 2 "带路"): every so often while the witch is on the move, if a wild
@@ -804,6 +818,17 @@ namespace WildPartner.Creatures
             if (!PetShown) { transform.position = player.transform.position + Vector3.down * 50f; return; }   // stowed away
             if (Def.id == "moon_butterfly") { UpdateButterflyPet(player); return; }
             if (Def.rideable && UpdateRide(player)) return;
+            if (_lookTime > 0f)
+            {
+                // 1123d-3: the cat stops and stares across the lake at the glowing moonflower
+                _lookTime -= Time.deltaTime;
+                if (_agent && _agent.enabled) _agent.isStopped = true;
+                FaceTowards(_lookAt - transform.position);
+                _nextMeow -= Time.deltaTime;
+                if (_nextMeow <= 0f) { Meowed?.Invoke(transform.position); _nextMeow = 9f; }
+                if (_lookTime <= 0f && _agent && _agent.enabled) _agent.isStopped = false;
+                return;
+            }
             if (Def.id == "cat" && Def.movement == Movement.Ground && UpdateLead(player)) return;
             if (Def.id == "cat" && Def.movement == Movement.Ground && UpdateSideSpot(player)) return;
             // Formation slots behind the player so companions never stack on each other.

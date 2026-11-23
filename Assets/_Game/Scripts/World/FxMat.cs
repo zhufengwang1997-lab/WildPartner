@@ -53,6 +53,30 @@ namespace WildPartner.World
             }
         }
 
+        static Texture2D _glow;
+        /// <summary>The soft dot with its colour fading to black as well (1123d): additive blending adds the colour and
+        /// ignores alpha, so with the plain white dot a quad drew as a hard square.</summary>
+        public static Texture2D GlowDot
+        {
+            get
+            {
+                if (_glow) return _glow;
+                const int n = 64;
+                _glow = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, name = "FxGlow" };
+                var px = new Color32[n * n];
+                for (int y = 0; y < n; y++)
+                    for (int x = 0; x < n; x++)
+                    {
+                        float dx = (x + 0.5f) / n * 2 - 1, dy = (y + 0.5f) / n * 2 - 1;
+                        float a = Mathf.Clamp01(1 - Mathf.Sqrt(dx * dx + dy * dy)); a = a * a * (3 - 2 * a); a *= a;
+                        byte v = (byte)(a * 255);
+                        px[y * n + x] = new Color32(v, v, v, v);
+                    }
+                _glow.SetPixels32(px); _glow.Apply();
+                return _glow;
+            }
+        }
+
         /// <summary>Alpha-blended soft dots (spray, mist).</summary>
         public static Material Alpha => _alpha ? _alpha : (_alpha = Make(false));
         /// <summary>Additive soft dots (magic sparkles).</summary>
@@ -67,7 +91,7 @@ namespace WildPartner.World
             m.SetFloat("_SrcBlend", (float)(additive ? UnityEngine.Rendering.BlendMode.One : UnityEngine.Rendering.BlendMode.SrcAlpha));
             m.SetFloat("_DstBlend", (float)(additive ? UnityEngine.Rendering.BlendMode.One : UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha));
             m.SetFloat("_ZWrite", 0); m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT"); m.renderQueue = 3000;
-            m.SetTexture("_BaseMap", Dot);
+            m.SetTexture("_BaseMap", additive ? GlowDot : Dot);
             return m;
         }
     }

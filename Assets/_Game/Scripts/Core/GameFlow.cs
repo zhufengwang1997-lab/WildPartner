@@ -60,6 +60,10 @@ namespace WildPartner.Core
             CaptureSystem.Interrupted += c => Toast?.Invoke($"{c.Def.name}受惊逃走了！试试按住 Ctrl 潜行靠近。");
             CaptureSystem.Startled += c => Toast?.Invoke($"{c.Def.name}竖起了耳朵——站着别动，等它放松下来再试。");
             Pets = gameObject.AddComponent<PetSwitcher>();
+            gameObject.AddComponent<FishingSystem>();   // 1123d-1: the koi is caught by fishing
+            FishingSystem.Lost += why => Toast?.Invoke(why);
+            FishingSystem.Bite += () => Toast?.Invoke("浮标沉下去了——快按 E 提竿！");
+            FishingSystem.Caught += koi => { if (!koi) Toast?.Invoke("钓到一条小银鱼，随手放回了水里。再试一次吧！"); };
             PetSwitcher.Switched += d => Toast?.Invoke($"现在陪着你的是{d.name}：{PetSwitcher.Ability(d.id)}");
             Player.PlayerController.EdgeReached += () => Toast?.Invoke("山太陡了，林子也太密——山谷外面去不了，回去吧。");
             Player.PlayerController.Recovered += () => Toast?.Invoke("好像迷路了……回到了刚才走过的地方。");
@@ -163,7 +167,8 @@ namespace WildPartner.Core
         {
             if (State == FlowState.Playing || State == FlowState.Journal || State == FlowState.Paused || State == FlowState.Map)
             {
-                if (GameInput.PausePressed)
+                if (GameInput.PausePressed && State == FlowState.Playing && FishingSystem.Active) { }   // Esc puts the rod away instead
+                else if (GameInput.PausePressed)
                 {
                     if (State == FlowState.Playing) Pause(); else Resume();
                 }

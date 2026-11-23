@@ -8,7 +8,7 @@ namespace WildPartner.Core
     {
         public static bool Blocked;
         /// <summary>Automation hooks (smoke test): behave as if the capture / sneak keys were held.</summary>
-        public static bool SimCapture, SimSneak, SimJump, SimInteract, SimRun, SimSwitchPet;
+        public static bool SimCapture, SimSneak, SimJump, SimInteract, SimRun, SimSwitchPet, SimPause;
         public static Vector2 SimMove;
 
         static Keyboard K => Keyboard.current;
@@ -58,7 +58,7 @@ namespace WildPartner.Core
         public static bool SwitchPetPressed => !Blocked && (SimSwitchPet || (K != null && K.jKey.wasPressedThisFrame) || (G != null && G.dpad.right.wasPressedThisFrame));
         public static bool JournalPressed => (K != null && K.tabKey.wasPressedThisFrame) || (G != null && G.selectButton.wasPressedThisFrame);
         public static bool MapPressed => (K != null && K.mKey.wasPressedThisFrame) || (G != null && G.dpad.up.wasPressedThisFrame);
-        public static bool PausePressed => (K != null && K.escapeKey.wasPressedThisFrame) || (G != null && G.startButton.wasPressedThisFrame);
+        public static bool PausePressed => SimPause || (K != null && K.escapeKey.wasPressedThisFrame) || (G != null && G.startButton.wasPressedThisFrame);
         public static bool DebugPressed => K != null && K.f3Key.wasPressedThisFrame;
         public static bool AnyKeyDown => (K != null && K.anyKey.wasPressedThisFrame) || (G != null && G.buttonSouth.wasPressedThisFrame);
         public static bool UsingGamepad => G != null && (G.leftStick.ReadValue().sqrMagnitude > 0.01f || G.rightStick.ReadValue().sqrMagnitude > 0.01f);

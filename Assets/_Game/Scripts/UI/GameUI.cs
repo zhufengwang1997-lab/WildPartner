@@ -100,6 +100,9 @@ namespace WildPartner.UI
 
         // ------------------------------------------------------------------ HUD
         Image _stamina;
+        // 1123d-1 fishing: tension bar (zones + pointer) and the reel-in progress
+        RectTransform _fishRoot, _fishPointer;
+        Image _fishProgress, _fishPointerImg;
         RawImage _petIcon; Text _petText; string _petShown; int _petCount = -1;
 
         void BuildHud()
@@ -131,6 +134,34 @@ namespace WildPartner.UI
             _petText.rectTransform.offsetMin = new Vector2(98, 6); _petText.rectTransform.offsetMax = new Vector2(-10, -6);
             _petText.horizontalOverflow = HorizontalWrapMode.Wrap;
             UIKit.Shade(_petText);
+
+            // 1123d-1: fishing tension bar - red (slack) | yellow | green | yellow | red (too tight), a white pointer
+            _fishRoot = UIKit.Rect(_hud, "FishTension", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 330), new Vector2(560, 34));
+            UIKit.Panel(_fishRoot, new Color(0.1f, 0.06f, 0.16f, 0.8f));
+            void Zone(float a, float b, Color c)
+            {
+                var z = UIKit.Rect(_fishRoot, "Zone", new Vector2(a, 0), new Vector2(b, 1), new Vector2(0, 0.5f), Vector2.zero, Vector2.zero);
+                z.offsetMin = new Vector2(1, 4); z.offsetMax = new Vector2(-1, -4);
+                UIKit.Panel(z, c);
+            }
+            var red = new Color(0.9f, 0.3f, 0.28f, 0.9f); var yel = new Color(0.95f, 0.78f, 0.3f, 0.85f); var grn = new Color(0.45f, 0.85f, 0.5f, 0.95f);
+            Zone(0, WildPartner.Creatures.FishingSystem.DangerLow, red);
+            Zone(WildPartner.Creatures.FishingSystem.DangerLow, WildPartner.Creatures.FishingSystem.SafeMin, yel);
+            Zone(WildPartner.Creatures.FishingSystem.SafeMin, WildPartner.Creatures.FishingSystem.SafeMax, grn);
+            Zone(WildPartner.Creatures.FishingSystem.SafeMax, WildPartner.Creatures.FishingSystem.DangerHigh, yel);
+            Zone(WildPartner.Creatures.FishingSystem.DangerHigh, 1, red);
+            var lblL = UIKit.Label(_fishRoot, "松", 20, TextAnchor.MiddleRight, Color.white); lblL.rectTransform.offsetMin = new Vector2(-50, 0); lblL.rectTransform.offsetMax = new Vector2(-570, 0);
+            var lblR = UIKit.Label(_fishRoot, "紧", 20, TextAnchor.MiddleLeft, Color.white); lblR.rectTransform.offsetMin = new Vector2(570, 0); lblR.rectTransform.offsetMax = new Vector2(50, 0);
+            _fishPointer = UIKit.Rect(_fishRoot, "Pointer", new Vector2(0.5f, 0), new Vector2(0.5f, 1), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(8, 14));
+            _fishPointerImg = UIKit.Panel(_fishPointer, Color.white);
+            var fp = UIKit.Rect(_fishRoot, "Progress", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 1), new Vector2(0, -6), new Vector2(0, 10));
+            UIKit.Panel(fp, new Color(0.1f, 0.06f, 0.16f, 0.8f));
+            var fpf = UIKit.Rect(fp, "Fill", Vector2.zero, new Vector2(1, 1), new Vector2(0, 0.5f), Vector2.zero, Vector2.zero);
+            fpf.offsetMin = new Vector2(2, 2); fpf.offsetMax = new Vector2(-2, -2);
+            _fishProgress = UIKit.Panel(fpf, new Color(0.75f, 0.6f, 1f));
+            _fishProgress.type = Image.Type.Filled; _fishProgress.fillMethod = Image.FillMethod.Horizontal;
+            if (!_fishProgress.sprite) _fishProgress.sprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), Vector2.one * 0.5f);
+            _fishRoot.gameObject.SetActive(false);
 
             // 1123c-B4: climbing stamina, shown while it is not full
             var st = UIKit.Rect(_hud, "Stamina", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 150), new Vector2(260, 16));
@@ -404,11 +435,24 @@ namespace WildPartner.UI
                 _stamina.color = f < 0.25f ? new Color(0.95f, 0.45f, 0.35f) : new Color(0.62f, 0.9f, 0.55f);
             }
 
+            // fishing (1123d-1)
+            var fish = WildPartner.Creatures.FishingSystem.Instance;
+            bool reeling = fish && fish.Current == WildPartner.Creatures.FishingSystem.Phase.Reel;
+            _fishRoot.gameObject.SetActive(reeling);
+            if (reeling)
+            {
+                _fishPointer.anchorMin = new Vector2(fish.Tension, 0); _fishPointer.anchorMax = new Vector2(fish.Tension, 1);
+                bool danger = fish.Tension < WildPartner.Creatures.FishingSystem.DangerLow || fish.Tension > WildPartner.Creatures.FishingSystem.DangerHigh;
+                _fishPointerImg.color = danger && Mathf.Repeat(Time.time * 6f, 1f) < 0.5f ? new Color(1f, 0.3f, 0.3f) : Color.white;
+                _fishProgress.fillAmount = fish.Progress;
+            }
+            string fishPrompt = WildPartner.Creatures.FishingSystem.Prompt;
+
             // capture prompt
-            var cand = CaptureSystem.Candidate;
+            var cand = WildPartner.Creatures.FishingSystem.Active ? null : CaptureSystem.Candidate;
             var target = CaptureSystem.Target;
             bool show = cand != null;
-            string interact = WildPartner.World.CabinInterior.Prompt ?? Creature.RidePrompt;
+            string interact = WildPartner.Creatures.FishingSystem.Active ? fishPrompt : WildPartner.World.CabinInterior.Prompt ?? Creature.RidePrompt ?? fishPrompt;
             _prompt.transform.parent.gameObject.SetActive(show || interact != null);
             if (!show && interact != null)
             {

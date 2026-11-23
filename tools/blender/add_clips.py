@@ -1,5 +1,7 @@
 """Add extra clips to the rigged witch and re-export Witch.fbx (all other clips untouched):
-  WakeUp (试玩反馈 1123c-A5), Swim (B3, breaststroke loop), Climb (B4, hand-over-hand loop), ClimbOver (B4, one-shot).
+  WakeUp (试玩反馈 1123c-A5), Swim (B3, breaststroke loop), Climb (B4, hand-over-hand loop), ClimbOver (B4, one-shot),
+  FishCast / FishWait / FishHook / FishReel (1123d-1: casting a rod held in the right hand; the rod itself is a prop
+  the game puts in Hand.R and points along the forearm).
 
     blender -b Art/Rigged/Witch_rig.blend -P tools/blender/add_clips.py -- <out_dir> [render_dir]
 
@@ -147,6 +149,49 @@ def climb_over(t):
         rot[f"Foot.{sfx}"] = [("x", -10 * k)]
     return rot, {"Hips": Vector((0, 0.45 * (1 - up), -1.0 * (1 - up)))}
 
+def rod_pose(r_lift, r_bend, l_lift, l_bend, lean=0.0, twist=0.0, crank=0.0):
+    """Both hands in front of her belly on a rod held in the right hand (the left hand on the reel, just below).
+    r_lift / l_lift: upper arm swung forward from hanging (deg); r_bend / l_bend: elbow flex (deg)."""
+    rot = {"Hips": [("x", lean * 0.5)], "Spine": [("x", lean * 0.3), ("z", twist * 0.4)],
+           "Chest": [("x", lean * 0.2), ("z", twist * 0.6)], "Neck": [("x", -4)], "Head": [("x", 6), ("z", -twist * 0.5)]}
+    rot["UpperArm.R"] = [("y", -50), ("x", -r_lift), ("z", -8)]   # arms point down: -x swings them forward
+    rot["ForeArm.R"] = [("x", -r_bend)]
+    rot["Hand.R"] = [("x", -10), ("z", -6)]
+    rot["UpperArm.L"] = [("y", 48), ("x", -(l_lift + 6 * math.cos(crank))), ("z", 14)]
+    rot["ForeArm.L"] = [("x", -l_bend - 14 * math.sin(crank))]
+    rot["Hand.L"] = [("x", -10 + 10 * math.sin(crank)), ("z", 10)]
+    for sfx, side in (("L", 1), ("R", -1)):
+        rot[f"Thigh.{sfx}"] = [("x", -4 if sfx == "L" else 6), ("z", 4 * side)]
+        rot[f"Shin.{sfx}"] = [("x", 6)]
+        rot[f"Foot.{sfx}"] = [("x", -2)]
+    return rot
+
+def fish_wait(p):
+    """2 s loop: holding the rod out, tip up, breathing; the rod hand rocks a little."""
+    br = math.sin(TAU * p)
+    return rod_pose(34 + 2 * br, 62 + 3 * math.sin(TAU * p + 1), 30, 78, lean=2 + br), {"Hips": Vector((0, 0, 0.004 * br))}
+
+def fish_cast(t):
+    """1.2 s: rod back over the right shoulder, weight back -> whip forward, arm out -> settle into holding."""
+    lift = track([(0, 34), (0.12, 60), (0.38, 200), (0.46, 200), (0.6, 78), (0.75, 62), (1, 34)], t)
+    bend = track([(0, 62), (0.38, 60), (0.46, 64), (0.6, 15), (0.75, 30), (1, 62)], t)
+    lean = track([(0, 2), (0.38, -8), (0.58, 12), (0.8, 6), (1, 2)], t)
+    twist = track([(0, 0), (0.38, 16), (0.6, -10), (1, 0)], t)
+    l = track([(0, 30), (0.38, 46), (0.6, 22), (1, 30)], t)
+    return rod_pose(lift, bend, l, 78, lean, twist), {"Hips": Vector((0, 0.04 * lean / 12, 0))}
+
+def fish_hook(t):
+    """0.6 s: the strike - rod snapped up and back, leaning back -> into the reeling stance."""
+    lift = track([(0, 34), (0.3, 100), (0.6, 92), (1, 56)], t)
+    bend = track([(0, 62), (0.3, 70), (0.6, 72), (1, 80)], t)
+    lean = track([(0, 2), (0.3, -12), (0.7, -9), (1, -7)], t)
+    return rod_pose(lift, bend, 34, 82, lean, -4), {"Hips": Vector((0, 0.05, 0))}
+
+def fish_reel(p):
+    """0.8 s loop: leaning back against the pull, rod high, the left hand cranking the reel."""
+    j = math.sin(TAU * 2 * p)
+    return rod_pose(56 + 4 * j, 80 + 3 * j, 34, 82, -7 + 2 * math.sin(TAU * p), -4 + 3 * math.sin(TAU * p), TAU * p), {"Hips": Vector((0, 0.05, 0))}
+
 def bake(name, frames, fn, loop):
     if name in bpy.data.actions: bpy.data.actions.remove(bpy.data.actions[name])
     act = bpy.data.actions.new(name)
@@ -161,7 +206,9 @@ def bake(name, frames, fn, loop):
     return act
 
 act = bake("WakeUp", FRAMES, wake, False)
-extra = {"Swim": bake("Swim", 36, swim, True), "Climb": bake("Climb", 42, climb, True), "ClimbOver": bake("ClimbOver", 27, climb_over, False)}
+extra = {"Swim": bake("Swim", 36, swim, True), "Climb": bake("Climb", 42, climb, True), "ClimbOver": bake("ClimbOver", 27, climb_over, False),
+         "FishCast": bake("FishCast", 36, fish_cast, False), "FishWait": bake("FishWait", 60, fish_wait, True),
+         "FishHook": bake("FishHook", 18, fish_hook, False), "FishReel": bake("FishReel", 24, fish_reel, True)}
 rig.animation_data.action = bpy.data.actions["Idle"]
 bpy.ops.object.mode_set(mode="OBJECT")
 

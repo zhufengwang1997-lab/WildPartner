@@ -58,7 +58,8 @@ namespace WildPartner.EditorTools
             TowerClimbProxy(Place("Watchtower", landmarks, WorldLayout.Watchtower, 30, 1f));
             BuildBridge(landmarks);
             var isl = WorldLayout.Islands[0];
-            Place("MoonFlower", landmarks, new Vector2(isl.x, isl.y), 200, 1.1f, -0.05f);   // the moon butterfly's perch
+            Place("MoonFlower", landmarks, new Vector2(isl.x, isl.y), 200, 1.1f, -0.05f).AddComponent<MoonFlowerBloom>();   // the moon butterfly's perch, glowing on clear nights (1123d-3)
+            BuildFishingSpots(landmarks);   // 1123d-1
             BuildBackground(landmarks);
             var vegetation = BuildVegetation();
             BuildGrass(vegetation);
@@ -439,6 +440,7 @@ namespace WildPartner.EditorTools
         {
             var root = new GameObject("Water").transform;
             root.gameObject.AddComponent<WaterProbe>();   // 1123c-C2: reflection for the water
+            root.gameObject.AddComponent<RiverDrift>();   // 1123d-2: foam, petals and leaves floating downstream
             var lakeMat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Water_Lake.mat");
             var riverMat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Water_River.mat");
             var fallMat = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Waterfall.mat");
@@ -510,11 +512,11 @@ namespace WildPartner.EditorTools
 
             // split into calm and falling pieces
             var calm = new List<int>(); var falls = new List<int>();
-            var verts = new List<Vector3>(); var uvs = new List<Vector2>();
+            var verts = new List<Vector3>(); var uvs = new List<Vector2>(); var flow = new List<Vector2>();
             float dist = 0;
             var nearFall = new float[samples.Count];
             for (int i = 1; i < samples.Count; i++)
-                if (Mathf.Abs(samples[i].y - samples[i - 1].y) > 0.6f)
+                if (Mathf.Abs(samples[i].y - samples[i - 1].y) > 0.12f)
                     for (int k = -5; k <= 5; k++)
                     {
                         int j = Mathf.Clamp(i + k, 0, samples.Count - 1);
@@ -530,16 +532,21 @@ namespace WildPartner.EditorTools
                 if (i > 0) dist += Vector3.Distance(samples[i], samples[i - 1]);
                 verts.Add(p - side); verts.Add(p + side);
                 uvs.Add(new Vector2(0, dist / 8f)); uvs.Add(new Vector2(1, dist / 8f));
+                // 试玩反馈 1123d-2: flow speed factor per vertex (uv1.x), read by Water.shader
+                WorldLayout.RiverFlow(samples[i].x, samples[i].z, out _, out float fsp);
+                flow.Add(new Vector2(fsp, 0)); flow.Add(new Vector2(fsp, 0));
                 if (i > 0)
                 {
                     int i0 = (i - 1) * 2;
-                    bool steep = Mathf.Abs(samples[i].y - samples[i - 1].y) > 0.6f;
+                    // 1123d: also the gently sloped ends of a fall (the smoothstep's start and end) - drawn they made a
+                    // tilted "wall" of water beside the plunge pool; the fall sheet and its foam cover that stretch
+                    bool steep = Mathf.Abs(samples[i].y - samples[i - 1].y) > 0.12f;
                     var list = steep ? falls : calm;
                     list.AddRange(new[] { i0, i0 + 2, i0 + 1, i0 + 1, i0 + 2, i0 + 3 });
                 }
             }
             var m = new Mesh { name = name, indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
-            m.SetVertices(verts); m.SetUVs(0, uvs);
+            m.SetVertices(verts); m.SetUVs(0, uvs); m.SetUVs(1, flow);
             m.subMeshCount = 2;
             // 试玩反馈 1123c-A4: the steep ribbon pieces are no longer drawn (depth-faded, they vanished up close);
             // each fall gets its own sheet + pool foam + spray + mist + sound (BuildFall)
@@ -981,6 +988,106 @@ namespace WildPartner.EditorTools
             go.transform.SetPositionAndRotation(new Vector3(b.x, bank - deck + 0.1f, b.y), Quaternion.Euler(0, yaw, 0));
             go.transform.localScale = new Vector3(1.2f, 1, 1.2f);
             GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.NavigationStatic);
+        }
+
+        // 试玩反馈 1123d-1: two fishing jetties - downstream of the wooden bridge, and at the pool below the last waterfall
+        static void BuildFishingSpots(Transform parent)
+        {
+            var o = WorldLayout.RiverOut; var ri = WorldLayout.RiverIn;
+            Vector2 P(Vector3 v) => new Vector2(v.x, v.y);
+            var bridgeDir = (P(o[2]) - P(o[1])).normalized;
+            FishingJetty(parent, "木桥边", Vector2.Lerp(P(o[1]), P(o[2]), 0.4f), bridgeDir);
+            var fallDir = (P(ri[6]) - P(ri[5])).normalized;
+            FishingJetty(parent, "瀑布下的水潭", P(ri[6]) + fallDir * 4f, fallDir);
+        }
+
+        static void FishingJetty(Transform parent, string label, Vector2 c, Vector2 flow)
+        {
+            WorldLayout.RiverDistance(c.x, c.y, out float level);
+            float surface = level + 0.18f;   // the river ribbon is drawn 0.18 m above the level (Ribbon)
+            // pick the bank that is closer and gentler
+            Vector2 bestOut = Vector2.zero; float bestK = 0, bestScore = float.MaxValue;
+            foreach (int sgn in new[] { 1, -1 })
+            {
+                var outDir = new Vector2(-flow.y, flow.x) * sgn;
+                for (float k = 1f; k < 14f; k += 0.25f)
+                {
+                    var p = c + outDir * k;
+                    if (TerrainH(p.x, p.y) < level + 0.1f) continue;
+                    var q = c + outDir * (k + 2.5f);
+                    float score = (TerrainH(q.x, q.y) - TerrainH(p.x, p.y)) + k * 0.15f;
+                    if (k >= 2.5f && score < bestScore) { bestScore = score; bestOut = outDir; bestK = k; }
+                    break;
+                }
+            }
+            if (bestOut == Vector2.zero) { Debug.LogWarning($"[World] fishing spot {label}: no bank found"); return; }
+
+            var wood = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Int_Floor.mat");
+            var dark = AssetDatabase.LoadAssetAtPath<Material>($"{AssetSetup.MatDir}/M_Int_Beam.mat");
+            var root = new GameObject($"FishingSpot_{label}");
+            root.transform.SetParent(parent, false);
+            var o3 = new Vector3(bestOut.x, 0, bestOut.y);
+            var bank = c + bestOut * bestK;
+            var landIn = c + bestOut * (bestK + 0.9f);
+            float top = Mathf.Max(surface + 0.42f, TerrainH(landIn.x, landIn.y) + 0.05f);
+            const float inWater = 2.4f, onLand = 1.3f, width = 1.6f;
+            float len = inWater + onLand;
+            var mid2 = bank + bestOut * ((onLand - inWater) * 0.5f);
+            var rot = Quaternion.LookRotation(o3);
+            var deck = new GameObject("Jetty");
+            deck.transform.SetParent(root.transform, false);
+            deck.transform.SetPositionAndRotation(new Vector3(mid2.x, top, mid2.y), rot);
+            // planks across the jetty, small gaps; two stringers under them; four posts down to the bed
+            int n = Mathf.RoundToInt(len / 0.25f);
+            for (int i = 0; i < n; i++)
+            {
+                float z = -len * 0.5f + (i + 0.5f) * len / n;
+                JettyBox(deck.transform, $"Plank_{i}", new Vector3(0, -0.04f, z), new Vector3(width * (0.96f + 0.04f * Mathf.Sin(i * 1.7f)), 0.07f, len / n - 0.03f), Quaternion.Euler(0, Mathf.Sin(i * 2.3f) * 1.2f, 0), wood, false);
+            }
+            foreach (float x in new[] { -width * 0.36f, width * 0.36f })
+                JettyBox(deck.transform, "Stringer", new Vector3(x, -0.14f, 0), new Vector3(0.12f, 0.12f, len), Quaternion.identity, dark, false);
+            foreach (float x in new[] { -width * 0.45f, width * 0.45f })
+                foreach (float z in new[] { -len * 0.5f + 0.12f, 0.15f })
+                {
+                    var wp = deck.transform.TransformPoint(new Vector3(x, 0, z));
+                    float bottom = TerrainH(wp.x, wp.z) - 0.4f, h = top + 0.12f - bottom;
+                    JettyBox(deck.transform, "Post", new Vector3(x, 0.12f - h * 0.5f, z), new Vector3(0.14f, h, 0.14f), Quaternion.identity, dark, false);
+                }
+            // one walkable box over the planks
+            var col = deck.AddComponent<BoxCollider>();
+            col.center = new Vector3(0, -0.04f, 0); col.size = new Vector3(width, 0.1f, len);
+            // lantern at the water end (lit at night) - seen from the path
+            var lampAt = deck.transform.TransformPoint(new Vector3(width * 0.5f + 0.05f, 0, -len * 0.5f + 0.25f));
+            var lamp = Place("LampPost", root.transform, new Vector2(lampAt.x, lampAt.z), 0, 0.55f);
+            if (lamp) { var lp = lamp.transform.position; lamp.transform.position = new Vector3(lp.x, top - 0.02f, lp.z); }
+
+            var spot = root.AddComponent<FishingSpot>();
+            spot.label = label;
+            var stand2 = bank - bestOut * (inWater - 0.75f);
+            spot.stand = new Vector3(stand2.x, top, stand2.y);
+            spot.yaw = Mathf.Atan2(-bestOut.x, -bestOut.y) * Mathf.Rad2Deg;
+            var cast2 = stand2 - bestOut * 4.2f;
+            // the float wants open water at least 0.5 m deep: slide along the stream until it finds some
+            for (int i = 0; i < 12; i++)
+            {
+                float depth = level - TerrainH(cast2.x, cast2.y);
+                if (depth > 0.5f) break;
+                cast2 += (i % 2 == 0 ? flow : -flow) * (i + 1) * 0.6f;
+            }
+            spot.cast = new Vector3(cast2.x, surface, cast2.y);
+            spot.wood = wood;
+            Debug.Log($"[World] fishing spot {label}: jetty at ({bank.x:0.0}, {bank.y:0.0}) top {top:0.00} (water {surface:0.00}), stand ({stand2.x:0.0}, {stand2.y:0.0}) yaw {spot.yaw:0}, cast ({cast2.x:0.0}, {cast2.y:0.0}) depth {level - TerrainH(cast2.x, cast2.y):0.00}");
+        }
+
+        static void JettyBox(Transform parent, string name, Vector3 local, Vector3 size, Quaternion rot, Material mat, bool collider)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = name;
+            if (!collider) UnityEngine.Object.DestroyImmediate(go.GetComponent<Collider>());
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = local; go.transform.localRotation = rot; go.transform.localScale = size;
+            go.GetComponent<MeshRenderer>().sharedMaterial = mat;
+            GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.BatchingStatic);
         }
 
         // Far mountains (画面整改 5): four concentric ridge rings around the valley instead of the old cone
