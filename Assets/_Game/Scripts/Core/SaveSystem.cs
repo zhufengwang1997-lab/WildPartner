@@ -59,6 +59,8 @@ namespace WildPartner.Core
         public float ambienceVolume = 1f;
         public string antiAliasing = "";   // 超分阶段: Off / TAA / STP
         public bool invertY;
+        public int displayMode = -1;         // 11-24: FullScreenMode as int; -1 = never chosen (Unity default)
+        public int resolutionW, resolutionH; // 11-24: 0 = native
     }
 
     /// <summary>

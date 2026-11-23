@@ -46,6 +46,7 @@ namespace WildPartner.Core
             Rendering.UpscalerSettings.Init();
             Rendering.UpscalerInputsPass.Init();
             Rendering.GrdSettings.Init();
+            Rendering.DisplaySettings.Init();   // 11-24: display mode / resolution (saved), F1 toggle
             Zfw.PerfRunner.PerfRunner.UpscalerInfo = () => Zfw.Upscaling.UpscalerHost.Active == null ? "off"
                 : $"{Zfw.Upscaling.UpscalerHost.Active.Name}/{Zfw.Upscaling.UpscalerHost.Quality} {Zfw.Upscaling.UpscalerHost.RenderSize.x}x{Zfw.Upscaling.UpscalerHost.RenderSize.y}";
             Zfw.PerfRunner.PerfRunner.UpscaleMs = Rendering.UpscaleBench.UpscaleMs;

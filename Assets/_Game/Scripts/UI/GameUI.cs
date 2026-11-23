@@ -18,6 +18,8 @@ namespace WildPartner.UI
         public string label;
         public Func<string> value;
         public Action<int> step;
+        /// <summary>11-24: settings page (显示 / 画面 / 操作 / 声音); rows registered by other modules default to 画面.</summary>
+        public string page = "画面";
     }
 
     public static class SettingsRegistry
@@ -60,6 +62,7 @@ namespace WildPartner.UI
             BuildEnding();
             _flow.StateChanged += OnState;
             _flow.Toast += t => _toasts.Enqueue(t);
+            Rendering.DisplaySettings.Notice += t => _toasts.Enqueue(t);
             _flow.Hints += h => { _hints = h; _hintIndex = 0; _hintTimer = 0; };
             RegisterBaseSettings();
             OnState(_flow.State);
@@ -75,7 +78,9 @@ namespace WildPartner.UI
             var scaler = go.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.matchWidthOrHeight = 0.5f;
+            // 11-24: Expand keeps the whole 1920x1080 reference layout on screen at any aspect (16:10, 21:9,
+            // 1366x768 ...): the canvas grows in the longer direction instead of cropping the shorter one
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             if (!FindFirstObjectByType<EventSystem>())
             {
                 var es = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
@@ -239,11 +244,31 @@ namespace WildPartner.UI
         void BuildSettings()
         {
             _settings = Screen("Settings", UIKit.Dim);
-            var card = Card(_settings, new Vector2(760, 760));
-            var title = UIKit.Rect(card, "T", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -16), new Vector2(0, 70));
+            var card = Card(_settings, new Vector2(800, 800));
+            var title = UIKit.Rect(card, "T", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -14), new Vector2(0, 64));
             UIKit.Label(title, "设置（立即生效）", 38, TextAnchor.MiddleCenter, UIKit.Ink);
-            _settingsList = UIKit.VList(card, "Rows", new Vector2(680, 560), 10);
-            _settingsList.anchoredPosition = new Vector2(0, -10);
+            // 11-24: pages instead of one long list (12+ rows overflowed the card on every resolution)
+            var tabs = UIKit.Rect(card, "Tabs", new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -86), new Vector2(720, 56));
+            var hl = tabs.gameObject.AddComponent<HorizontalLayoutGroup>();
+            hl.spacing = 12; hl.childAlignment = TextAnchor.MiddleCenter; hl.childControlWidth = hl.childControlHeight = false; hl.childForceExpandWidth = hl.childForceExpandHeight = false;
+            _pageButtons.Clear();
+            foreach (var pg in Pages)
+            {
+                string page = pg;
+                var tb = UIKit.Button(tabs, page, () => { _page = page; RebuildSettingsRows(); }, new Vector2(165, 54));
+                _pageButtons[page] = tb;
+            }
+            // the rows sit in a scroll view, so a page that grows past the card scrolls instead of being cut off
+            var viewport = UIKit.Rect(card, "Viewport", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 1), new Vector2(0, 250), new Vector2(720, 500));
+            viewport.gameObject.AddComponent<RectMask2D>();
+            _settingsList = UIKit.Rect(viewport, "Rows", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(0, 0));
+            var v = _settingsList.gameObject.AddComponent<VerticalLayoutGroup>();
+            v.spacing = 10; v.padding = new RectOffset(0, 0, 4, 4); v.childAlignment = TextAnchor.UpperCenter;
+            v.childControlHeight = false; v.childControlWidth = false; v.childForceExpandHeight = false; v.childForceExpandWidth = false;
+            _settingsList.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            var sr = viewport.gameObject.AddComponent<ScrollRect>();
+            sr.content = _settingsList; sr.viewport = viewport; sr.horizontal = false; sr.vertical = true;
+            sr.movementType = ScrollRect.MovementType.Clamped; sr.scrollSensitivity = 40;
             var back = UIKit.Rect(card, "BackRow", new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 24), new Vector2(300, 64));
             var b = UIKit.Button(back, "返回", CloseSettings, new Vector2(300, 64));
             b.transform.localPosition = Vector3.zero;
@@ -253,12 +278,58 @@ namespace WildPartner.UI
         void RebuildSettingsRows()
         {
             if (!_settingsList) return;
-            foreach (Transform c in _settingsList) Destroy(c.gameObject);
-            foreach (var r in SettingsRegistry.Rows) UIKit.Cycler(_settingsList, r.label, r.value, r.step, new Vector2(680, 56));
+            var old = new List<GameObject>();
+            foreach (Transform c in _settingsList) old.Add(c.gameObject);   // collect first: re-parenting while iterating skips rows
+            foreach (var go in old) { go.transform.SetParent(null, false); Destroy(go); }
+            foreach (var r in SettingsRegistry.Rows)
+                if ((Array.IndexOf(Pages, r.page) < 0 ? "画面" : r.page) == _page)
+                    UIKit.Cycler(_settingsList, r.label, r.value, r.step, new Vector2(680, 56));
+            foreach (var kv in _pageButtons)
+            {
+                var img = kv.Value.targetGraphic as Image;
+                if (img) img.color = kv.Key == _page ? new Color(0.78f, 0.68f, 1f, 1f) : Color.white;
+            }
+            _settingsList.anchoredPosition = Vector2.zero;
+            if (_settings && _settings.gameObject.activeSelf)
+                Select(_settingsList.childCount > 0 ? _settingsList.GetChild(0).GetComponentInChildren<Button>() : null);
         }
+
+        static readonly string[] Pages = { "显示", "画面", "操作", "声音" };
+        string _page = "显示";
+        readonly Dictionary<string, Button> _pageButtons = new Dictionary<string, Button>();
 
         void RegisterBaseSettings()
         {
+            // 11-24: 显示 page — display mode and resolution, saved and re-applied at launch (F1 toggles)
+            SettingsRegistry.Add(new SettingRow
+            {
+                page = "显示", label = "显示模式",
+                value = () => Rendering.DisplaySettings.Label(Rendering.DisplaySettings.CurrentMode),
+                step = d =>
+                {
+                    var m = Rendering.DisplaySettings.Modes;
+                    int i = Mathf.Max(0, Array.IndexOf(m, Rendering.DisplaySettings.CurrentMode));
+                    Rendering.DisplaySettings.SetMode(m[(i + (d > 0 ? 1 : m.Length - 1)) % m.Length]);
+                },
+            });
+            SettingsRegistry.Add(new SettingRow
+            {
+                page = "显示", label = "分辨率",
+                value = () => $"{UnityEngine.Screen.width} × {UnityEngine.Screen.height}",
+                step = d =>
+                {
+                    var list = Rendering.DisplaySettings.Resolutions();
+                    int i = list.IndexOf(new Vector2Int(UnityEngine.Screen.width, UnityEngine.Screen.height));
+                    i = i < 0 ? 0 : (i + (d > 0 ? 1 : list.Count - 1)) % list.Count;
+                    Rendering.DisplaySettings.Set(Rendering.DisplaySettings.CurrentMode, list[i].x, list[i].y);
+                },
+            });
+            SettingsRegistry.Add(new SettingRow
+            {
+                page = "显示", label = "快捷键",
+                value = () => "F1 全屏窗口 / 窗口",
+                step = d => Rendering.DisplaySettings.Toggle(),
+            });
             string[] tierNames = { "自动", "低", "中", "高", "极高" };
             SettingsRegistry.Add(new SettingRow
             {
@@ -275,19 +346,19 @@ namespace WildPartner.UI
             });
             SettingsRegistry.Add(new SettingRow
             {
-                label = "鼠标灵敏度",
+                page = "操作", label = "鼠标灵敏度",
                 value = () => SaveSystem.Settings.mouseSensitivity.ToString("0.0"),
                 step = d => { SaveSystem.Settings.mouseSensitivity = Mathf.Clamp(SaveSystem.Settings.mouseSensitivity + d * 0.1f, 0.2f, 3f); SaveSystem.SaveSettings(); },
             });
             SettingsRegistry.Add(new SettingRow
             {
-                label = "反转 Y 轴",
+                page = "操作", label = "反转 Y 轴",
                 value = () => SaveSystem.Settings.invertY ? "开" : "关",
                 step = d => { SaveSystem.Settings.invertY = !SaveSystem.Settings.invertY; SaveSystem.SaveSettings(); },
             });
             SettingsRegistry.Add(new SettingRow
             {
-                label = "主音量",
+                page = "声音", label = "主音量",
                 value = () => Mathf.RoundToInt(SaveSystem.Settings.masterVolume * 100) + "%",
                 step = d => { SaveSystem.Settings.masterVolume = Mathf.Clamp01(SaveSystem.Settings.masterVolume + d * 0.1f); AudioListener.volume = SaveSystem.Settings.masterVolume; SaveSystem.SaveSettings(); },
             });
@@ -296,7 +367,7 @@ namespace WildPartner.UI
             {
                 SettingsRegistry.Add(new SettingRow
                 {
-                    label = label,
+                    page = "声音", label = label,
                     value = () => Mathf.RoundToInt(get() * 100) + "%",
                     step = d => { set(Mathf.Round(Mathf.Clamp01(get() + d * 0.1f) * 10f) / 10f); SaveSystem.SaveSettings(); },
                 });
@@ -359,6 +430,14 @@ namespace WildPartner.UI
             AudioListener.volume = SaveSystem.Settings.masterVolume;
         }
 
+        /// <summary>UI screenshot tool (11-24): open the settings on a page from the pause menu, or close them.</summary>
+        public void ShowSettingsPage(string page)
+        {
+            if (page == null) { if (_settings.gameObject.activeSelf) CloseSettings(); return; }
+            _page = page;
+            OpenSettings(FlowStateMemo.Pause);
+        }
+
         void OpenSettings(FlowStateMemo from)
         {
             _returnFromSettings = from;
@@ -379,10 +458,10 @@ namespace WildPartner.UI
         void BuildJournal()
         {
             _journal = Screen("Journal", UIKit.Dim);
-            var card = Card(_journal, new Vector2(1500, 820));
+            var card = Card(_journal, new Vector2(1560, 900));
             var title = UIKit.Rect(card, "T", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -14), new Vector2(0, 70));
             UIKit.Label(title, "伙伴图鉴", 42, TextAnchor.MiddleCenter, UIKit.Ink);
-            _journalGrid = UIKit.Rect(card, "Grid", new Vector2(0, 0), new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -20), new Vector2(-60, -180));
+            _journalGrid = UIKit.Rect(card, "Grid", new Vector2(0, 0), new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -6), new Vector2(-60, -170));
             var h = _journalGrid.gameObject.AddComponent<HorizontalLayoutGroup>();
             h.spacing = 18; h.childControlWidth = true; h.childControlHeight = true; h.childForceExpandWidth = true; h.childForceExpandHeight = true;
             var foot = UIKit.Rect(card, "Foot", new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.5f, 0), new Vector2(0, 18), new Vector2(0, 50));
@@ -399,7 +478,7 @@ namespace WildPartner.UI
                 var cell = UIKit.Rect(_journalGrid, def.id, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
                 UIKit.Panel(cell, got ? new Color(1, 1, 1, 0.85f) : new Color(0.85f, 0.82f, 0.78f, 0.85f));
 
-                var icon = UIKit.Rect(cell, "Icon", new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -20), new Vector2(200, 200));
+                var icon = UIKit.Rect(cell, "Icon", new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -14), new Vector2(150, 150));
                 var tex = Resources.Load<Texture2D>("Icons/" + def.model);
                 if (tex)
                 {
@@ -413,13 +492,17 @@ namespace WildPartner.UI
                     UIKit.Label(icon, got ? def.name.Substring(0, 1) : "?", 90, TextAnchor.MiddleCenter, got ? UIKit.Ink : Color.white);
                 }
 
-                var name = UIKit.Rect(cell, "Name", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -236), new Vector2(0, 50));
+                var name = UIKit.Rect(cell, "Name", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0.5f, 1), new Vector2(0, -170), new Vector2(0, 46));
                 UIKit.Label(name, got ? def.name : "？？？", 32, TextAnchor.MiddleCenter, UIKit.Ink);
-                var body = UIKit.Rect(cell, "Body", Vector2.zero, new Vector2(1, 1), new Vector2(0.5f, 0.5f), new Vector2(0, -150), new Vector2(-30, -330));
+                // 11-24: the long clues ran past the bottom of the card; the body now fills the space under the name
+                // (top 226, bottom 12), about 490 px for the longest clue; anything longer is truncated, never drawn outside
+                var body = UIKit.Rect(cell, "Body", Vector2.zero, new Vector2(1, 1), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+                body.offsetMin = new Vector2(14, 12); body.offsetMax = new Vector2(-14, -226);
                 string text = got
                     ? $"{def.description}\n\n<color=#6a4ca8>捕捉于：游戏时间 {FormatHour(entry.gameHour)}，第 {GameFlow.FormatTime(entry.playTime)}</color>"
                     : $"<b>线索</b>\n{def.hint}\n\n<color=#6a4ca8>出没：{def.ConditionText}</color>";
-                UIKit.Label(body, text, 22, TextAnchor.UpperLeft, UIKit.Ink);
+                var bt = UIKit.Label(body, text, 22, TextAnchor.UpperLeft, UIKit.Ink);
+                bt.verticalOverflow = VerticalWrapMode.Truncate;
             }
             _journalBody.text = $"已收集 {_flow.CaughtCount}/{_flow.Total}    ·    按 Tab 或 Esc 关闭";
         }

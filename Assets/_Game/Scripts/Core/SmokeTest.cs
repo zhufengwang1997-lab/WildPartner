@@ -741,6 +741,30 @@ namespace WildPartner.Core
             yield return new WaitForSeconds(0.3f);
             Step(resized && Zfw.Upscaling.UpscalerHost.RenderSize == r0, $"超分：窗口 {w0}x{h0} → 1280x720 → 还原，渲染尺寸 {r0.x}x{r0.y} → {r1.x}x{r1.y} → {Zfw.Upscaling.UpscalerHost.RenderSize.x}x{Zfw.Upscaling.UpscalerHost.RenderSize.y}，每次重新初始化");
 
+            // 11-24: display mode / resolution from the settings (DisplaySettings) -> render size recomputed, history reset
+            {
+                int c0 = WildPartner.Rendering.DisplaySettings.Changes;
+                var q = Zfw.Upscaling.UpscalerHost.Quality;
+                Vector2Int Want() => Zfw.Upscaling.UpscalerMath.RenderSize(new Vector2Int(Screen.width, Screen.height), q);
+                WildPartner.Rendering.DisplaySettings.Set(FullScreenMode.Windowed, 1366, 768, save: false);
+                float tt = 0; while (Screen.width != 1366 && tt < 3f) { tt += Time.unscaledDeltaTime; yield return null; }
+                yield return new WaitForSecondsRealtime(0.5f);
+                var ra = Zfw.Upscaling.UpscalerHost.RenderSize; var da = new Vector2Int(Screen.width, Screen.height);
+                bool resOk = da == new Vector2Int(1366, 768) && ra == Want();
+                WildPartner.Rendering.DisplaySettings.SetMode(FullScreenMode.FullScreenWindow);
+                tt = 0; while (WildPartner.Rendering.DisplaySettings.CurrentMode != FullScreenMode.FullScreenWindow && tt < 5f) { tt += Time.unscaledDeltaTime; yield return null; }
+                yield return new WaitForSecondsRealtime(1.5f);
+                var rb = Zfw.Upscaling.UpscalerHost.RenderSize; var db = new Vector2Int(Screen.width, Screen.height);
+                bool modeOk = WildPartner.Rendering.DisplaySettings.CurrentMode == FullScreenMode.FullScreenWindow && rb == Want();
+                yield return Shot("7x_display_fullscreen_window");
+                WildPartner.Rendering.DisplaySettings.Set(FullScreenMode.Windowed, w0, h0, save: false);
+                tt = 0; while ((Screen.width != w0 || WildPartner.Rendering.DisplaySettings.CurrentMode != FullScreenMode.Windowed) && tt < 5f) { tt += Time.unscaledDeltaTime; yield return null; }
+                yield return new WaitForSecondsRealtime(1f);
+                int resets = WildPartner.Rendering.DisplaySettings.Changes - c0;
+                Step(resOk && modeOk && resets >= 3 && Zfw.Upscaling.UpscalerHost.RenderSize == Want(),
+                     $"显示设置：分辨率 1366x768 → 渲染 {ra.x}x{ra.y}；切到全屏窗口 {db.x}x{db.y} → 渲染 {rb.x}x{rb.y}；切回窗口 {Screen.width}x{Screen.height} → 渲染 {Zfw.Upscaling.UpscalerHost.RenderSize.x}x{Zfw.Upscaling.UpscalerHost.RenderSize.y}；每次重置历史帧（{resets} 次）");
+            }
+
             // IN-03 / IN-06: the input views and the reactive mask pass
             {
                 int ex0 = _exceptions, f0 = WildPartner.Rendering.UpscalerInputsPass.FramesWithMask;
