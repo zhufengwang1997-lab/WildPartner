@@ -5,10 +5,10 @@
 Unity 6000.3.28f1 · URP 17（Forward+）· 开发和测试机：Apple M5 Max（Metal）。
 
 ## 下载
-- **试玩（直接下载）**：[Windows 64 位](https://github.com/zhufengwang1997-lab/WildPartner/releases/download/v0.1.0/WildPartner-Windows-x64.zip) · [macOS](https://github.com/zhufengwang1997-lab/WildPartner/releases/download/v0.1.0/WildPartner-Mac.zip) · [发布页与说明](https://github.com/zhufengwang1997-lab/WildPartner/releases/tag/v0.1.0)
+- **试玩（直接下载）**：[Windows 64 位](https://github.com/zhufengwang1997-lab/WildPartner/releases/latest/download/WildPartner-Windows-x64.zip) · [macOS](https://github.com/zhufengwang1997-lab/WildPartner/releases/latest/download/WildPartner-Mac.zip) · [发布页与说明](https://github.com/zhufengwang1997-lab/WildPartner/releases/latest)
   - Windows：解压后双击 `WildPartner/WildPartner.exe`（SmartScreen 提示时点"更多信息 → 仍要运行"）。
   - macOS：解压后右键 `WildPartner.app` → 打开（未签名）。
-- **源码**：`git clone https://github.com/zhufengwang1997-lab/WildPartner.git` 后执行 `git lfs pull`（或 [下载源码 zip](https://github.com/zhufengwang1997-lab/WildPartner/archive/refs/tags/v0.1.0.zip)，不含 LFS 大文件）。
+- **源码**：`git clone https://github.com/zhufengwang1997-lab/WildPartner.git` 后执行 `git lfs pull`（或 [下载源码 zip](https://github.com/zhufengwang1997-lab/WildPartner/archive/refs/tags/v1.0.0.zip)，不含 LFS 大文件）。
 
 ![月影蝶夜晚](docs/screenshots/feedback-1123e/3_butterfly_night.jpg)
 ![钓鱼](docs/screenshots/feedback-1123d/1_fishing_reel.jpg)
