@@ -9,8 +9,8 @@ namespace WildPartner.Rendering
 {
     /// <summary>
     /// Stage 4 (FR-RD-01..03): GPU Resident Drawer and GPU occlusion culling switches.
-    /// Priority: -grd=on|off / -occlusion=on|off &gt; settings file &gt; off. Off by default: on Mac (Metal) every
-    /// renderer using the WildPartner/Toon shader stops drawing when GRD is on (root cause not found yet; DECISIONS). Applied to whichever URP asset the current
+    /// Priority: -grd=on|off / -occlusion=on|off &gt; settings file &gt; off. Off by default: on Mac (Metal, release player)
+    /// nothing drawn through GRD shows up, even a URP Lit cube in an empty scene (root cause not found; docs/GRD评估报告.md). Applied to whichever URP asset the current
     /// quality tier uses (tier changes swap the asset, so <see cref="Apply"/> runs again from Bootstrap.ReapplyAA).
     /// All tier assets are saved with GRD = Instanced Drawing (same lesson as STP: settings nobody saves get stripped),
     /// and GraphicsSettings keeps every BatchRendererGroup variant.

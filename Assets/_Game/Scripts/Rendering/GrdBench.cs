@@ -62,17 +62,40 @@ namespace WildPartner.Rendering
             {
                 // diagnostic: one cube per shader in front of the camera, to see which shaders draw under GRD
                 var cam = Camera.main.transform;
-                string[] shaders = { "Universal Render Pipeline/Lit", "Universal Render Pipeline/Simple Lit", "WildPartner/Toon" };
-                for (int i = 0; i < shaders.Length; i++)
+                if (Environment.GetCommandLineArgs().Contains("-grdminimal"))
                 {
-                    var sh = Shader.Find(shaders[i]);
+                    // bisect: switch the whole game off, keep only a fresh camera + light + the cubes
+                    var keep = gameObject;
+                    foreach (var r in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects()) if (r != keep) r.SetActive(false);
+                    foreach (var r in keep.scene.GetRootGameObjects()) if (r != keep) r.SetActive(false);
+                    var cgo = new GameObject("DiagCam"); var c2 = cgo.AddComponent<Camera>(); cgo.tag = "MainCamera";
+                    c2.clearFlags = CameraClearFlags.SolidColor; c2.backgroundColor = Color.gray;
+                    cgo.transform.position = new Vector3(0, 1, -5);
+                    var lgo = new GameObject("DiagLight"); var l = lgo.AddComponent<Light>(); l.type = LightType.Directional; lgo.transform.rotation = Quaternion.Euler(50, 30, 0);
+                    cam = cgo.transform;
+                    yield return null;
+                }
+                // left: URP Lit (known DOTS-instancing shader, material in Resources so it is in the build); right: Toon
+                var mats = new[] { Resources.Load<Material>("Diag/GrdDiagLit"), new Material(Shader.Find("WildPartner/Toon")) { color = Color.red } };
+                for (int i = 0; i < mats.Length; i++)
+                {
                     var c = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     Destroy(c.GetComponent<Collider>());
-                    c.transform.position = cam.position + cam.forward * 4f + cam.right * (i - 1) * 1.6f;
-                    if (sh) c.GetComponent<MeshRenderer>().sharedMaterial = new Material(sh) { color = Color.red };
-                    Debug.Log($"[GrdDiag] cube {i} shader {shaders[i]} found={(sh != null)}");
+                    c.transform.position = cam.position + cam.forward * 4f + cam.right * (i - 0.5f) * 1.8f;
+                    if (mats[i]) c.GetComponent<MeshRenderer>().sharedMaterial = mats[i];
+                    Debug.Log($"[GrdDiag] cube {i} material {(mats[i] ? mats[i].shader.name : "missing")}");
                 }
-                yield return new WaitForSeconds(1f);
+                // does the GRD instance get recreated while running? (s_Instance is private, debug only)
+                var fi = typeof(UnityEngine.Rendering.GPUResidentDrawer).GetField("s_Instance", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+                object prev = fi?.GetValue(null); int changes = 0, nulls = 0;
+                for (int f = 0; f < 60; f++)
+                {
+                    yield return null;
+                    var cur = fi?.GetValue(null);
+                    if (cur == null) nulls++;
+                    if (!ReferenceEquals(cur, prev)) { changes++; prev = cur; }
+                }
+                Debug.Log($"[GrdDiag] 60 frames: GRD instance recreated {changes} times, null {nulls} frames, field {(fi != null)}");
                 ScreenCapture.CaptureScreenshot(Path.Combine(outDir, $"diag_grd_{grd}.png"));
                 yield return new WaitForSeconds(0.5f);
                 Application.Quit(); yield break;

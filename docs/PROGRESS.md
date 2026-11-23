@@ -173,6 +173,6 @@
     - SC-05 切镜头：切后第 20 帧截图无可见残影；切后最初几帧没有单独检查。
     - 超分 Pass 耗时、显存：发布版拿不到（显示「—」），未测。GPU ms 在 Metal 上只能看相对值，帧率用实际帧时间。
   - 修过的测量问题：第一次跑时草的风动时间在配置之间没对齐，FLIP 主要在量风的相位；现在每个配置开始时重置风动时钟，并加 ref2 量噪声底。
-- [ ] GRD（GPU 驻留绘制）：`-grd=` / `-occlusion=` 参数、设置菜单两项、F3 面板开关和 Draw Calls / Batches / SetPass 读数、`tools/grd.sh` 开关对比脚本都做了。**未达成**：在 Mac（Metal）上打开后，所有用 Toon 着色器的物体（树、灌木、木屋）都不绘制；默认改为关闭，Draw Call 对比没有可信数据（见 `docs/GRD评估报告.md`）。
+- [ ] GRD（GPU 驻留绘制）：`-grd=` / `-occlusion=` 参数、设置菜单两项、F3 面板开关和 Draw Calls / Batches / SetPass 读数、`tools/grd.sh` 开关对比脚本都做了。**未达成**：在 Mac（Metal）上打开后，交给 GRD 绘制的物体（树、灌木、木屋，连 URP Lit 方块）都不显示，最小场景也复现，根因未找到；默认改为关闭，Windows 测试包里带了同样的诊断，Draw Call 对比没有可信数据（见 `docs/GRD评估报告.md`）。
 - [x] TC-10 挂机 10 分钟（M5 Max，1920×1080，STP，已验证）：不崩溃，帧率 118.0 → 117.9 FPS，内存 171 → 171 MB，最慢一帧 25 ms，GC 512 次（约每秒一次，偏多，未查）。`docs/挂机测试-mac-20261123.md`。
 - [x] PerfRunner 0.3.0（MineEmbers 标签 v0.3.1）：记录 `-upscaler=` / `-quality=`，新增 `upscale_ms` 列；包不引用超分代码，由游戏填钩子。

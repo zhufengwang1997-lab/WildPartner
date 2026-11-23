@@ -10,6 +10,9 @@ echo [3/5] GRD 关 / 开对比（约 4 分钟）...
 mkdir "%OUT%\grd" 2>nul
 "%EXE%" %COMMON% -grdbench -demoout="%OUT%\grd" -grd=off -screen-width 1920 -screen-height 1080 -logFile "%OUT%\grd\player_off.log"
 "%EXE%" %COMMON% -grdbench -demoout="%OUT%\grd" -grd=on -screen-width 1920 -screen-height 1080 -logFile "%OUT%\grd\player_on.log"
+echo     GRD 诊断（两个方块，开 / 关各一次，约 1 分钟）...
+"%EXE%" %COMMON% -grdbench -grddiag -grdminimal -demoout="%OUT%\grd" -grd=on -occlusion=off -screen-width 1280 -screen-height 720 -logFile "%OUT%\grd\diag_on.log"
+"%EXE%" %COMMON% -grdbench -grddiag -grdminimal -demoout="%OUT%\grd" -grd=off -screen-width 1280 -screen-height 720 -logFile "%OUT%\grd\diag_off.log"
 echo [4/5] 特效开销（约 8 分钟）...
 mkdir "%OUT%\fxcost" 2>nul
 "%EXE%" %COMMON% -fxcost -demoout="%OUT%\fxcost" -screen-width 1920 -screen-height 1080 -logFile "%OUT%\fxcost\player.log"

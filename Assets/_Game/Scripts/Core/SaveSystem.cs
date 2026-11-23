@@ -43,7 +43,7 @@ namespace WildPartner.Core
         public string upscaler = "";         // stage 2: "" = auto
         public string upscalerQuality = "";  // stage 2
         public bool grd = true;              // unused (old placeholder; settings files saved before 11-23 have it true)
-        public bool grdEnabled;              // stage 4: GPU Resident Drawer, off by default (Toon objects vanish under GRD on Metal, see DECISIONS)
+        public bool grdEnabled;              // stage 4: GPU Resident Drawer, off by default (on Metal nothing GRD draws shows up, see docs/GRD评估报告.md)
         public bool gpuOcclusion = true;     // stage 4: GPU occlusion culling (needs GRD)
         public bool debugOverlay;
         public float mouseSensitivity = 1f;

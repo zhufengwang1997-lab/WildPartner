@@ -763,7 +763,7 @@ namespace WildPartner.Core
 
         IEnumerator GrdCheck()
         {
-            // stage 4 (FR-RD-01/02): GRD is off by default (known issue: Toon objects are not drawn under GRD on Metal);
+            // stage 4 (FR-RD-01/02): GRD is off by default (known issue: on Metal nothing GRD draws shows up);
             // switching it on and off again must work without errors and restore the normal picture
             int ex0 = _exceptions;
             bool g0 = WildPartner.Rendering.GrdSettings.Grd, o0 = WildPartner.Rendering.GrdSettings.Occlusion;
@@ -780,7 +780,7 @@ namespace WildPartner.Core
             WildPartner.Rendering.GrdSettings.Set(g0, o0);
             yield return new WaitForSeconds(0.3f);
             Step(offAtStart && on && backOff && _exceptions == ex0,
-                 $"GPU 驻留绘制：默认关（{offAtStart}），打开后运行（{on}，遮挡剔除 {(occ ? "运行" : "未运行")}），再关掉（{backOff}），无报错。已知问题：打开时 Toon 物体不绘制（截图 7z_grd_on）");
+                 $"GPU 驻留绘制：默认关（{offAtStart}），打开后运行（{on}，遮挡剔除 {(occ ? "运行" : "未运行")}），再关掉（{backOff}），无报错。已知问题：Mac 上打开时 GRD 绘制的物体不显示（截图 7z_grd_on）");
         }
 
         IEnumerator AntiAliasCheck(PlayerController player, GameFlow flow)
