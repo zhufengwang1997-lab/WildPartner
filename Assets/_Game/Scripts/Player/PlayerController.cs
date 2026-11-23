@@ -98,6 +98,8 @@ namespace WildPartner.Player
             _cc = GetComponent<CharacterController>();
             _animator = GetComponentInChildren<Animator>();
             if (vcam) _orbit = vcam.GetComponent<CinemachineOrbitalFollow>();
+            // 1123c-B4 leftover: keep the camera out of tree crowns while climbing / high up
+            if (vcam && !vcam.GetComponent<CanopyCameraAvoid>()) vcam.gameObject.AddComponent<CanopyCameraAvoid>().player = this;
         }
 
         void OnDestroy() { if (Instance == this) Instance = null; }
@@ -213,6 +215,7 @@ namespace WildPartner.Player
         /// <summary>The top of the watchtower was reached (first time per session raises TowerTopReached).</summary>
         public static event System.Action TowerTopReached;
         Vector3 _wallNormal;
+        float _lookIdle = 10f;
         float _gapExtra, _blockedUp, _grabAt, _pushWall, _climbCooldown, _mantleT = -1f, _mantleH;
         Vector3 _mantleFrom, _mantleTo;
         bool _towerTopDone;
@@ -621,6 +624,15 @@ namespace WildPartner.Player
                 _orbit.VerticalAxis.Value = Mathf.Clamp(_orbit.VerticalAxis.Value + look.y * inv, -12f, 65f);
                 float z = GameInput.Zoom;
                 if (Mathf.Abs(z) > 0.01f) _orbit.RadialAxis.Value = Mathf.Clamp(_orbit.RadialAxis.Value - z * 0.05f, 0.65f, 1.9f);
+                // 1123c-B4 leftover: on a wall the camera swings round behind her to face the wall (unless the
+                // player is turning it), so it is not squeezed against the wall or left in the trees beside it
+                if (look.sqrMagnitude > 1e-4f) _lookIdle = 0f; else _lookIdle += Time.deltaTime;
+                if ((Climbing || Mantling) && _lookIdle > 1.2f && _wallNormal.sqrMagnitude > 0.5f)
+                {
+                    float k = 1f - Mathf.Exp(-Time.deltaTime / 0.7f);
+                    _orbit.HorizontalAxis.Value = Mathf.LerpAngle(_orbit.HorizontalAxis.Value, Quaternion.LookRotation(-_wallNormal).eulerAngles.y, k);
+                    _orbit.VerticalAxis.Value = Mathf.Lerp(_orbit.VerticalAxis.Value, 16f, k);
+                }
             }
 
             Vector2 input = Frozen ? Vector2.zero : GameInput.Move;

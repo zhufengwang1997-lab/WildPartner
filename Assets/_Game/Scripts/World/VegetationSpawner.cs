@@ -22,6 +22,12 @@ namespace WildPartner.World
         public List<Batch> batches = new List<Batch>();
         public int SpawnedCount { get; private set; }
         public static event Action<int> Spawned;
+        /// <summary>
+        /// 1123c-B4 leftover: tree crowns as world boxes (upper part of each tree's render bounds, trimmed a little
+        /// sideways because the crowns are round). The crowns have no colliders, so the camera deoccluder cannot see
+        /// them; CanopyCameraAvoid reads this list instead.
+        /// </summary>
+        public static readonly List<Bounds> TreeCrowns = new List<Bounds>();
 
         void Awake() => Spawn();
 
@@ -41,14 +47,28 @@ namespace WildPartner.World
                     var go = Instantiate(b.prefab, new Vector3(it.x, it.y, it.z), Quaternion.Euler(0, yaw, 0), parent);
                     go.transform.localScale = Vector3.one * Mathf.Max(scale, 0.05f);
                     SpawnedCount++;
+                    if (Application.isPlaying && b.prefab.name.StartsWith("Tree", StringComparison.Ordinal)) AddCrown(go);
                 }
             }
             Debug.Log($"[Vegetation] spawned {SpawnedCount} instances in {(Time.realtimeSinceStartup - t0) * 1000:0} ms");
             Spawned?.Invoke(SpawnedCount);
         }
 
+        static void AddCrown(GameObject tree)
+        {
+            var rs = tree.GetComponentsInChildren<Renderer>();
+            if (rs.Length == 0) return;
+            var b = rs[0].bounds;
+            for (int i = 1; i < rs.Length; i++) b.Encapsulate(rs[i].bounds);
+            // crown: from about a third of the height up; 80 % of the width (round crown in a square box)
+            float h = b.size.y, y0 = b.min.y + h * 0.33f;
+            var c = new Bounds(new Vector3(b.center.x, (y0 + b.max.y) * 0.5f, b.center.z), new Vector3(b.size.x * 0.8f, b.max.y - y0, b.size.z * 0.8f));
+            TreeCrowns.Add(c);
+        }
+
         public void Clear()
         {
+            TreeCrowns.Clear();
             for (int i = transform.childCount - 1; i >= 0; i--)
             {
                 if (Application.isPlaying) Destroy(transform.GetChild(i).gameObject);

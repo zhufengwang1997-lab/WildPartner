@@ -1142,7 +1142,23 @@ namespace WildPartner.Core
                 else GameInput.SimMove = new Vector2(0, 1);   // on the wall: W = up
                 maxH = Mathf.Max(maxH, player.transform.position.y - gy);
                 minSt = Mathf.Min(minSt, player.Stamina);
-                if (!shot && player.Climbing && player.transform.position.y - gy > 3f) { shot = true; yield return Shot("44_climb_tower"); }
+                if (!shot && player.Climbing && player.transform.position.y - gy > 3f)
+                {
+                    shot = true;
+                    yield return Shot("44_climb_tower");
+                    {
+                        var cp = Camera.main.transform.position; var tp = player.vcam ? player.vcam.Follow.position : player.transform.position;
+                        Debug.Log($"[Smoke] climb cam {cp} target {tp} dist {(cp - tp).magnitude:0.00}");
+                        foreach (var c in VegetationSpawner.TreeCrowns)
+                            if ((c.center - tp).sqrMagnitude < 15f * 15f) Debug.Log($"[Smoke]   crown {c.center} size {c.size} hasTarget {c.Contains(tp)} hasCam {c.Contains(cp)}");
+                        foreach (var col in Physics.OverlapSphere(cp, 0.6f)) Debug.Log($"[Smoke]   near cam: {col.name}");
+                    }
+                    var camP = Camera.main.transform.position; var tgtP = player.vcam.Follow.position;
+                    bool inWall = Physics.CheckSphere(camP, 0.15f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+                    float facing = Vector3.Dot(Vector3.ProjectOnPlane(Camera.main.transform.forward, Vector3.up).normalized, face);
+                    Step(CanopyCameraAvoid.Active && !CanopyCameraAvoid.LastFinalInCrown && !inWall && facing > 0.7f,
+                        $"攀爬镜头：转到她身后对着墙（朝向点积 {facing:0.00}），不在墙里，不在树冠里（修正前{(CanopyCameraAvoid.LastRawInCrown ? "在" : "不在")}树冠里），离她 {(camP - tgtP).magnitude:0.0} m");
+                }
                 yield return null;
             }
             GameInput.SimMove = Vector2.zero;
