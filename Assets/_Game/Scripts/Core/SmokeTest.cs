@@ -199,6 +199,7 @@ namespace WildPartner.Core
                 float t = 0;
                 while (c.Current == Creature.State.Hidden && t < 5f) { t += Time.deltaTime; yield return null; }
                 Step(c.Current != Creature.State.Hidden, $"{def.name}：条件（{def.ConditionText}）满足后出现");
+                if (def.id == "moon_butterfly") yield return MoonCheck(player, flow, c, def);
 
                 if (!leadTested && c.Current != Creature.State.Hidden)
                 {
@@ -258,7 +259,13 @@ namespace WildPartner.Core
                 }
 
                 bool caught = false;
-                for (int attempt = 0; attempt < 3 && !caught; attempt++)
+                if (def.fishable)
+                {
+                    yield return FishingFlow(player, flow, def);
+                    caught = flow.Save.HasCaught(def.id);
+                    c = creatures.FirstOrDefault(x => x.defId == def.id && x.Current == Creature.State.Companion) ?? c;
+                }
+                else for (int attempt = 0; attempt < 3 && !caught; attempt++)
                 {
                     // approach: stand inside capture range, sneaking, facing it (a deer: from behind, 1123c-B1)
                     // a deer: wait until it has its head down grazing (it sees less then), like a player would
@@ -280,7 +287,7 @@ namespace WildPartner.Core
                     if (!caught) { Debug.Log($"[Smoke] {def.id} attempt {attempt} failed (state {c.Current}), retrying"); yield return new WaitForSeconds(1.5f); }
                 }
                 GameInput.SimSneak = false;
-                Step(caught && c.Current == Creature.State.Companion, $"{def.name}：按住捕捉成功并成为伙伴");
+                Step(caught && c.Current == Creature.State.Companion, def.fishable ? $"{def.name}：钓上来并成为伙伴" : $"{def.name}：按住捕捉成功并成为伙伴");
                 if (def.rideable && caught)
                     yield return RideCheck(player, c, shot++);
                 if (def.Count > 1)
@@ -292,6 +299,7 @@ namespace WildPartner.Core
             }
             Step(flow.AllCaught, $"图鉴集齐 {flow.CaughtCount}/{flow.Total}");
             yield return FishCheck(player, shot++);
+            yield return FlowCheck(player, flow);
             yield return BoundsCheck(player);
             yield return PetCheck(player, flow);
             yield return SwimCheck(player, flow);
@@ -371,6 +379,213 @@ namespace WildPartner.Core
         }
             /// <summary>试玩反馈 1123b-6: a capture spoiled by the alert meter only startles the rabbit (ears up ~1 s); if
         /// the witch keeps still it relaxes and can be tried again.</summary>
+        // ---------------------------------------------------------------- 试玩反馈 1123d
+        /// <summary>1123d-1: the koi lives by the two jetties and is caught by fishing. Moving / Esc put the rod away,
+        /// a missed bite loses the fish, an ordinary fish is let go, then the koi: bite, strike, reel in the green.</summary>
+        IEnumerator FishingFlow(PlayerController player, GameFlow flow, CreatureDef def)
+        {
+            var fs = FishingSystem.Instance;
+            var spots = FishingSpot.All;
+            Step(fs && spots.Count == 2, $"钓鱼点：{spots.Count} 处（{string.Join("、", spots.Select(x => x.label))}），带木栈台和水面光圈");
+            if (!fs || spots.Count == 0) yield break;
+            var koi = FindObjectsByType<Creature>(FindObjectsSortMode.None).Where(x => x.defId == def.id).ToArray();
+            yield return new WaitForSeconds(1.2f);
+            var near = spots.Select(sp => koi.Count(k => k.Current != Creature.State.Hidden && Vector3.Distance(k.transform.position, sp.cast) < 8f)).ToArray();
+            float minDepth = koi.Min(k => { WorldLayout.WaterSurface(k.transform.position.x, k.transform.position.z, out float lv); return lv - k.transform.position.y; });
+            Step(near.All(n => n >= 1) && near.Sum() == koi.Length, $"赤墨锦鲤只在两处：{string.Join("、", spots.Select((sp, i) => $"{sp.label} {near[i]} 条"))}（一共 {koi.Length} 条，都在钓鱼点 8 m 内，浮在水面下）");
+
+            var spot = spots.First();
+            void Stand() => player.Teleport(spot.stand + Vector3.up * 0.1f - Quaternion.Euler(0, spot.yaw, 0) * Vector3.forward * 0.8f, spot.yaw);
+            IEnumerator Press() { GameInput.SimInteract = true; yield return null; GameInput.SimInteract = false; }
+            Stand();
+            yield return new WaitForSeconds(0.6f);
+            Step(fs.NearSpot == spot && FishingSystem.Prompt == "按 E 钓鱼", $"站上{spot.label}的木栈台：提示「{FishingSystem.Prompt}」");
+            yield return Shot("50_fishing_spot");
+
+            // cancel by moving, then by Esc
+            FishingSystem.ForceWait = 6f;
+            yield return Press();
+            float t = 0;
+            while (fs.Current != FishingSystem.Phase.Wait && t < 3f) { t += Time.deltaTime; yield return null; }
+            bool waited = fs.Current == FishingSystem.Phase.Wait;
+            yield return new WaitForSeconds(0.4f);
+            yield return Shot("51_fishing_wait");
+            GameInput.SimMove = new Vector2(0, -1);
+            yield return null; yield return null;
+            GameInput.SimMove = Vector2.zero;
+            bool movedOff = fs.Current == FishingSystem.Phase.Idle && !player.Frozen;
+            Stand(); yield return new WaitForSeconds(0.3f);
+            yield return Press();
+            yield return new WaitForSeconds(0.5f);
+            GameInput.SimPause = true; yield return null; GameInput.SimPause = false;
+            yield return null;
+            bool escOff = fs.Current == FishingSystem.Phase.Idle && flow.State == GameFlow.FlowState.Playing;
+            Step(waited && movedOff && escOff, "钓鱼：按 E 抛竿、浮标落水后等待；移动或按 Esc 立即收竿（不会打开暂停菜单）");
+
+            // a missed bite
+            Stand(); yield return new WaitForSeconds(0.3f);
+            FishingSystem.ForceWait = 1.5f;
+            string lost = null; System.Action<string> onLost = w => lost = w;
+            FishingSystem.Lost += onLost;
+            yield return Press();
+            t = 0;
+            while (fs.Current != FishingSystem.Phase.Bite && t < 5f) { t += Time.deltaTime; yield return null; }
+            bool bit = fs.Current == FishingSystem.Phase.Bite;
+            t = 0;
+            while (fs.Current == FishingSystem.Phase.Bite && t < 3f) { t += Time.deltaTime; yield return null; }
+            Step(bit && lost != null && t >= FishingSystem.BiteWindow - 0.1f, $"钓鱼：浮标下沉后 {t:0.0} 秒内没提竿，鱼跑掉（「{lost}」）");
+            while (fs.Current != FishingSystem.Phase.Idle && t < 6f) { t += Time.deltaTime; yield return null; }
+
+            // an ordinary fish first, then the koi
+            bool? caughtKoi = null; System.Action<bool> onCaught = k => caughtKoi = k;
+            FishingSystem.Caught += onCaught;
+            foreach (bool wantKoi in new[] { false, true })
+            {
+                Stand(); yield return new WaitForSeconds(0.3f);
+                caughtKoi = null; lost = null;
+                FishingSystem.ForceWait = 2f; FishingSystem.ForceKoi = wantKoi;
+                yield return Press();
+                t = 0;
+                while (fs.Current != FishingSystem.Phase.Bite && t < 6f) { t += Time.deltaTime; yield return null; }
+                if (wantKoi) yield return Shot("52_fishing_bite");
+                yield return new WaitForSeconds(0.25f);
+                yield return Press();
+                // reeling like a player: hold E while the pointer is on the slack side, let go on the tight side
+                t = 0; float minT = 1, maxT = 0, reelT = 0; bool shotReel = false;
+                while ((fs.Current == FishingSystem.Phase.Reel || fs.Current == FishingSystem.Phase.Bite) && t < 15f)
+                {
+                    t += Time.deltaTime;
+                    if (fs.Current == FishingSystem.Phase.Reel) { reelT += Time.deltaTime; minT = Mathf.Min(minT, fs.Tension); maxT = Mathf.Max(maxT, fs.Tension); }
+                    GameInput.SimCapture = fs.Tension < 0.5f;
+                    if (wantKoi && !shotReel && reelT > 2f) { shotReel = true; GameInput.SimCapture = false; yield return Shot("53_fishing_reel"); continue; }
+                    yield return null;
+                }
+                GameInput.SimCapture = false;
+                if (wantKoi && fs.Current == FishingSystem.Phase.Landed) { yield return new WaitForSeconds(0.45f); yield return Shot("54_fishing_koi_out"); }
+                t = 0;
+                while (caughtKoi == null && lost == null && t < 4f) { t += Time.deltaTime; yield return null; }
+                Step(caughtKoi == wantKoi && reelT > 3f && reelT < 12f && (!wantKoi || maxT - minT > 0.15f),
+                     wantKoi ? $"钓鱼：咬钩→按 E 提竿→收线 {reelT:0.0} 秒（张力在 {minT:0.00}–{maxT:0.00} 摆动，锦鲤挣扎）→ 拉出水面成为伙伴"
+                             : $"钓鱼：先钓到普通鱼（收线 {reelT:0.0} 秒，张力 {minT:0.00}–{maxT:0.00}），放回水里并提示{(lost != null ? "（失败：" + lost + "）" : "")}");
+                if (wantKoi) yield return new WaitForSeconds(0.3f);
+            }
+            FishingSystem.Caught -= onCaught; FishingSystem.Lost -= onLost;
+            FishingSystem.ForceWait = null; FishingSystem.ForceKoi = null;
+            Step(!player.Frozen && fs.Current == FishingSystem.Phase.Idle, "钓鱼结束后可以自由行动，镜头恢复");
+
+            // the koi chance without forcing: 65 % / 80 % / 100 % -> always within three tries
+            Step(fs.Tries == 0, $"钓到锦鲤后计数清零（{fs.Tries}）；锦鲤几率 65% / 80% / 100%，第 3 次必定是锦鲤");
+        }
+
+        /// <summary>1123d-2: the river runs from the falls down to the lake, fast below the falls and slow near the
+        /// lake; floating flecks drift downstream; the current carries her when she walks on the water with the koi.</summary>
+        IEnumerator FlowCheck(PlayerController player, GameFlow flow)
+        {
+            var ri = WorldLayout.RiverIn;
+            Vector2 P(Vector3 v) => new Vector2(v.x, v.y);
+            var lake = WorldLayout.LakeCentre;
+            var below = P(ri[6]) + (P(ri[7]) - P(ri[6])).normalized * 6f;
+            var mid = Vector2.Lerp(P(ri[8]), P(ri[9]), 0.5f);
+            var mouth = Vector2.Lerp(P(ri[9]), P(ri[10]), 0.6f);
+            WorldLayout.RiverFlow(below.x, below.y, out var d0, out float s0);
+            WorldLayout.RiverFlow(mid.x, mid.y, out var d1, out float s1);
+            WorldLayout.RiverFlow(mouth.x, mouth.y, out var d2, out float s2);
+            bool inLake = WorldLayout.RiverFlow(lake.x, lake.y, out _, out float s3);
+            bool toLake = Vector2.Dot(d1, (lake - mid).normalized) > 0.5f && Vector2.Dot(d2, (lake - mouth).normalized) > 0.5f;
+            Step(toLake && s0 > s1 && s1 > s2 && !inLake && s3 == 0,
+                 $"水流方向：从瀑布流向湖（朝湖口 {Vector2.Dot(d1, (lake - mid).normalized):0.00}），流速 瀑布下 {s0:0.00} > 中段 {s1:0.00} > 湖口 {s2:0.00} > 湖里 0");
+            var drift = RiverDrift.Instance;
+            Step(drift && RiverDrift.Count > 40 && RiverDrift.MeanDownstream > 0.3f, $"河面漂浮物（泡沫、花瓣、落叶）{RiverDrift.Count} 个，顺流漂，平均 {RiverDrift.MeanDownstream:0.00} m/s");
+
+            // walking on the water with the koi in the river: the current pushes her downstream
+            flow.Pets.SetActive("ink_koi");
+            var at = Vector2.Lerp(P(ri[7]), P(ri[8]), 0.5f);
+            WorldLayout.RiverDistance(at.x, at.y, out float lv);
+            player.Teleport(new Vector3(at.x, lv + 0.4f, at.y), 0);
+            yield return new WaitForSeconds(0.6f);
+            var a0 = player.transform.position;
+            yield return new WaitForSeconds(2f);
+            var moved = player.transform.position - a0; moved.y = 0;
+            WorldLayout.RiverFlow(at.x, at.y, out var fd, out _);
+            float along = Vector2.Dot(new Vector2(moved.x, moved.z), fd);
+            Step(player.WaterWalking && along > 0.2f, $"踏水站在河上被水流推向下游：2 秒顺流 {along:0.00} m");
+            yield return Shot("55_river_flow");
+            flow.Pets.SetActive("cat");
+            yield return new WaitForSeconds(0.5f);
+        }
+
+        /// <summary>1123d-3: the moon butterfly only on a clear night, resting on the glowing moonflower on the island;
+        /// the cat and a line on screen point there; sleeping into the night is clear at least 70 % of the time and
+        /// never rainy three times running.</summary>
+        IEnumerator MoonCheck(PlayerController player, GameFlow flow, Creature c, CreatureDef def)
+        {
+            var env = EnvController.Instance; var weather = Weather.Instance;
+            var bloom = MoonFlowerBloom.Instance;
+            if (!bloom) { Step(false, "月光花不存在（MoonFlowerBloom）"); yield break; }
+            float t = 0;
+            while (bloom.Bloom < 0.99f && t < 5f) { t += Time.deltaTime; yield return null; }
+            var flat = c.transform.position - bloom.Top; 
+            var light = bloom.GetComponentInChildren<Light>();
+            Step(bloom.Bloom > 0.99f && light && light.enabled && light.intensity > 0.9f && flat.magnitude < 1.2f,
+                 $"晴朗夜晚：月光花开放发光（灯光 {(light ? light.intensity : 0):0.0}），月影蝶停在花上（离花心 {flat.magnitude:0.00} m）");
+
+            // from the lake shore, the cat at her side
+            flow.Pets.SetActive("cat");
+            var isl = WorldLayout.Islands[0];
+            var toShore = new Vector2(isl.x, isl.y) - WorldLayout.LakeCentre; toShore = new Vector2(-0.3f, -1f).normalized;
+            Vector3 shore = Vector3.zero;
+            for (float r = 20f; r < 90f; r += 1f)
+            {
+                var q = new Vector2(isl.x, isl.y) + toShore * r;
+                float ld = WorldLayout.LakeDistance(q.x, q.y);
+                if (ld > 1.12f && Creature.GroundHeight(q.x, q.y) > WorldLayout.LakeLevel + 0.4f) { shore = new Vector3(q.x, Creature.GroundHeight(q.x, q.y) + 0.1f, q.y); break; }
+            }
+            var look = bloom.Top - shore; look.y = 0;
+            player.Teleport(shore, Quaternion.LookRotation(look).eulerAngles.y);
+            player.SetCameraOrbit(Quaternion.LookRotation(look).eulerAngles.y, 6f);
+            var cat = PetSwitcher.Pet("cat");
+            if (cat) cat.WarpNear(shore + Quaternion.LookRotation(look) * new Vector3(0.6f, 0, -0.8f), Quaternion.LookRotation(look).eulerAngles.y);
+            bool looked = false, hinted = false;
+            System.Action onCat = () => looked = true, onHint = () => hinted = true;
+            MoonFlowerBloom.CatCue += onCat; MoonFlowerBloom.ShoreHint += onHint;
+            bloom.ResetCues();
+            t = 0;
+            while (t < 4f && !(looked && hinted)) { t += Time.deltaTime; yield return null; }
+            yield return new WaitForSeconds(1f);
+            MoonFlowerBloom.CatCue -= onCat; MoonFlowerBloom.ShoreHint -= onHint;
+            Vector3 cf = cat ? cat.transform.forward : Vector3.zero; cf.y = 0;
+            var toIsl = bloom.Top - (cat ? cat.transform.position : shore); toIsl.y = 0;
+            float catAng = cat ? Vector3.Angle(cf, toIsl) : 180f;
+            Step(hinted && flow.Save.moonHintShown && looked && catAng < 40f,
+                 $"晴朗夜晚第一次走到湖岸：屏幕提示月光花；猫转向湖心岛叫了一声（朝向偏差 {catAng:0}°，离岛 {Vector3.Distance(shore, bloom.Top):0} m）");
+            yield return new WaitForSeconds(0.6f);
+            yield return Shot("56_moonflower_from_shore");
+
+            // rain: the flower closes and the butterfly goes; by day it is not there either
+            weather.Set(true, true);
+            t = 0;
+            while ((c.Current != Creature.State.Hidden || bloom.Bloom > 0.01f) && t < 6f) { t += Time.deltaTime; yield return null; }
+            bool goneRain = c.Current == Creature.State.Hidden && bloom.Bloom < 0.01f;
+            weather.Set(false, true); env.timeOfDay = 12f;
+            t = 0; bool showedDay = false;
+            while (t < 2.5f) { t += Time.deltaTime; if (c.Current != Creature.State.Hidden || bloom.Bloom > 0.01f) showedDay = true; yield return null; }
+            env.timeOfDay = 21.5f;
+            t = 0;
+            while (c.Current == Creature.State.Hidden && t < 5f) { t += Time.deltaTime; yield return null; }
+            Step(goneRain && !showedDay && c.Current != Creature.State.Hidden, "月影蝶：下雨的夜晚和白天都不出现、月光花合上；晴夜又回到花上");
+
+            // sleeping into the night: two rainy nights in a row, then the third is clear for sure; 70 %+ clear overall
+            int row = 0; var seq = new List<bool>();
+            for (int i = 0; i < 3; i++) seq.Add(weather.SleptIntoNight(ref row, 0.1));
+            int clear = 0, rowR = 0, maxRow = 0; var rng = new System.Random(5);
+            for (int i = 0; i < 2000; i++) { if (!weather.SleptIntoNight(ref rowR, rng.NextDouble())) clear++; maxRow = Mathf.Max(maxRow, rowR); }
+            Step(seq[0] && seq[1] && !seq[2] && clear >= 1400 && maxRow <= 2,
+                 $"床上睡到夜晚：晴天 {clear / 20f:0}%（2000 次），连续两次雨夜后第三次必定晴（{string.Join("/", seq.Select(r => r ? "雨" : "晴"))}），最多连续 {maxRow} 次雨夜");
+            weather.Set(false, true);
+            env.timeOfDay = 21.5f;
+            yield return new WaitForSeconds(0.5f);
+        }
+
         IEnumerator StartleCheck(PlayerController player, Creature c, CreatureDef def, int shotNo)
         {
             var p = c.transform.position;

@@ -4,8 +4,9 @@ using UnityEngine;
 namespace WildPartner.World
 {
     /// <summary>
-    /// Clear / rain switching (FR-G05). Durations are random, but rain is guaranteed at least once every
-    /// <see cref="maxDryMinutes"/> of play so the rain-only creature can always be found. Rain is a GPU
+    /// Clear / rain switching (FR-G05). Durations are random. (Rain used to be forced every few minutes for the
+    /// rain-only koi; since 1123d-1 the koi is fished in any weather, and the moon butterfly needs a clear night,
+    /// so sleeping into the night is what guarantees the weather now: see <see cref="SleptIntoNight"/>.) Rain is a GPU
     /// particle system that follows the camera; rain drops are transparent and have no motion vectors,
     /// which is why stage 2 writes them into the Reactive Mask (IN-06).
     /// </summary>
@@ -44,8 +45,7 @@ namespace WildPartner.World
             {
                 _timer -= Time.deltaTime;
                 if (!IsRaining) _dry += Time.deltaTime;
-                if (_timer <= 0) Set(!IsRaining && (_rng.NextDouble() < 0.5 || _dry > maxDryMinutes * 60f));
-                else if (!IsRaining && _dry > maxDryMinutes * 60f) Set(true);
+                if (_timer <= 0) Set(!IsRaining && _rng.NextDouble() < 0.5);
             }
             RainAmount = Mathf.MoveTowards(RainAmount, IsRaining ? 1 : 0, Time.deltaTime / fadeSeconds);
 
@@ -62,5 +62,20 @@ namespace WildPartner.World
         }
 
         public string Label => IsRaining ? "下雨" : "晴";
+
+        /// <summary>1123d-3: sleeping in the bed into the night. At least 70 % clear; after two rainy nights in a row the
+        /// third is clear for sure. A clear night then stays clear for <see cref="ClearHoldSeconds"/> so there is time to
+        /// reach the island. Returns whether it rains.</summary>
+        public bool SleptIntoNight(ref int rainyInRow, double roll = -1)
+        {
+            if (roll < 0) roll = _rng.NextDouble();
+            bool rain = rainyInRow < 2 && roll < 0.3;
+            rainyInRow = rain ? rainyInRow + 1 : 0;
+            Set(rain, true);
+            if (!rain) _timer = Mathf.Max(_timer, ClearHoldSeconds);
+            Debug.Log($"[Weather] slept into the night: {(rain ? "rain" : "clear")} (rainy nights in a row {rainyInRow})");
+            return rain;
+        }
+        public const float ClearHoldSeconds = 300f;
     }
 }

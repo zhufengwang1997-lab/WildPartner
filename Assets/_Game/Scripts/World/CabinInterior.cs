@@ -204,8 +204,9 @@ namespace WildPartner.World
             var env = EnvController.Instance;
             bool day = env && env.timeOfDay >= 6f && env.timeOfDay < 18.5f;
             if (env) { env.timeOfDay = day ? 20.5f : 7f; env.Apply(); }
+            bool rainy = day && Weather.Instance && GameFlow.Instance && Weather.Instance.SleptIntoNight(ref GameFlow.Instance.Save.rainyNightsInRow);   // 1123d-3
             pc.Teleport(bedStand, bedYaw + 90);
-            if (GameFlow.Instance) { GameFlow.Instance.SaveNow(); GameFlow.Instance.ShowToast(day ? "一觉睡到了夜里。已存档。" : "一觉睡到了清晨。已存档。"); }
+            if (GameFlow.Instance) { GameFlow.Instance.SaveNow(); GameFlow.Instance.ShowToast(day ? (rainy ? "一觉睡到了夜里，外面在下雨。已存档。" : "一觉睡到了夜里，今晚天很晴，月亮很亮。已存档。") : "一觉睡到了清晨。已存档。"); }
             yield return new WaitForSecondsRealtime(0.9f);
             yield return Fade(_fade, 0, 0.8f);
             pc.Frozen = false;

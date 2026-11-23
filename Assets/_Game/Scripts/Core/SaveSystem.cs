@@ -30,6 +30,8 @@ namespace WildPartner.Core
         public bool finished;
         public bool indoors;             // saved inside the cabin (试玩反馈 1123b-3)
         public string currentPet = "cat"; // the pet at her side (试玩反馈 1123c-B2); missing in older saves -> cat
+        public bool moonHintShown;       // 1123d-3: the first clear night by the lake gave its hint
+        public int rainyNightsInRow;     // 1123d-3: sleeping into a rainy night twice in a row -> the next one is clear
         public bool HasCaught(string id) => caught.Exists(c => c.id == id);
     }
 

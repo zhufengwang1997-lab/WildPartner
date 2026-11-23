@@ -21,13 +21,16 @@ namespace WildPartner.Core
     public class Showcase : MonoBehaviour
     {
         string _out, _dir;
+        bool _mode1123d;
         int _frame;
         bool _record;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot()
         {
-            if (!Environment.GetCommandLineArgs().Contains("-showcase")) return;
+            var args = Environment.GetCommandLineArgs();
+            if (args.Contains("-showcase1123d")) { var s = new GameObject("Showcase").AddComponent<Showcase>(); s._mode1123d = true; return; }
+            if (!args.Contains("-showcase")) return;
             new GameObject("Showcase").AddComponent<Showcase>();
         }
 
@@ -39,6 +42,7 @@ namespace WildPartner.Core
             yield return new WaitForSeconds(1.5f);
             var flow = GameFlow.Instance;
             flow.NewGame();
+            if (_mode1123d) { yield return Run1123d(); yield break; }
             float t = 0;
             yield return null;
             while (CabinInterior.Busy && t < 10f) { t += Time.deltaTime; yield return null; }
@@ -190,6 +194,131 @@ namespace WildPartner.Core
                 _record = false; Time.captureFramerate = 0;
             }
             Debug.Log($"[Showcase] done -> {_out}");
+            yield return new WaitForSecondsRealtime(0.5f);
+            Application.Quit();
+        }
+
+        // ---------------------------------------------------------------- 试玩反馈 1123d clips
+        IEnumerator Run1123d()
+        {
+            float t = 0;
+            yield return null;
+            while (CabinInterior.Busy && t < 10f) { t += Time.deltaTime; yield return null; }
+            CabinInterior.SetInside(false);
+            var env = EnvController.Instance; var player = PlayerController.Instance; var flow = GameFlow.Instance;
+            var creatures = FindObjectsByType<Creature>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var cat = creatures.First(c => c.defId == "cat");
+            env.timeOfDay = 10.5f; Weather.Instance.Set(false, true);
+
+            // ---- 2: walk from below the waterfall along the river to the lake ----
+            var ri = WorldLayout.RiverIn;
+            Vector2 P(Vector3 v) => new Vector2(v.x, v.y);
+            var way = new System.Collections.Generic.List<Vector3>();
+            for (int i = 6; i < 10; i++)
+                for (float u = 0; u < 1f; u += 0.25f)
+                {
+                    var c = Vector2.Lerp(P(ri[i]), P(ri[i + 1]), u);
+                    var dir = (P(ri[i + 1]) - P(ri[i])).normalized; var side = new Vector2(dir.y, -dir.x);   // right bank looking downstream
+                    Vector2 best = c + side * 9f;
+                    for (float k = 7f; k < 14f; k += 0.5f)
+                    {
+                        var q = c + side * k;
+                        if (!WorldLayout.WaterSurface(q.x, q.y, out float lv) || lv < Creature.GroundHeight(q.x, q.y) - 0.1f) { best = q; break; }
+                    }
+                    way.Add(new Vector3(best.x, Creature.GroundHeight(best.x, best.y) + 0.1f, best.y));
+                }
+            var d0 = way[1] - way[0]; d0.y = 0;
+            player.Teleport(way[0], Quaternion.LookRotation(d0).eulerAngles.y);
+            cat.WarpNear(way[0] - d0.normalized * 1.5f, Quaternion.LookRotation(d0).eulerAngles.y);
+            yield return new WaitForSeconds(1f);
+            _dir = "river"; _record = true; Time.captureFramerate = 30; StartCoroutine(Capture());
+            int wi = 1; t = 0;
+            GameInput.SimRun = true;
+            while (wi < way.Count && t < 40f)
+            {
+                var to = way[wi] - player.transform.position; to.y = 0;
+                if (to.magnitude < 2.5f) { wi++; continue; }
+                float yaw = Quaternion.LookRotation(to).eulerAngles.y;
+                // camera behind and to her right, looking down over the river on her left
+                player.SetCameraOrbit(yaw + 28f, 22f);
+                player.SetCameraDistance(1.25f);
+                GameInput.SimMove = new Vector2(0, 1);
+                if (wi == way.Count / 2 && !_still) Still("2_river_mid");
+                t += Time.deltaTime;
+                yield return null;
+            }
+            GameInput.SimMove = Vector2.zero; GameInput.SimRun = false;
+            Still("2_river_lake");
+            yield return new WaitForSeconds(1.5f);
+            _record = false; Time.captureFramerate = 0;
+            yield return null;
+
+            // ---- 1: fishing at the bridge jetty, the koi on the second cast ----
+            var spot = FishingSpot.All.First();
+            player.Teleport(spot.stand + Vector3.up * 0.1f - Quaternion.Euler(0, spot.yaw, 0) * Vector3.forward * 0.6f, spot.yaw);
+            player.SetCameraOrbit(spot.yaw + 20f, 12f); player.SetCameraDistance(1f);
+            cat.WarpNear(spot.stand - Quaternion.Euler(0, spot.yaw, 0) * Vector3.forward * 1.6f, spot.yaw);
+            yield return new WaitForSeconds(1.5f);
+            Still("1_fishing_spot");
+            yield return new WaitForSeconds(0.3f);
+            var fs = FishingSystem.Instance;
+            _dir = "fishing"; _record = true; Time.captureFramerate = 30; StartCoroutine(Capture());
+            FishingSystem.ForceWait = 3.5f; FishingSystem.ForceKoi = true;
+            GameInput.SimInteract = true; yield return null; GameInput.SimInteract = false;
+            t = 0;
+            while (fs.Current != FishingSystem.Phase.Bite && t < 8f) { t += Time.deltaTime; yield return null; }
+            yield return new WaitForSeconds(0.2f);
+            Still("1_fishing_bite");
+            yield return new WaitForSeconds(0.4f);
+            GameInput.SimInteract = true; yield return null; GameInput.SimInteract = false;
+            t = 0; bool st = false;
+            while ((fs.Current == FishingSystem.Phase.Reel || fs.Current == FishingSystem.Phase.Bite) && t < 15f)
+            {
+                t += Time.deltaTime;
+                GameInput.SimCapture = fs.Tension < 0.5f;
+                if (!st && t > 2.5f) { st = true; Still("1_fishing_reel"); }
+                yield return null;
+            }
+            GameInput.SimCapture = false;
+            yield return new WaitForSeconds(0.5f);
+            Still("1_fishing_koi_out");
+            yield return new WaitForSeconds(2f);
+            _record = false; Time.captureFramerate = 0;
+            FishingSystem.ForceWait = null; FishingSystem.ForceKoi = null;
+            yield return null;
+
+            // ---- 3: a clear night - the moonflower glowing on the island, seen from the shore, then close ----
+            env.timeOfDay = 21.5f; Weather.Instance.Set(false, true);
+            var bloom = MoonFlowerBloom.Instance;
+            var isl = WorldLayout.Islands[0];
+            Vector3 shore = Vector3.zero;
+            var toShore = new Vector2(-0.3f, -1f).normalized;
+            for (float r = 20f; r < 90f; r += 1f)
+            {
+                var q = new Vector2(isl.x, isl.y) + toShore * r;
+                if (WorldLayout.LakeDistance(q.x, q.y) > 1.12f && Creature.GroundHeight(q.x, q.y) > WorldLayout.LakeLevel + 0.4f) { shore = new Vector3(q.x, Creature.GroundHeight(q.x, q.y) + 0.1f, q.y); break; }
+            }
+            var look = bloom.Top - shore; look.y = 0;
+            float ly = Quaternion.LookRotation(look).eulerAngles.y;
+            player.Teleport(shore, ly);
+            player.SetCameraOrbit(ly, 6f); player.SetCameraDistance(1f);
+            cat.WarpNear(shore + Quaternion.Euler(0, ly, 0) * new Vector3(0.7f, 0, -0.6f), ly);
+            t = 0;
+            while (bloom.Bloom < 0.99f && t < 5f) { t += Time.deltaTime; yield return null; }
+            yield return new WaitForSeconds(1.5f);
+            _dir = "moon"; _record = true; Time.captureFramerate = 30; StartCoroutine(Capture());
+            yield return new WaitForSeconds(1.2f);
+            Still("3_moon_from_shore");
+            yield return new WaitForSeconds(3f);
+            var bf = creatures.First(c => c.defId == "moon_butterfly");
+            var camSide = Quaternion.Euler(0, ly + 150f, 0) * Vector3.forward;
+            Frame(bloom.Top + camSide * 1.3f + Vector3.up * 0.35f, bloom.Top + Vector3.up * 0.05f);
+            yield return new WaitForSeconds(1.5f);
+            Still("3_moon_butterfly_close");
+            yield return new WaitForSeconds(3f);
+            _record = false; Time.captureFramerate = 0;
+            Unframe();
+            Debug.Log($"[Showcase] 1123d done -> {_out}");
             yield return new WaitForSecondsRealtime(0.5f);
             Application.Quit();
         }
