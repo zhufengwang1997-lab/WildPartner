@@ -11,6 +11,8 @@ namespace WildPartner.World
     /// </summary>
     public class WaterProbe : MonoBehaviour
     {
+        /// <summary>Cube size per quality tier (画质分级扩展).</summary>
+        public static int Resolution = 128;
         ReflectionProbe _probe;
         float _lastHour = -99f, _lastRain = -1f, _next;
         int _renderId = -1;
@@ -24,7 +26,7 @@ namespace WildPartner.World
             _probe.mode = UnityEngine.Rendering.ReflectionProbeMode.Realtime;
             _probe.refreshMode = UnityEngine.Rendering.ReflectionProbeRefreshMode.ViaScripting;
             _probe.timeSlicingMode = UnityEngine.Rendering.ReflectionProbeTimeSlicingMode.IndividualFaces;
-            _probe.resolution = 128;
+            _probe.resolution = Resolution;
             _probe.size = new Vector3(WorldLayout.Size + 80f, 120f, WorldLayout.Size + 80f);
             _probe.boxProjection = false;
             _probe.nearClipPlane = 1f; _probe.farClipPlane = 600f;
@@ -36,6 +38,7 @@ namespace WildPartner.World
         void Update()
         {
             if (!_probe || Time.unscaledTime < _next) return;
+            if (_probe.resolution != Resolution) { _probe.resolution = Resolution; _lastHour = -99f; }
             var env = EnvController.Instance;
             float hour = env ? env.timeOfDay : 12f;
             float rain = Weather.Instance ? Weather.Instance.RainAmount : 0f;
