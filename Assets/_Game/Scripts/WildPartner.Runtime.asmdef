@@ -2,7 +2,7 @@
   "name": "WildPartner.Runtime",
   "rootNamespace": "WildPartner",
   "references": ["Zfw.GpuCaps", "Zfw.QualityTiers", "Zfw.PerfRunner", "Zfw.Upscaling",
-                 "Unity.RenderPipelines.Universal.Runtime", "Unity.RenderPipelines.Core.Runtime",
+                 "Unity.RenderPipelines.Universal.Runtime", "Unity.RenderPipelines.Core.Runtime", "Unity.RenderPipelines.GPUDriven.Runtime",
                  "Unity.InputSystem", "Unity.Cinemachine", "Unity.AI.Navigation"],
   "autoReferenced": true
 }

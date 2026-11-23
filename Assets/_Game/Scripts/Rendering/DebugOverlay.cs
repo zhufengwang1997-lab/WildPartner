@@ -15,6 +15,17 @@ namespace WildPartner.Rendering
         float _ms = 16f, _fps = 60f;
         GUIStyle _box, _label, _button, _active;
 
+        Unity.Profiling.ProfilerRecorder _draws, _batches, _setpass;
+
+        void OnEnable()
+        {
+            _draws = Unity.Profiling.ProfilerRecorder.StartNew(Unity.Profiling.ProfilerCategory.Render, "Draw Calls Count");
+            _batches = Unity.Profiling.ProfilerRecorder.StartNew(Unity.Profiling.ProfilerCategory.Render, "Batches Count");
+            _setpass = Unity.Profiling.ProfilerRecorder.StartNew(Unity.Profiling.ProfilerCategory.Render, "SetPass Calls Count");
+        }
+
+        void OnDisable() { _draws.Dispose(); _batches.Dispose(); _setpass.Dispose(); }
+
         void Awake()
         {
             DontDestroyOnLoad(gameObject);
@@ -65,7 +76,7 @@ namespace WildPartner.Rendering
             float rs = asset ? asset.renderScale : 1f;
             var host = Zfw.Upscaling.UpscalerHost.Active;
             int dw = Screen.width, dh = Screen.height;
-            var r = new Rect(14, 160, 470, 420);
+            var r = new Rect(14, 160, 470, 470);
             GUI.Box(r, GUIContent.none, _box);
             GUILayout.BeginArea(new Rect(r.x + 12, r.y + 8, r.width - 24, r.height - 16));
             GUILayout.Label($"F3 调试   {_fps:0} fps   {_ms:0.0} ms", _label);
@@ -106,6 +117,11 @@ namespace WildPartner.Rendering
             }
             GUILayout.EndHorizontal();
             GUILayout.Label($"Reactive Mask 来源 {UpscalerInputsPass.LastSourceCount} 个（当前后端未消费）  Reversed-Z {(SystemInfo.usesReversedZBuffer ? "是" : "否")}", _label);
+            GUILayout.Label($"Draw Calls {_draws.LastValue}  Batches {_batches.LastValue}  SetPass {_setpass.LastValue}", _label);
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"GPU 驻留绘制 {(GrdSettings.IsEnabled() ? "运行中" : GrdSettings.Grd ? "已开但未运行" : "关")}  遮挡剔除 {(GrdSettings.OcclusionActive ? "运行中" : "关")}", _label);
+            if (GUILayout.Button(GrdSettings.Grd ? "关 GRD" : "开 GRD", _button, GUILayout.Height(26), GUILayout.Width(80))) GrdSettings.Set(!GrdSettings.Grd, GrdSettings.Occlusion);
+            GUILayout.EndHorizontal();
             GUILayout.Label(SystemInfo.graphicsDeviceName, _label);
             GUILayout.EndArea();
             GUI.matrix = m;

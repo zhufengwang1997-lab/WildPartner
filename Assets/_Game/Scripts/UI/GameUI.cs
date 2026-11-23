@@ -340,6 +340,19 @@ namespace WildPartner.UI
                     Rendering.UpscalerSettings.Set(SaveSystem.Settings.upscaler, opts[i]);
                 },
             });
+            // stage 4: GPU Resident Drawer and GPU occlusion culling (FR-RD-01/02)
+            SettingsRegistry.Add(new SettingRow
+            {
+                label = "GPU 驻留绘制",
+                value = () => Rendering.GrdSettings.Grd ? "开" : "关",
+                step = d => Rendering.GrdSettings.Set(!Rendering.GrdSettings.Grd, Rendering.GrdSettings.Occlusion),
+            });
+            SettingsRegistry.Add(new SettingRow
+            {
+                label = "GPU 遮挡剔除",
+                value = () => !Rendering.GrdSettings.Grd ? "关（需要 GPU 驻留绘制）" : Rendering.GrdSettings.Occlusion ? "开" : "关",
+                step = d => Rendering.GrdSettings.Set(Rendering.GrdSettings.Grd, !Rendering.GrdSettings.Occlusion),
+            });
             VolumeRow("音乐", () => SaveSystem.Settings.musicVolume, v => SaveSystem.Settings.musicVolume = v);
             VolumeRow("音效", () => SaveSystem.Settings.sfxVolume, v => SaveSystem.Settings.sfxVolume = v);
             VolumeRow("环境声", () => SaveSystem.Settings.ambienceVolume, v => SaveSystem.Settings.ambienceVolume = v);

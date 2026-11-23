@@ -328,6 +328,7 @@ namespace WildPartner.Core
             yield return AudioMixCheck(player, flow);
             yield return AntiAliasCheck(player, flow);
             yield return UpscaleCheck(player);
+            yield return GrdCheck();
             yield return SwimCheck(player, flow);
             yield return ClimbCheck(player);
             yield return AmbientCheck(player);
@@ -758,6 +759,28 @@ namespace WildPartner.Core
             }
             WildPartner.Rendering.UpscalerSettings.Set(sb, sq);
             yield return new WaitForSeconds(0.3f);
+        }
+
+        IEnumerator GrdCheck()
+        {
+            // stage 4 (FR-RD-01/02): GRD is off by default (known issue: Toon objects are not drawn under GRD on Metal);
+            // switching it on and off again must work without errors and restore the normal picture
+            int ex0 = _exceptions;
+            bool g0 = WildPartner.Rendering.GrdSettings.Grd, o0 = WildPartner.Rendering.GrdSettings.Occlusion;
+            bool offAtStart = !WildPartner.Rendering.GrdSettings.IsEnabled();
+            WildPartner.Rendering.GrdSettings.Set(true, true);
+            yield return new WaitForSeconds(0.6f);
+            bool on = WildPartner.Rendering.GrdSettings.IsEnabled();
+            bool occ = WildPartner.Rendering.GrdSettings.OcclusionActive;
+            yield return Shot("7z_grd_on");
+            WildPartner.Rendering.GrdSettings.Set(false, o0);
+            yield return new WaitForSeconds(0.6f);
+            bool backOff = !WildPartner.Rendering.GrdSettings.IsEnabled();
+            yield return Shot("7z_grd_off");
+            WildPartner.Rendering.GrdSettings.Set(g0, o0);
+            yield return new WaitForSeconds(0.3f);
+            Step(offAtStart && on && backOff && _exceptions == ex0,
+                 $"GPU 驻留绘制：默认关（{offAtStart}），打开后运行（{on}，遮挡剔除 {(occ ? "运行" : "未运行")}），再关掉（{backOff}），无报错。已知问题：打开时 Toon 物体不绘制（截图 7z_grd_on）");
         }
 
         IEnumerator AntiAliasCheck(PlayerController player, GameFlow flow)
