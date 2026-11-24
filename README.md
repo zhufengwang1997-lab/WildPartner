@@ -88,7 +88,6 @@ Apple M5 Max，Metal，2560×1440，画质档 High，2026-11-23。出处：[`doc
 一条命令重跑评估：`tools/bench.sh <标签>`；挂机：`tools/soak.sh 600 <标签>`；GRD 对比：`tools/grd.sh <标签>`；冒烟测试：`tools/smoke.sh`。
 
 ## 文档
-- 讲解稿：[`docs/讲解稿/`](docs/讲解稿/)（00 三分钟总览，01~07 各模块）
 - 演示流程：[`docs/演示流程.md`](docs/演示流程.md)
 - 进度与决策：[`docs/PROGRESS.md`](docs/PROGRESS.md)、[`docs/DECISIONS.md`](docs/DECISIONS.md)
 - 第三方素材许可：[`docs/CREDITS.md`](docs/CREDITS.md)

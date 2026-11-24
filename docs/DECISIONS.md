@@ -5,7 +5,7 @@
 ## 2026-11-22 阶段 0
 - **Unity 版本用 6000.3.28f1（Unity 6.3 LTS）**：本机已安装，用户确认不再装 6000.0.x。
 - **TierSettings 扩展机制用 `[SerializeReference] List<TierExtension>`**，而不是让游戏继承 TierSettings：多个游戏/模块可以各挂自己的扩展，且已有资产不需要换脚本类型。MineEmbers 的 heatHaze / lakeReflection 移到 `MineTierExtension`。结果：MineEmbers EditMode 21/21（原 20 + 新增 1）、Python 13/13 通过，打标签 `v0.2.0`。
-- **三个包用 Git URL + `#v0.2.0` 固定版本**，manifest 中三个都显式写出。MineEmbers 目前是**私有仓库**：本机通过 `gh auth setup-git` 让 Unity 的 git 能拉取。若面试官要从零克隆运行，需要把 MineEmbers 也设为公开（公开前向用户确认，见 PRD 7.3）。
+- **三个包用 Git URL + `#v0.2.0` 固定版本**，manifest 中三个都显式写出。MineEmbers 当时是私有仓库，本机通过 `gh auth setup-git` 让 Unity 的 git 能拉取；现已公开，从零克隆即可拉取。
 - **项目用 URP 3D 模板（Forward+）创建**，配置写在 `Assets/_Game/Editor/ProjectSetup.cs`（配置即代码，可重复执行）。Windows 只开 D3D12（PRD 要求 DX12），Mac 只开 Metal。脚本后端 Mono（Mac 上交叉编译 Windows 包只能用 Mono）。
 - **MSAA 全档位关闭**：抗锯齿交给阶段 2 的超分/时间性方案（IN-01），避免重复抗锯齿。
 
